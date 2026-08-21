@@ -1,6 +1,7 @@
 <script lang="ts">
   import { open } from "@tauri-apps/plugin-dialog";
   import { buttonClass, inputClass, labelClass } from "./styles";
+  import { directoryPlaceholder } from "$lib/platform";
 
   let {
     value = $bindable(""),
@@ -30,7 +31,7 @@
     <input
       bind:value
       {required}
-      placeholder="C:\path\to\project"
+      placeholder={directoryPlaceholder()}
       class={`flex-1 ${inputClass}`}
     />
     <button type="button" onclick={pickDirectory} class={buttonClass}>Browse…</button>
