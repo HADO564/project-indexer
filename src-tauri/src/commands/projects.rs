@@ -1,7 +1,6 @@
 use crate::models::{Project, UpdateProject};
 use crate::store::ProjectStore;
 use tauri::AppHandle;
-use tauri_plugin_opener::open_path;
 
 #[tauri::command]
 pub fn create_project(
@@ -71,7 +70,7 @@ pub fn open_project(
         .get_project(&id)?
         .ok_or_else(|| format!("Project with id '{}' not found", id))?;
 
-    open_path(&project.directory, project.open_with.as_deref()).map_err(|e| e.to_string())?;
+    crate::commands::system::open_in_app(&project.directory, project.open_with.as_deref())?;
     project.last_opened_at = Some(chrono::Utc::now());
     store.save_project(&project)?;
     Ok(project)

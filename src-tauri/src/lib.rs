@@ -2,9 +2,39 @@ pub mod models;
 pub mod store;
 pub mod commands;
 
+/// Works around WebKitGTK's DMABUF renderer failing on NVIDIA's proprietary
+/// driver, where it can't allocate GBM buffers. The window then either comes
+/// up blank ("Failed to create GBM buffer") or, under Wayland, the app dies
+/// during startup with "Error 71 (Protocol error) dispatching to Wayland
+/// display". Disabling the DMABUF renderer falls back to a software path that
+/// works on both X11 and Wayland.
+///
+/// Gated on the proprietary driver so that Mesa, nouveau and everything else
+/// keep the accelerated path, and skipped when the variable is already set so
+/// a user can still force either behaviour. Must run before GTK/WebKit start.
+#[cfg(target_os = "linux")]
+fn disable_dmabuf_renderer_on_nvidia() {
+    const VAR: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+
+    if std::env::var_os(VAR).is_some() {
+        return;
+    }
+
+    // Both paths are created by the proprietary kernel module only, so this
+    // is distro-independent — no package or driver-version probing needed.
+    let nvidia_loaded = std::path::Path::new("/proc/driver/nvidia/version").exists()
+        || std::path::Path::new("/sys/module/nvidia/version").exists();
+
+    if nvidia_loaded {
+        std::env::set_var(VAR, "1");
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    disable_dmabuf_renderer_on_nvidia();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
