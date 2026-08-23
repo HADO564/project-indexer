@@ -1,4 +1,4 @@
-use crate::models::{Project, UpdateProject};
+use crate::models::{Project, ProjectError, UpdateProject};
 use crate::store::ProjectStore;
 use tauri::AppHandle;
 
@@ -9,7 +9,7 @@ pub fn create_project(
     directory: String,
     description: Option<String>,
     tags: Option<Vec<String>>,
-) -> Result<Project, String> {
+) -> Result<Project, ProjectError> {
     let store = ProjectStore::new(&app)?;
     let existing = store.get_all_projects()?;
 
@@ -26,12 +26,12 @@ pub fn update_project(
     app: AppHandle,
     id: String,
     update: UpdateProject,
-) -> Result<Project, String> {
+) -> Result<Project, ProjectError> {
     let store = ProjectStore::new(&app)?;
 
     let mut project = store
         .get_project(&id)?
-        .ok_or_else(|| format!("Project with id '{}' not found", id))?;
+        .ok_or_else(|| ProjectError::NotFound(id.clone()))?;
 
     project.update(update)?;
     store.save_project(&project)?;
@@ -40,22 +40,22 @@ pub fn update_project(
 }
 
 #[tauri::command]
-pub fn get_project(app: AppHandle, id: String) -> Result<Project, String> {
+pub fn get_project(app: AppHandle, id: String) -> Result<Project, ProjectError> {
     let store = ProjectStore::new(&app)?;
 
     store
         .get_project(&id)?
-        .ok_or_else(|| format!("Project with id '{}' not found", id))
+        .ok_or_else(|| ProjectError::NotFound(id.clone()))
 }
 
 #[tauri::command]
-pub fn get_all_projects(app: AppHandle) -> Result<Vec<Project>, String> {
+pub fn get_all_projects(app: AppHandle) -> Result<Vec<Project>, ProjectError> {
     let store = ProjectStore::new(&app)?;
     store.get_all_projects()
 }
 
 #[tauri::command]
-pub fn delete_project(app: AppHandle, id: String) -> Result<(), String> {
+pub fn delete_project(app: AppHandle, id: String) -> Result<(), ProjectError> {
     let store = ProjectStore::new(&app)?;
     store.delete_project(&id)?;
     Ok(())
@@ -66,14 +66,15 @@ pub fn delete_project(app: AppHandle, id: String) -> Result<(), String> {
 pub fn open_project(
     app: AppHandle,
     id: String,
-) -> Result<Project, String> {
+) -> Result<Project, ProjectError> {
     let store = ProjectStore::new(&app)?;
 
     let mut project = store
         .get_project(&id)?
-        .ok_or_else(|| format!("Project with id '{}' not found", id))?;
+        .ok_or_else(|| ProjectError::NotFound(id.clone()))?;
 
-    crate::commands::system::open_in_app(&project.directory, project.open_with.as_deref())?;
+    crate::commands::system::open_in_app(&project.directory, project.open_with.as_deref())
+        .map_err(ProjectError::OpenFailed)?;
     project.mark_as_opened_recently();
     store.save_project(&project)?;
     Ok(project)

@@ -1,6 +1,8 @@
+pub mod errors;
 pub mod installed_app;
 pub mod project;
 pub mod update_project;
+pub use errors::ProjectError;
 pub use installed_app::InstalledApp;
 pub use project::Project;
 

@@ -2743,6 +2743,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-store",
  "tauri-plugin-window-state",
+ "thiserror 2.0.20",
  "uuid",
  "winreg 0.56.0",
 ]
