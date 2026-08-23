@@ -1,4 +1,5 @@
 use crate::models::update_project::UpdateProject;
+use crate::models::ProjectError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -37,24 +38,24 @@ impl Project {
         name: &str,
         directory: &str,
         existing: &[Project],
-    ) -> Result<(), String> {
+    ) -> Result<(), ProjectError> {
         if existing.iter().any(|p| p.directory == directory) {
-            return Err(String::from("A project with this directory already exists"));
+            return Err(ProjectError::DuplicateDirectory(directory.to_string()));
         }
 
         if existing
             .iter()
             .any(|p| p.name.trim().eq_ignore_ascii_case(name.trim()))
         {
-            return Err(String::from("A project with this name already exists"));
+            return Err(ProjectError::DuplicateName(name.to_string()));
         }
 
         Ok(())
     }
 
-    fn validate_name(name: &str) -> Result<(), String> {
+    fn validate_name(name: &str) -> Result<(), ProjectError> {
         if name.trim().is_empty() {
-            return Err(String::from("Project name cannot be empty"));
+            return Err(ProjectError::InvalidName);
         }
         Ok(())
     }
@@ -62,10 +63,31 @@ impl Project {
     fn remove_spaces(name: &str) -> String {
         name.replace(' ', "_")
     }
-    
-    fn validate_directory(directory: &str) -> Result<(), String> {
+
+    fn normalize_tag(tag: &str) -> String {
+        let trimmed = tag.trim();
+        let mut chars = trimmed.chars();
+        match chars.next() {
+            Some(first) => first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
+            None => String::new(),
+        }
+    }
+
+    fn normalize_tags(tags: Vec<String>) -> Vec<String> {
+        let mut normalized = Vec::new();
+        for tag in tags {
+            let tag = Self::normalize_tag(&tag);
+            if !tag.is_empty() && !normalized.contains(&tag) {
+                normalized.push(tag);
+            }
+        }
+        normalized
+    }
+
+
+    fn validate_directory(directory: &str) -> Result<(), ProjectError> {
         if !Path::new(directory).is_dir() {
-            return Err(String::from("Project directory does not exist"));
+            return Err(ProjectError::InvalidDirectory(directory.to_string()));
         }
         Ok(())
     }
@@ -75,7 +97,7 @@ impl Project {
         directory: String,
         description: Option<String>,
         tags: Option<Vec<String>>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, ProjectError> {
         Self::validate_name(&name)?;
         Self::validate_directory(&directory)?;
         let name = Self::remove_spaces(&name);
@@ -90,7 +112,7 @@ impl Project {
             created_at: now,
             updated_at: now,
             last_opened_at: None,
-            tags: tags.unwrap_or_default(),
+            tags: Self::normalize_tags(tags.unwrap_or_default()),
             favorite: false,
             open_with: None,
             notes: None,
@@ -98,7 +120,7 @@ impl Project {
         })
     }
 
-    pub fn update(&mut self, update: UpdateProject) -> Result<(), String> {
+    pub fn update(&mut self, update: UpdateProject) -> Result<(), ProjectError> {
         if let Some(name) = &update.name {
             Self::validate_name(name)?;
         }
@@ -107,8 +129,16 @@ impl Project {
             Self::validate_directory(directory)?;
         }
 
+        if let Some(name) = update.name {
+            self.name = Self::remove_spaces(&name);
+        }
+
+        if let Some(tags) = update.tags {
+            self.tags = Self::normalize_tags(tags);
+        }
+
         apply_if_present!(
-            self, update, name, directory, description, tags, favorite, open_with, notes, client
+            self, update, directory, description, favorite, open_with, notes, client
         );
         self.updated_at = Utc::now();
 
