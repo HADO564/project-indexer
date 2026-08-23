@@ -1,6 +1,8 @@
 pub mod models;
 pub mod store;
 pub mod commands;
+pub mod errors;
+pub mod migrations;
 
 /// Works around WebKitGTK's DMABUF renderer failing on NVIDIA's proprietary
 /// driver, where it can't allocate GBM buffers. The window then either comes
