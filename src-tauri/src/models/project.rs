@@ -33,20 +33,52 @@ macro_rules! apply_if_present {
 }
 
 impl Project {
+    pub fn check_for_duplicate_name_or_dir(
+        name: &str,
+        directory: &str,
+        existing: &[Project],
+    ) -> Result<(), String> {
+        if existing.iter().any(|p| p.directory == directory) {
+            return Err(String::from("A project with this directory already exists"));
+        }
+
+        if existing
+            .iter()
+            .any(|p| p.name.trim().eq_ignore_ascii_case(name.trim()))
+        {
+            return Err(String::from("A project with this name already exists"));
+        }
+
+        Ok(())
+    }
+
+    fn validate_name(name: &str) -> Result<(), String> {
+        if name.trim().is_empty() {
+            return Err(String::from("Project name cannot be empty"));
+        }
+        Ok(())
+    }
+
+    fn remove_spaces(name: &str) -> String {
+        name.replace(' ', "_")
+    }
+    
+    fn validate_directory(directory: &str) -> Result<(), String> {
+        if !Path::new(directory).is_dir() {
+            return Err(String::from("Project directory does not exist"));
+        }
+        Ok(())
+    }
+
     pub fn new(
         name: String,
         directory: String,
         description: Option<String>,
         tags: Option<Vec<String>>,
     ) -> Result<Self, String> {
-        if name.trim().is_empty() {
-            return Err(String::from("Project name cannot be empty"));
-        }
-
-        if !Path::new(&directory).is_dir() {
-            return Err(String::from("Project directory does not exist"));
-        }
-
+        Self::validate_name(&name)?;
+        Self::validate_directory(&directory)?;
+        let name = Self::remove_spaces(&name);
         let now = Utc::now();
         let id = Uuid::new_v4().to_string();
 
@@ -68,15 +100,11 @@ impl Project {
 
     pub fn update(&mut self, update: UpdateProject) -> Result<(), String> {
         if let Some(name) = &update.name {
-            if name.trim().is_empty() {
-                return Err(String::from("Project name cannot be empty"));
-            }
+            Self::validate_name(name)?;
         }
 
         if let Some(directory) = &update.directory {
-            if !Path::new(directory).is_dir() {
-                return Err(String::from("Project directory does not exist"));
-            }
+            Self::validate_directory(directory)?;
         }
 
         apply_if_present!(
@@ -85,5 +113,9 @@ impl Project {
         self.updated_at = Utc::now();
 
         Ok(())
+    }
+
+    pub fn mark_as_opened_recently(&mut self) {
+        self.last_opened_at = Some(Utc::now());
     }
 }

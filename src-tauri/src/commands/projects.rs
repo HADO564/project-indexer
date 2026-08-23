@@ -10,9 +10,12 @@ pub fn create_project(
     description: Option<String>,
     tags: Option<Vec<String>>,
 ) -> Result<Project, String> {
-    let project = Project::new(name, directory, description, tags)?;
-
     let store = ProjectStore::new(&app)?;
+    let existing = store.get_all_projects()?;
+
+    Project::check_for_duplicate_name_or_dir(&name, &directory, &existing)?;
+
+    let project = Project::new(name, directory, description, tags)?;
     store.save_project(&project)?;
 
     Ok(project)
@@ -71,7 +74,7 @@ pub fn open_project(
         .ok_or_else(|| format!("Project with id '{}' not found", id))?;
 
     crate::commands::system::open_in_app(&project.directory, project.open_with.as_deref())?;
-    project.last_opened_at = Some(chrono::Utc::now());
+    project.mark_as_opened_recently();
     store.save_project(&project)?;
     Ok(project)
 }
