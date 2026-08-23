@@ -1,4 +1,5 @@
-use crate::models::{Project, ProjectError, UpdateProject};
+use crate::errors::ProjectError;
+use crate::models::{Project, UpdateProject};
 use crate::store::ProjectStore;
 use tauri::AppHandle;
 

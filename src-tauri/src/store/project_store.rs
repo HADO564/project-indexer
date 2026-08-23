@@ -1,4 +1,6 @@
-use crate::models::{Project, ProjectError};
+use crate::errors::ProjectError;
+use crate::migrations;
+use crate::models::Project;
 use serde_json::{from_value, to_value};
 use std::sync::Arc;
 use tauri::{AppHandle, Runtime};
@@ -19,6 +21,7 @@ impl<R: Runtime> ProjectStore<R> {
     pub fn save_project(&self, project: &Project) -> Result<(), ProjectError> {
         let value = to_value(project)
             .map_err(|e| ProjectError::Store(format!("Failed to serialize project: {}", e)))?;
+        let value = migrations::migrate(value);
 
         self.store.set(project.id.clone(), value);
 
@@ -32,6 +35,7 @@ impl<R: Runtime> ProjectStore<R> {
     pub fn get_project(&self, project_id: &str) -> Result<Option<Project>, ProjectError> {
         match self.store.get(project_id) {
             Some(value) => {
+                let value = migrations::migrate(value);
                 let project: Project = from_value(value).map_err(|e| {
                     ProjectError::Store(format!("Failed to deserialize project: {}", e))
                 })?;
@@ -44,6 +48,7 @@ impl<R: Runtime> ProjectStore<R> {
     pub fn get_all_projects(&self) -> Result<Vec<Project>, ProjectError> {
         let mut projects = Vec::new();
         for value in self.store.values() {
+            let value = migrations::migrate(value);
             let project: Project = from_value(value).map_err(|e| {
                 ProjectError::Store(format!("Failed to deserialize project: {}", e))
             })?;
