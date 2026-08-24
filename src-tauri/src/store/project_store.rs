@@ -25,10 +25,6 @@ impl<R: Runtime> ProjectStore<R> {
 
         self.store.set(project.id.clone(), value);
 
-        self.store
-            .save()
-            .map_err(|e| ProjectError::Store(format!("Failed to save project store: {}", e)))?;
-
         Ok(())
     }
 
@@ -45,7 +41,27 @@ impl<R: Runtime> ProjectStore<R> {
         }
     }
 
+    /// Returns every non-deleted project. This is the main list, and also
+    /// what duplicate name/directory checks are run against, so a directory
+    /// freed up by a soft-deleted project can be reused by a new one.
     pub fn get_all_projects(&self) -> Result<Vec<Project>, ProjectError> {
+        Ok(self
+            .all_projects()?
+            .into_iter()
+            .filter(|p| !p.is_deleted)
+            .collect())
+    }
+
+    /// Returns soft-deleted projects only, for the bin view.
+    pub fn get_deleted_projects(&self) -> Result<Vec<Project>, ProjectError> {
+        Ok(self
+            .all_projects()?
+            .into_iter()
+            .filter(|p| p.is_deleted)
+            .collect())
+    }
+
+    fn all_projects(&self) -> Result<Vec<Project>, ProjectError> {
         let mut projects = Vec::new();
         for value in self.store.values() {
             let value = migrations::migrate(value);
@@ -60,10 +76,20 @@ impl<R: Runtime> ProjectStore<R> {
     pub fn delete_project(&self, project_id: &str) -> Result<(), ProjectError> {
         self.store.delete(project_id);
 
-        self.store
-            .save()
-            .map_err(|e| ProjectError::Store(format!("Failed to save project store: {}", e)))?;
+        Ok(())
+    }
 
+    /// Flushes any pending autosaved writes to disk immediately.
+    ///
+    /// Autosave debounces writes by 100ms, so a mutation made just before the
+    /// app closes could otherwise be lost. Call this on shutdown (e.g. window
+    /// `CloseRequested`). Does nothing if the store was never loaded.
+    pub fn flush(app: &AppHandle<R>) -> Result<(), ProjectError> {
+        if let Some(store) = app.get_store("projects.json") {
+            store
+                .save()
+                .map_err(|e| ProjectError::Store(format!("Failed to save project store: {}", e)))?;
+        }
         Ok(())
     }
 }

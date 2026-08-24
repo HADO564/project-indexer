@@ -22,6 +22,18 @@ pub enum ProjectError {
 
     #[error("Project store error: {0}")]
     Store(String),
+
+    #[error("Project directory is not accessible: {0}")]
+    DirectoryInaccessible(String),
+
+    #[error("Project directory has been deleted or moved: {0}")]
+    DirectoryDeletedOrMoved(String),
+
+    #[error("Project is not in the bin, so it can't be permanently deleted: {0}")]
+    ProjectNotInBin(String),
+
+    #[error("The app associated with this project has been removed or cannot be found: {0}")]
+    OpenWithAppMissing(String),
 }
 
 /// Tauri serializes command errors as their `Display` string, so the JS

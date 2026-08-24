@@ -1,10 +1,16 @@
 use crate::models::InstalledApp;
 
-/// Recursively deletes a directory from disk. Used when a project is
-/// removed with the "also delete this directory" option.
-#[tauri::command]
-pub fn delete_directory(path: String) -> Result<(), String> {
-    std::fs::remove_dir_all(&path).map_err(|e| format!("Failed to delete directory: {}", e))
+/// Recursively deletes a directory from disk, treating an already-missing
+/// directory as success (deleting is idempotent: the goal state — the
+/// directory being gone — is already reached). `std::fs::remove_dir_all`
+/// works identically on Windows and Linux, so no OS-specific handling is
+/// needed here.
+pub fn remove_directory(path: &str) -> Result<(), String> {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("Failed to delete directory: {}", e)),
+    }
 }
 
 /// Scans platform-specific sources for installed applications, used by
@@ -43,6 +49,79 @@ pub fn open_in_app(directory: &str, open_with: Option<&str>) -> Result<(), Strin
     }
 
     tauri_plugin_opener::open_path(directory, open_with).map_err(|e| e.to_string())
+}
+
+/// Checks whether the app an `open_with` value points at can still be
+/// launched, so a project configured to open with an app that's since been
+/// uninstalled or moved can be caught before actually trying — and reported
+/// as a specific "app is missing" error rather than a generic launch
+/// failure.
+///
+/// On Linux `open_with` is a full command line (as stored by the picker, or
+/// hand-typed), so only the program — the first token — is resolved. On
+/// Windows/macOS it's just a path or bare command name.
+pub fn open_with_app_available(open_with: &str) -> bool {
+    let program = program_from_open_with(open_with);
+    let program = program.trim();
+    if program.is_empty() {
+        return false;
+    }
+    command_exists(program)
+}
+
+#[cfg(target_os = "linux")]
+fn program_from_open_with(open_with: &str) -> String {
+    linux_impl::split_command(open_with)
+        .into_iter()
+        .next()
+        .unwrap_or_default()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn program_from_open_with(open_with: &str) -> String {
+    open_with.to_string()
+}
+
+/// Checks whether `program` exists: as a path on its own when it looks like
+/// one (absolute, or containing a separator), otherwise by searching `PATH`
+/// the way the OS would when launching a bare command name.
+fn command_exists(program: &str) -> bool {
+    use std::path::Path;
+
+    let path = Path::new(program);
+    if path.is_absolute() || program.contains(std::path::MAIN_SEPARATOR) {
+        return path.is_file();
+    }
+
+    let Some(path_var) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let extensions = windows_path_extensions();
+
+    std::env::split_paths(&path_var).any(|dir| {
+        dir.join(program).is_file()
+            || extensions
+                .iter()
+                .any(|ext| dir.join(format!("{program}{ext}")).is_file())
+    })
+}
+
+/// `PATHEXT` suffixes (`.EXE`, `.CMD`, …) that Windows tries in turn against
+/// a bare command name when resolving it through `PATH`. Empty on other
+/// platforms, where a bare name must match a `PATH` entry exactly.
+#[cfg(windows)]
+fn windows_path_extensions() -> Vec<String> {
+    std::env::var("PATHEXT")
+        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
+        .split(';')
+        .filter(|ext| !ext.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn windows_path_extensions() -> Vec<String> {
+    Vec::new()
 }
 
 #[cfg(windows)]
@@ -599,5 +678,53 @@ mod linux_impl {
             assert_eq!(app.name, "Editor");
             assert_eq!(app.path, "editor %F");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_absolute_path_is_unavailable() {
+        assert!(!open_with_app_available(
+            "/definitely/not/a/real/app-xyz"
+        ));
+    }
+
+    #[test]
+    fn blank_open_with_is_unavailable() {
+        assert!(!open_with_app_available(""));
+        assert!(!open_with_app_available("   "));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_bare_command_on_path_is_available() {
+        // cmd.exe lives in System32, which is always on PATH on Windows.
+        assert!(open_with_app_available("cmd.exe"));
+        assert!(open_with_app_available("cmd"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_missing_absolute_exe_is_unavailable() {
+        assert!(!open_with_app_available(
+            r"C:\definitely\not\a\real\app-xyz.exe"
+        ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_bare_command_on_path_is_available() {
+        // `ls` is safe to assume present on any Linux box running these tests.
+        assert!(open_with_app_available("ls"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_full_command_line_checks_only_the_program() {
+        assert!(open_with_app_available("ls -la /tmp"));
+        assert!(!open_with_app_available("/definitely/not/a/real/app-xyz -la"));
     }
 }
