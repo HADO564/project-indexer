@@ -129,6 +129,7 @@ mod tests {
             open_with: None,
             notes: None,
             client: None,
+            tracker: None,
         }
     }
 

@@ -67,16 +67,22 @@ mod tests {
     fn flags_permission_denied() {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir = std::env::temp_dir().join("project-indexer-tests-no-access-dir");
-        std::fs::create_dir_all(&dir).expect("should create temp dir");
-        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000))
+        // Statting a path resolves it through its parent, so the mode that
+        // decides the outcome is the parent's execute bit, not the target's own
+        // — a mode-000 directory is still perfectly stattable from outside.
+        // The path under test therefore has to sit *inside* the locked
+        // directory, so that resolving it requires traversing one we've closed.
+        let outer = std::env::temp_dir().join("project-indexer-tests-no-access-dir");
+        let inner = outer.join("child");
+        std::fs::create_dir_all(&inner).expect("should create temp dirs");
+        std::fs::set_permissions(&outer, std::fs::Permissions::from_mode(0o000))
             .expect("should lock down permissions");
 
-        let status = check_directory_status(dir.to_str().unwrap());
+        let status = check_directory_status(inner.to_str().unwrap());
 
-        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755))
+        std::fs::set_permissions(&outer, std::fs::Permissions::from_mode(0o755))
             .expect("should restore permissions for cleanup");
-        std::fs::remove_dir_all(&dir).expect("should clean up temp dir");
+        std::fs::remove_dir_all(&outer).expect("should clean up temp dir");
 
         assert!(matches!(status, DirectoryStatus::PermissionDenied));
     }

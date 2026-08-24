@@ -1,25 +1,48 @@
 use crate::errors::ProjectError;
 use crate::models::update_project::UpdateProject;
 use crate::utils::filesystem::{check_directory_status, DirectoryStatus};
+use crate::models::tracker::Tracker;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+/// A stored project.
+///
+/// Records written by older builds simply lack every field added since, so a
+/// new field has to be absorbable on read: either `Option<T>`, which serde
+/// reads as `None` when the key is missing, or `#[serde(default)]`. Adding a
+/// bare `bool`, `String` or `Vec` without one of those makes every existing
+/// record fail to load — the whole project disappears from the app, rather
+/// than just the new field being empty.
+///
+/// The identifying fields are deliberately left strict. A record with no `id`
+/// or `directory` is corrupt, and should fail loudly instead of loading as a
+/// blank project.
+///
+/// A change that can't be absorbed this way — a rename, a type change, a field
+/// split — needs a step in [`crate::migrations::migrate`] and a
+/// `CURRENT_VERSION` bump. `loads_a_record_missing_every_absorbable_field` in
+/// this module's tests fails the moment a new field breaks the rule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-
 pub struct Project {
+    #[serde(default)]
     pub is_deleted: bool,
     pub id: String,
     pub name: String,
+    #[serde(default)]
     pub description: String,
     pub directory: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_opened_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
     pub favorite: bool,
     pub open_with: Option<String>,
     pub notes: Option<String>,
     pub client: Option<String>,
+    pub tracker: Option<Vec<Tracker>>,
 }
 
 /// Assigns each listed field from `$update` onto `$self` only when present
@@ -174,6 +197,7 @@ impl Project {
             open_with: None,
             notes: None,
             client: None,
+            tracker: None,
         })
     }
 
@@ -245,6 +269,7 @@ mod tests {
             open_with: None,
             notes: None,
             client: None,
+            tracker: None,
         }
     }
 
@@ -323,7 +348,6 @@ mod tests {
         let result = Project::check_directory_health(dir.to_str().unwrap());
         assert!(result.is_ok());
     }
-
     #[test]
     fn mark_deleted_sets_the_flag() {
         let mut project = project_with_dir("D:\\Projects\\Friction");
@@ -342,5 +366,56 @@ mod tests {
         project.restore();
 
         assert!(!project.is_deleted);
+    }
+
+    /// The oldest record shape still in the wild: identity and timestamps only.
+    const LEGACY_RECORD: &str = r#"{
+        "id": "e4df90f6",
+        "name": "Legacy",
+        "directory": "/tmp/legacy",
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-01-01T00:00:00Z"
+    }"#;
+
+    #[test]
+    fn loads_a_record_missing_every_absorbable_field() {
+        let project: Project = serde_json::from_str(LEGACY_RECORD).expect(
+            "a new field on Project must be Option<T> or #[serde(default)], \
+             otherwise every already-stored project fails to load",
+        );
+
+        assert!(!project.is_deleted);
+        assert!(!project.favorite);
+        assert!(project.tags.is_empty());
+        assert!(project.description.is_empty());
+        assert!(project.last_opened_at.is_none());
+        assert!(project.tracker.is_none());
+    }
+
+    #[test]
+    fn loads_a_legacy_record_through_the_migration_path() {
+        // Mirrors how the store actually reads a project, so the test breaks if
+        // a migration step starts mangling records it was meant to leave alone.
+        let value: serde_json::Value = serde_json::from_str(LEGACY_RECORD).unwrap();
+        let migrated = crate::migrations::migrate(value);
+
+        let project: Project =
+            serde_json::from_value(migrated).expect("legacy records must survive migration");
+
+        assert_eq!(project.id, "e4df90f6");
+    }
+
+    #[test]
+    fn rejects_a_record_missing_its_identity() {
+        // The other half of the contract: absorbable fields default, but a
+        // record with no id is corrupt and must not load as a blank project.
+        let corrupt = r#"{
+            "name": "No id",
+            "directory": "/tmp/x",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
+        }"#;
+
+        assert!(serde_json::from_str::<Project>(corrupt).is_err());
     }
 }
