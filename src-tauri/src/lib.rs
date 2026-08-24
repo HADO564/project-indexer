@@ -4,6 +4,7 @@ pub mod commands;
 pub mod errors;
 pub mod migrations;
 pub mod utils;
+pub mod detectors;
 
 use tauri::Manager;
 
