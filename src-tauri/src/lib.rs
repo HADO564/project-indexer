@@ -61,6 +61,7 @@ pub fn run() {
             commands::projects::get_project,
             commands::projects::get_all_projects,
             commands::projects::get_deleted_projects,
+            commands::projects::get_favorite_projects,
             commands::projects::delete_project,
             commands::projects::delete_project_directory,
             commands::projects::restore_project,

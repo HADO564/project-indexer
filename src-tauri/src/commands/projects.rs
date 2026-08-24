@@ -2,6 +2,7 @@ use crate::commands::system::{open_with_app_available, remove_directory};
 use crate::errors::ProjectError;
 use crate::models::{Project, UpdateProject};
 use crate::store::ProjectStore;
+use crate::utils::{filter_deleted, filter_favorites, SortOptions};
 use tauri::{AppHandle, Runtime};
 
 #[tauri::command]
@@ -56,10 +57,28 @@ pub fn get_all_projects(app: AppHandle) -> Result<Vec<Project>, ProjectError> {
     store.get_all_projects()
 }
 
+/// Returns soft-deleted projects for the bin view, ordered per `options`
+/// (default: alphabetical, ascending — see [`SortOptions::default`]).
 #[tauri::command]
-pub fn get_deleted_projects(app: AppHandle) -> Result<Vec<Project>, ProjectError> {
+pub fn get_deleted_projects(
+    app: AppHandle,
+    options: Option<SortOptions>,
+) -> Result<Vec<Project>, ProjectError> {
     let store = ProjectStore::new(&app)?;
-    store.get_deleted_projects()
+    let all = store.all_projects()?;
+    Ok(filter_deleted(&all, options.unwrap_or_default()))
+}
+
+/// Returns favorited, non-deleted projects, ordered per `options` (default:
+/// alphabetical, ascending).
+#[tauri::command]
+pub fn get_favorite_projects(
+    app: AppHandle,
+    options: Option<SortOptions>,
+) -> Result<Vec<Project>, ProjectError> {
+    let store = ProjectStore::new(&app)?;
+    let active = store.get_all_projects()?;
+    Ok(filter_favorites(&active, options.unwrap_or_default()))
 }
 
 /// Permanently purges a project's metadata. Only allowed on an already

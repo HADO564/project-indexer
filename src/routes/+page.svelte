@@ -5,6 +5,7 @@
   import CreateProjectForm from "$lib/components/CreateProjectForm.svelte";
   import DeleteModal from "$lib/components/DeleteModal.svelte";
   import ErrorBanner from "$lib/components/ErrorBanner.svelte";
+  import FavoritesModal from "$lib/components/FavoritesModal.svelte";
   import OpenWithMissingModal from "$lib/components/OpenWithMissingModal.svelte";
   import ProjectList from "$lib/components/ProjectList.svelte";
 
@@ -14,6 +15,7 @@
   let editingId = $state<string | null>(null);
   let deleteTarget = $state<Project | null>(null);
   let binOpen = $state(false);
+  let favoritesOpen = $state(false);
   let openWithMissingTarget = $state<Project | null>(null);
 
   async function loadProjects() {
@@ -90,6 +92,20 @@
     await loadProjects();
   }
 
+  function handleOpenFavorites() {
+    favoritesOpen = true;
+    error = "";
+  }
+
+  function handleCloseFavorites() {
+    favoritesOpen = false;
+  }
+
+  async function handleFavoritesChanged() {
+    error = "";
+    await loadProjects();
+  }
+
   function handleOpenWithAppMissing(project: Project) {
     openWithMissingTarget = project;
     error = "";
@@ -109,6 +125,28 @@
 <main class="mx-auto max-w-3xl px-4 py-8">
   <div class="mb-6 flex items-center justify-center gap-2">
     <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Project Indexer</h1>
+    <button
+      type="button"
+      onclick={handleOpenFavorites}
+      class="rounded-md p-1.5 text-gray-500 hover:bg-gray-200 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+      title="Favorites"
+      aria-label="Open favorites"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="h-5 w-5"
+      >
+        <path
+          d="M12 3.5l2.6 5.27 5.82.85-4.21 4.1.99 5.79L12 16.9l-5.2 2.61.99-5.79-4.21-4.1 5.82-.85z"
+        />
+      </svg>
+    </button>
     <button
       type="button"
       onclick={handleOpenBin}
@@ -164,6 +202,15 @@
 
 {#if binOpen}
   <BinModal onClose={handleCloseBin} onRestored={handleRestored} onerror={handleError} />
+{/if}
+
+{#if favoritesOpen}
+  <FavoritesModal
+    onClose={handleCloseFavorites}
+    onChanged={handleFavoritesChanged}
+    onOpenWithAppMissing={handleOpenWithAppMissing}
+    onerror={handleError}
+  />
 {/if}
 
 {#if openWithMissingTarget}

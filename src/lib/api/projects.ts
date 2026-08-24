@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { toError } from "./errors";
-import type { CreateProjectInput, Project, UpdateProject } from "./types";
+import type { CreateProjectInput, Project, SortOptions, UpdateProject } from "./types";
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {
   try {
@@ -31,9 +31,17 @@ export async function getAllProjects(): Promise<Project[]> {
   }
 }
 
-export async function getDeletedProjects(): Promise<Project[]> {
+export async function getDeletedProjects(options?: SortOptions): Promise<Project[]> {
   try {
-    return await invoke<Project[]>("get_deleted_projects");
+    return await invoke<Project[]>("get_deleted_projects", { options: options ?? null });
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+export async function getFavoriteProjects(options?: SortOptions): Promise<Project[]> {
+  try {
+    return await invoke<Project[]>("get_favorite_projects", { options: options ?? null });
   } catch (err) {
     throw toError(err);
   }

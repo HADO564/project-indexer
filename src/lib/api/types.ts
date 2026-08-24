@@ -45,3 +45,14 @@ export interface InstalledApp {
   name: string;
   path: string;
 }
+
+// Mirrors src-tauri/src/utils/sorting.rs. Used by get_favorite_projects and
+// get_deleted_projects; omit entirely to get the backend default
+// (alphabetical, ascending).
+export type SortBy = "alphabetical" | "last_opened";
+export type SortDirection = "ascending" | "descending";
+
+export interface SortOptions {
+  by: SortBy;
+  direction: SortDirection;
+}
