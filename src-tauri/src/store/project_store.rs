@@ -5,6 +5,7 @@ use serde_json::{from_value, to_value};
 use std::sync::Arc;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_store::{Store, StoreExt};
+use crate::utils::sort_projects;
 
 pub struct ProjectStore<R: tauri::Runtime> {
     store: Arc<Store<R>>,
@@ -70,6 +71,7 @@ impl<R: Runtime> ProjectStore<R> {
             })?;
             projects.push(project);
         }
+        sort_projects(&mut projects);
         Ok(projects)
     }
 
