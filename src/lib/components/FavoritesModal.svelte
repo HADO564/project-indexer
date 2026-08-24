@@ -1,32 +1,32 @@
 <script lang="ts">
-  import { deleteProject, getDeletedProjects, restoreProject } from "$lib/api/projects";
+  import { isOpenWithAppMissing, openProjectDirectory } from "$lib/api/opener";
+  import { getFavoriteProjects, updateProject } from "$lib/api/projects";
   import type { Project, SortBy, SortDirection } from "$lib/api/types";
   import SortControls from "./SortControls.svelte";
-  import { buttonClass, dangerButtonClass } from "./styles";
+  import { buttonClass } from "./styles";
 
   let {
     onClose,
-    onRestored,
+    onChanged,
+    onOpenWithAppMissing,
     onerror,
   }: {
     onClose: () => void;
-    onRestored: () => void | Promise<void>;
+    onChanged: () => void | Promise<void>;
+    onOpenWithAppMissing: (project: Project) => void;
     onerror?: (message: string) => void;
   } = $props();
 
   let projects = $state<Project[]>([]);
   let loading = $state(false);
   let pendingId = $state<string | null>(null);
-  // Purging is permanent, so the danger button asks for a second click
-  // before it acts rather than opening yet another modal on top of this one.
-  let confirmPurgeId = $state<string | null>(null);
   let sortBy = $state<SortBy>("alphabetical");
   let sortDirection = $state<SortDirection>("ascending");
 
   async function load() {
     loading = true;
     try {
-      projects = await getDeletedProjects({ by: sortBy, direction: sortDirection });
+      projects = await getFavoriteProjects({ by: sortBy, direction: sortDirection });
     } catch (err) {
       onerror?.((err as Error).message);
     } finally {
@@ -42,33 +42,32 @@
     if (event.key === "Escape") onClose();
   }
 
-  async function handleRestore(project: Project) {
+  async function handleOpen(project: Project) {
     pendingId = project.id;
     try {
-      await restoreProject(project.id);
-      projects = projects.filter((p) => p.id !== project.id);
-      await onRestored();
+      await openProjectDirectory(project.id);
+      await onChanged();
     } catch (err) {
-      onerror?.((err as Error).message);
+      if (isOpenWithAppMissing(err)) {
+        onOpenWithAppMissing(project);
+      } else {
+        onerror?.((err as Error).message);
+      }
     } finally {
       pendingId = null;
     }
   }
 
-  async function handlePurge(project: Project) {
-    if (confirmPurgeId !== project.id) {
-      confirmPurgeId = project.id;
-      return;
-    }
+  async function handleUnfavorite(project: Project) {
     pendingId = project.id;
     try {
-      await deleteProject(project.id);
+      await updateProject(project.id, { favorite: false });
       projects = projects.filter((p) => p.id !== project.id);
+      await onChanged();
     } catch (err) {
       onerror?.((err as Error).message);
     } finally {
       pendingId = null;
-      confirmPurgeId = null;
     }
   }
 </script>
@@ -86,19 +85,19 @@
     role="dialog"
     tabindex="-1"
     aria-modal="true"
-    aria-labelledby="bin-modal-title"
+    aria-labelledby="favorites-modal-title"
     onclick={(e) => e.stopPropagation()}
     onkeydown={(e) => e.stopPropagation()}
   >
     <div class="flex items-center justify-between">
-      <h2 id="bin-modal-title" class="mt-0 text-lg font-semibold text-gray-900 dark:text-gray-100">
-        Bin
+      <h2
+        id="favorites-modal-title"
+        class="mt-0 text-lg font-semibold text-gray-900 dark:text-gray-100"
+      >
+        Favorites
       </h2>
       <button type="button" onclick={onClose} class={buttonClass}>Close</button>
     </div>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-      Projects whose directory was deleted, kept here until restored or forgotten for good.
-    </p>
 
     <div class="mt-3">
       <SortControls bind:by={sortBy} bind:direction={sortDirection} />
@@ -107,7 +106,7 @@
     {#if loading}
       <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">Loading…</p>
     {:else if projects.length === 0}
-      <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">The bin is empty.</p>
+      <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">No favorites yet.</p>
     {:else}
       <ul class="mt-4 flex max-h-80 flex-col gap-2 overflow-y-auto">
         {#each projects as project (project.id)}
@@ -122,19 +121,20 @@
               <div class="flex shrink-0 gap-2">
                 <button
                   type="button"
-                  onclick={() => handleRestore(project)}
+                  onclick={() => handleOpen(project)}
                   disabled={pendingId === project.id}
                   class={buttonClass}
                 >
-                  Restore
+                  Open
                 </button>
                 <button
                   type="button"
-                  onclick={() => handlePurge(project)}
+                  onclick={() => handleUnfavorite(project)}
                   disabled={pendingId === project.id}
-                  class={dangerButtonClass}
+                  class={buttonClass}
+                  title="Remove from favorites"
                 >
-                  {confirmPurgeId === project.id ? "Confirm?" : "Delete permanently"}
+                  ★
                 </button>
               </div>
             </div>

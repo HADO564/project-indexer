@@ -5,7 +5,7 @@ use serde_json::{from_value, to_value};
 use std::sync::Arc;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_store::{Store, StoreExt};
-use crate::utils::sort_projects;
+use crate::utils::sort_projects_by_recents;
 
 pub struct ProjectStore<R: tauri::Runtime> {
     store: Arc<Store<R>>,
@@ -53,16 +53,11 @@ impl<R: Runtime> ProjectStore<R> {
             .collect())
     }
 
-    /// Returns soft-deleted projects only, for the bin view.
-    pub fn get_deleted_projects(&self) -> Result<Vec<Project>, ProjectError> {
-        Ok(self
-            .all_projects()?
-            .into_iter()
-            .filter(|p| p.is_deleted)
-            .collect())
-    }
-
-    fn all_projects(&self) -> Result<Vec<Project>, ProjectError> {
+    /// Returns every project regardless of deleted status. Commands that
+    /// need a specific view of the full set (e.g. favorites, the bin) filter
+    /// and re-sort this themselves via `utils::sorting`, rather than the
+    /// store baking a fixed sort/filter into each view.
+    pub fn all_projects(&self) -> Result<Vec<Project>, ProjectError> {
         let mut projects = Vec::new();
         for value in self.store.values() {
             let value = migrations::migrate(value);
@@ -71,7 +66,7 @@ impl<R: Runtime> ProjectStore<R> {
             })?;
             projects.push(project);
         }
-        sort_projects(&mut projects);
+        sort_projects_by_recents(&mut projects);
         Ok(projects)
     }
 
