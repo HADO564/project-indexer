@@ -3,6 +3,9 @@ pub mod store;
 pub mod commands;
 pub mod errors;
 pub mod migrations;
+pub mod utils;
+
+use tauri::Manager;
 
 /// Works around WebKitGTK's DMABUF renderer failing on NVIDIA's proprietary
 /// driver, where it can't allocate GBM buffers. The window then either comes
@@ -45,15 +48,25 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if let Err(e) = store::ProjectStore::flush(window.app_handle()) {
+                    eprintln!("Failed to flush project store on close: {}", e);
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::projects::create_project,
             commands::projects::update_project,
             commands::projects::get_project,
             commands::projects::get_all_projects,
+            commands::projects::get_deleted_projects,
             commands::projects::delete_project,
+            commands::projects::delete_project_directory,
+            commands::projects::restore_project,
             commands::system::list_installed_apps,
-            commands::system::delete_directory,
-            commands::projects::open_project
+            commands::projects::open_project,
+            commands::projects::open_project_in_explorer
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

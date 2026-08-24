@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { openProjectDirectory } from "$lib/api/opener";
+  import { isOpenWithAppMissing, openProjectDirectory } from "$lib/api/opener";
   import type { Project } from "$lib/api/types";
   import { buttonClass } from "./styles";
 
@@ -8,12 +8,14 @@
     onEdit,
     onRequestDelete,
     onOpened,
+    onOpenWithAppMissing,
     onerror,
   }: {
     project: Project;
     onEdit: (project: Project) => void;
     onRequestDelete: (project: Project) => void;
     onOpened: () => void | Promise<void>;
+    onOpenWithAppMissing: (project: Project) => void;
     onerror?: (message: string) => void;
   } = $props();
 
@@ -22,7 +24,11 @@
       await openProjectDirectory(project.id);
       await onOpened();
     } catch (err) {
-      onerror?.((err as Error).message);
+      if (isOpenWithAppMissing(err)) {
+        onOpenWithAppMissing(project);
+      } else {
+        onerror?.((err as Error).message);
+      }
     }
   }
 </script>

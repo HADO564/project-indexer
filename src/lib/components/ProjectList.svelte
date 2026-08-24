@@ -13,6 +13,7 @@
     onSaved,
     onRequestDelete,
     onOpened,
+    onOpenWithAppMissing,
     onerror,
   }: {
     projects: Project[];
@@ -23,6 +24,7 @@
     onSaved: () => void | Promise<void>;
     onRequestDelete: (project: Project) => void;
     onOpened: () => void | Promise<void>;
+    onOpenWithAppMissing: (project: Project) => void;
     onerror: (message: string) => void;
   } = $props();
 </script>
@@ -40,7 +42,14 @@
           {#if editingId === project.id}
             <EditProjectForm {project} {onSaved} onCancel={onCancelEdit} {onerror} />
           {:else}
-            <ProjectCard {project} {onEdit} {onRequestDelete} {onOpened} {onerror} />
+            <ProjectCard
+              {project}
+              {onEdit}
+              {onRequestDelete}
+              {onOpened}
+              {onOpenWithAppMissing}
+              {onerror}
+            />
           {/if}
         </li>
       {/each}

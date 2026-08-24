@@ -3,6 +3,7 @@
 
 export interface Project {
   id: string;
+  is_deleted: boolean;
   name: string;
   description: string;
   directory: string;

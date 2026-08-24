@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { deleteDirectory } from "$lib/api/filesystem";
-  import { deleteProject } from "$lib/api/projects";
+  import { deleteProjectDirectory } from "$lib/api/projects";
   import type { Project } from "$lib/api/types";
   import { buttonClass, dangerButtonClass } from "./styles";
 
@@ -16,7 +15,10 @@
     onerror?: (message: string) => void;
   } = $props();
 
-  let deleteDirectoryToo = $state(false);
+  // Unchecked by default: deleting always removes the directory, but keeps
+  // the tracked metadata around (soft-deleted, recoverable from the bin)
+  // unless the user opts into the permanent purge.
+  let permanentlyDeleteMetadata = $state(false);
   let deleting = $state(false);
 
   function handleKeydown(event: KeyboardEvent) {
@@ -26,10 +28,7 @@
   async function handleConfirm() {
     deleting = true;
     try {
-      if (deleteDirectoryToo) {
-        await deleteDirectory(project.directory);
-      }
-      await deleteProject(project.id);
+      await deleteProjectDirectory(project.id, permanentlyDeleteMetadata);
       await onDeleted();
     } catch (err) {
       onerror?.((err as Error).message);
@@ -63,12 +62,12 @@
       Delete "{project.name}"?
     </h2>
     <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-      This removes the project from Project Indexer.
+      This deletes <code class="break-all">{project.directory}</code> from disk (cannot be undone).
     </p>
     <label class="mt-3 mb-4 flex items-start gap-2 text-sm text-red-700 dark:text-red-400">
-      <input type="checkbox" bind:checked={deleteDirectoryToo} class="mt-0.5" />
+      <input type="checkbox" bind:checked={permanentlyDeleteMetadata} class="mt-0.5" />
       <span>
-        Also delete <code class="break-all">{project.directory}</code> from disk (cannot be undone)
+        Also permanently forget this project, instead of keeping it in the bin
       </span>
     </label>
     <div class="flex gap-2">
