@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* Declare which color schemes the UI supports so the engine paints *native*
+   widgets — <select> menulists, scrollbars, spinners — to match the active
+   scheme. Without this the engine assumes `light`: WebKitGTK then drew the
+   sort <select> with a light menulist background while the `dark:` variants
+   below set near-white text on it, leaving the label invisible. Chromium on a
+   light Windows desktop happened to agree with that light default, which is
+   why the bug only surfaced on Linux. */
+html {
+  color-scheme: light dark;
+}
+
 body {
   @apply min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100;
 }
