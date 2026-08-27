@@ -1,8 +1,10 @@
 use crate::commands::system::{open_with_app_available, remove_directory};
+use crate::detectors::detect_project;
 use crate::errors::ProjectError;
 use crate::models::{Project, UpdateProject};
 use crate::store::ProjectStore;
-use crate::utils::{filter_deleted, filter_favorites, SortOptions};
+use crate::utils::{filter_deleted, filter_favorites, sort_projects, SortOptions};
+use std::path::Path;
 use tauri::{AppHandle, Runtime};
 
 #[tauri::command]
@@ -18,7 +20,41 @@ pub fn create_project(
 
     Project::check_for_duplicate_name_or_dir(&name, &directory, &existing)?;
 
-    let project = Project::new(name, directory, description, tags)?;
+    let mut project = Project::new(name, directory, description, tags)?;
+
+    // Best-effort: a project is still worth tracking even if we can't tell
+    // what kind of project it is (a detector bug, a permissions hiccup on a
+    // git call, etc). `refresh_project_trackers` lets the frontend retry
+    // this explicitly, where a failure is worth surfacing to the user.
+    match detect_project(Path::new(&project.directory)) {
+        Ok(trackers) => project.trackers = trackers,
+        Err(e) => eprintln!(
+            "Failed to detect project type for '{}': {}",
+            project.directory, e
+        ),
+    }
+
+    store.save_project(&project)?;
+
+    Ok(project)
+}
+
+/// Re-runs project-type detection (git, and whatever else is registered)
+/// against an existing project's directory and persists the result.
+///
+/// Unlike the best-effort detection in [`create_project`], a detection
+/// failure here is returned to the caller — this is an explicit,
+/// user-triggered retry, so silently doing nothing would be confusing.
+#[tauri::command]
+pub fn refresh_project_trackers(app: AppHandle, id: String) -> Result<Project, ProjectError> {
+    let store = ProjectStore::new(&app)?;
+
+    let mut project = store
+        .get_project(&id)?
+        .ok_or_else(|| ProjectError::NotFound(id.clone()))?;
+
+    project.trackers = detect_project(Path::new(&project.directory))
+        .map_err(|e| ProjectError::Detection(e.to_string()))?;
     store.save_project(&project)?;
 
     Ok(project)
@@ -51,10 +87,17 @@ pub fn get_project(app: AppHandle, id: String) -> Result<Project, ProjectError> 
         .ok_or_else(|| ProjectError::NotFound(id.clone()))
 }
 
+/// Returns non-deleted projects for the main list view, ordered per
+/// `options` (default: alphabetical, ascending — see [`SortOptions::default`]).
 #[tauri::command]
-pub fn get_all_projects(app: AppHandle) -> Result<Vec<Project>, ProjectError> {
+pub fn get_all_projects(
+    app: AppHandle,
+    options: Option<SortOptions>,
+) -> Result<Vec<Project>, ProjectError> {
     let store = ProjectStore::new(&app)?;
-    store.get_all_projects()
+    let mut projects = store.get_all_projects()?;
+    sort_projects(&mut projects, options.unwrap_or_default());
+    Ok(projects)
 }
 
 /// Returns soft-deleted projects for the bin view, ordered per `options`
@@ -104,11 +147,29 @@ pub fn delete_project(app: AppHandle, id: String) -> Result<(), ProjectError> {
     Ok(())
 }
 
+/// Removes a project's tracked metadata without touching its directory on
+/// disk — "stop indexing this," as opposed to [`delete_project`] (only for
+/// an already soft-deleted project) or [`delete_project_directory`] (which
+/// always removes the directory too). Works on any project regardless of
+/// `is_deleted`, since the folder is left exactly where it is; re-adding it
+/// later is just [`create_project`] pointed at the same directory again.
+#[tauri::command]
+pub fn untrack_project(app: AppHandle, id: String) -> Result<(), ProjectError> {
+    let store = ProjectStore::new(&app)?;
+
+    store
+        .get_project(&id)?
+        .ok_or_else(|| ProjectError::NotFound(id.clone()))?;
+
+    store.delete_project(&id)?;
+    Ok(())
+}
+
 /// Deletes a project's directory from disk, then either purges its metadata
 /// too (`delete_metadata: true`) or keeps it around soft-deleted so it shows
 /// up in the bin (`delete_metadata: false`). This is the only path that
-/// removes a directory — there's no way to drop a project's tracked metadata
-/// without also deleting the directory it points at.
+/// removes a directory. Dropping a project's tracked metadata *without*
+/// touching its directory goes through [`untrack_project`] instead.
 #[tauri::command]
 pub fn delete_project_directory(
     app: AppHandle,

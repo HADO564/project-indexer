@@ -13,4 +13,7 @@ pub enum GitError{
 
     #[error("Failed to determine repository status: {0}")]
     Status(#[source] git2::Error),
+
+    #[error("Failed to read remote information")]
+    Remote(#[source] git2::Error),
 }

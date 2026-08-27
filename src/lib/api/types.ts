@@ -15,7 +15,42 @@ export interface Project {
   open_with: string | null;
   notes: string | null;
   client: string | null;
+  trackers: Tracker[];
 }
+
+// Mirrors src-tauri/src/models/git.rs
+export interface GitInfo {
+  repo_root: string;
+  dirty: boolean;
+  detached_head: boolean;
+  repo_url: string | null;
+  contributors: string[];
+  curr_branch: string | null;
+  branches: string[] | null;
+  commit_hash: string | null;
+}
+
+// Mirrors src-tauri/src/models/unreal.rs
+export interface UnrealInfo {
+  project_root: string;
+  project_name: string;
+  uproject_path: string;
+  engine_association: string | null;
+  category: string | null;
+  description: string | null;
+  modules: string[];
+  plugins: string[];
+  vcs_provider: string | null;
+}
+
+// Mirrors src-tauri/src/models/tracker.rs. Serde's default (externally
+// tagged) enum representation: a variant with data becomes `{ VariantName:
+// <data> }`, a plain unit variant becomes just its name as a string.
+export type Tracker =
+  | { Git: GitInfo }
+  | { Unreal: UnrealInfo }
+  | "Unity"
+  | "Blender";
 
 // Partial update: omit a key to leave that field unchanged. For
 // open_with/notes/client, an explicit `null` clears the field (the Rust

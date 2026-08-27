@@ -1,7 +1,53 @@
-use git2::{ErrorCode, Repository, StatusOptions};
+use git2::{BranchType, ErrorCode, Repository, StatusOptions};
 use std::path::Path;
+use crate::detectors::detector::Detector;
 
-use crate::errors::GitError;
+use crate::errors::{DetectorError, GitError};
+use crate::models::git::GitInfo;
+use crate::models::tracker::Tracker;
+
+pub struct Gitector;
+
+impl Detector for Gitector {
+    fn detect(&self, path: &Path) -> Result<bool, DetectorError> {
+        Ok(is_repo(path)?)
+    }
+
+    fn get_info(&self, path: &Path) -> Result<Option<Tracker>, DetectorError> {
+        let repo = match open_repo(path) {
+            Ok(repo) => repo,
+            Err(GitError::NotRepository(_)) => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+
+        // Bare repositories have no work tree, so there's nothing to be dirty.
+        let dirty = if repo.is_bare() { false } else { is_dirty(&repo)? };
+
+        let root = repo_root(&repo)
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| path.display().to_string());
+
+        // A repo that made it past `open_repo` has at least one branch in
+        // the ordinary case; `None` is reserved for the genuine edge case of
+        // zero local branches (e.g. a freshly-initialized repo with no
+        // commits yet) rather than standing in for an empty list.
+        let branches = list_branches(&repo)?;
+        let branches = (!branches.is_empty()).then_some(branches);
+
+        Ok(Some(Tracker::Git(GitInfo {
+            repo_root: root,
+            dirty,
+            detached_head: is_detached(&repo)?,
+            repo_url: remote_url(&repo, "origin")?,
+            // Walking full commit history for authors is a separate feature;
+            // left empty until that's built.
+            contributors: Vec::new(),
+            curr_branch: get_current_branch(&repo)?,
+            branches,
+            commit_hash: head_commit_hash(&repo)?,
+        })))
+    }
+}
 
 /// Opens the repository that owns `path`.
 ///
@@ -102,4 +148,49 @@ pub fn is_dirty(repo: &Repository) -> Result<bool, GitError> {
         .map_err(GitError::Status)?;
 
     Ok(!statuses.is_empty())
+}
+
+/// Names of every local branch in the repository, current branch included —
+/// unlike [`get_current_branch`], which reports only the one HEAD is on.
+pub fn list_branches(repo: &Repository) -> Result<Vec<String>, GitError> {
+    let mut names = Vec::new();
+
+    for entry in repo
+        .branches(Some(BranchType::Local))
+        .map_err(GitError::Branch)?
+    {
+        let (branch, _) = entry.map_err(GitError::Branch)?;
+        if let Some(name) = branch.name().map_err(GitError::Branch)? {
+            names.push(name.to_string());
+        }
+    }
+
+    Ok(names)
+}
+
+/// Hash of the commit HEAD currently points at, or `None` for a repository
+/// with no commits yet (an unborn HEAD) — the same normal-not-a-failure case
+/// [`get_current_branch`] handles.
+pub fn head_commit_hash(repo: &Repository) -> Result<Option<String>, GitError> {
+    match repo.head() {
+        Ok(head) => Ok(head.target().map(|oid| oid.to_string())),
+        Err(e) if e.code() == ErrorCode::UnbornBranch => Ok(None),
+        Err(e) => Err(GitError::Branch(e)),
+    }
+}
+
+/// URL of the remote named `name` (typically `"origin"`), or `None` if no
+/// such remote is configured — a normal state for a purely local repository.
+pub fn remote_url(repo: &Repository, name: &str) -> Result<Option<String>, GitError> {
+    match repo.find_remote(name) {
+        // An empty URL means the remote has none configured (git2 reports
+        // this as `Ok("")` rather than `None`), which is a normal state, not
+        // a failure — same treatment as a missing remote below.
+        Ok(remote) => {
+            let url = remote.url().map_err(GitError::Remote)?;
+            Ok((!url.is_empty()).then(|| url.to_string()))
+        }
+        Err(e) if e.code() == ErrorCode::NotFound => Ok(None),
+        Err(e) => Err(GitError::Remote(e)),
+    }
 }

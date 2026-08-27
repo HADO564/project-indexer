@@ -34,6 +34,9 @@ pub enum ProjectError {
 
     #[error("The app associated with this project has been removed or cannot be found: {0}")]
     OpenWithAppMissing(String),
+
+    #[error("Failed to detect project type: {0}")]
+    Detection(String),
 }
 
 /// Tauri serializes command errors as their `Display` string, so the JS

@@ -36,7 +36,7 @@ pub struct SortOptions {
 /// comparator here ends in the unique `id`) is exactly equivalent to
 /// resorting with the comparison negated, so this is a cheap way to support
 /// both directions without duplicating each comparator.
-fn apply_sort(projects: &mut [Project], options: SortOptions) {
+pub fn sort_projects(projects: &mut [Project], options: SortOptions) {
     let natural_direction = match options.by {
         SortBy::Alphabetical => {
             sort_alphabetically(projects);
@@ -79,7 +79,7 @@ pub fn sort_projects_by_recents(projects: &mut [Project]) {
 pub fn filter_favorites(projects: &[Project], options: SortOptions) -> Vec<Project> {
     let mut favorites: Vec<Project> = projects.iter().filter(|p| p.favorite).cloned().collect();
 
-    apply_sort(&mut favorites, options);
+    sort_projects(&mut favorites, options);
     favorites
 }
 
@@ -88,7 +88,7 @@ pub fn filter_favorites(projects: &[Project], options: SortOptions) -> Vec<Proje
 pub fn filter_deleted(projects: &[Project], options: SortOptions) -> Vec<Project> {
     let mut deleted: Vec<Project> = projects.iter().filter(|p| p.is_deleted).cloned().collect();
 
-    apply_sort(&mut deleted, options);
+    sort_projects(&mut deleted, options);
     deleted
 }
 
@@ -129,7 +129,7 @@ mod tests {
             open_with: None,
             notes: None,
             client: None,
-            tracker: None,
+            trackers: Vec::new(),
         }
     }
 
@@ -203,7 +203,7 @@ mod tests {
         };
 
         let mut sorted = projects;
-        apply_sort(&mut sorted, options);
+        sort_projects(&mut sorted, options);
 
         let ids: Vec<&str> = sorted.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(ids, ["1", "3", "2"]);

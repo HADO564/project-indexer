@@ -23,9 +23,9 @@ export async function getProject(id: string): Promise<Project> {
   }
 }
 
-export async function getAllProjects(): Promise<Project[]> {
+export async function getAllProjects(options?: SortOptions): Promise<Project[]> {
   try {
-    return await invoke<Project[]>("get_all_projects");
+    return await invoke<Project[]>("get_all_projects", { options: options ?? null });
   } catch (err) {
     throw toError(err);
   }
@@ -79,9 +79,33 @@ export async function deleteProjectDirectory(
   }
 }
 
+// Removes a project's tracked metadata without touching its directory on
+// disk — "stop indexing this," not "delete it." Works on any project, not
+// just ones already in the bin; re-adding it later is just pointing
+// createProject at the same directory again.
+export async function untrackProject(id: string): Promise<void> {
+  try {
+    await invoke<void>("untrack_project", { id });
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
 export async function restoreProject(id: string): Promise<Project> {
   try {
     return await invoke<Project>("restore_project", { id });
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+// Re-runs project-type detection (git, and whatever else is registered)
+// against the project's directory and persists the result. Unlike creation
+// (where detection is best-effort and failures are swallowed), a failure
+// here is a real error — this is an explicit, user-triggered retry.
+export async function refreshProjectTrackers(id: string): Promise<Project> {
+  try {
+    return await invoke<Project>("refresh_project_trackers", { id });
   } catch (err) {
     throw toError(err);
   }
