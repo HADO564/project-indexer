@@ -1,13 +1,16 @@
 <script lang="ts">
   import { isOpenWithAppMissing, openProjectDirectory } from "$lib/api/opener";
+  import { refreshProjectTrackers } from "$lib/api/projects";
   import type { Project } from "$lib/api/types";
   import { buttonClass } from "./styles";
+  import TrackerBadges from "./TrackerBadges.svelte";
 
   let {
     project,
     onEdit,
     onRequestDelete,
     onOpened,
+    onTrackersRefreshed,
     onOpenWithAppMissing,
     onerror,
   }: {
@@ -15,9 +18,12 @@
     onEdit: (project: Project) => void;
     onRequestDelete: (project: Project) => void;
     onOpened: () => void | Promise<void>;
+    onTrackersRefreshed: () => void | Promise<void>;
     onOpenWithAppMissing: (project: Project) => void;
     onerror?: (message: string) => void;
   } = $props();
+
+  let refreshing = $state(false);
 
   async function handleOpen() {
     try {
@@ -29,6 +35,18 @@
       } else {
         onerror?.((err as Error).message);
       }
+    }
+  }
+
+  async function handleRefreshTrackers() {
+    refreshing = true;
+    try {
+      await refreshProjectTrackers(project.id);
+      await onTrackersRefreshed();
+    } catch (err) {
+      onerror?.((err as Error).message);
+    } finally {
+      refreshing = false;
     }
   }
 </script>
@@ -54,9 +72,19 @@
         {/each}
       </div>
     {/if}
+    <TrackerBadges trackers={project.trackers} />
   </div>
   <div class="flex shrink-0 gap-2">
     <button type="button" onclick={handleOpen} class={buttonClass}>Open</button>
+    <button
+      type="button"
+      onclick={handleRefreshTrackers}
+      disabled={refreshing}
+      class={buttonClass}
+      title="Re-detect project type (git, ...)"
+    >
+      {refreshing ? "Detecting…" : "Detect"}
+    </button>
     <button type="button" onclick={() => onEdit(project)} class={buttonClass}>Edit</button>
     <button type="button" onclick={() => onRequestDelete(project)} class={buttonClass}>
       Delete

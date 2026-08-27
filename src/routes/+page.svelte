@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getAllProjects } from "$lib/api/projects";
-  import type { Project } from "$lib/api/types";
+  import type { Project, SortBy, SortDirection } from "$lib/api/types";
   import BinModal from "$lib/components/BinModal.svelte";
   import CreateProjectForm from "$lib/components/CreateProjectForm.svelte";
   import DeleteModal from "$lib/components/DeleteModal.svelte";
@@ -8,6 +8,7 @@
   import FavoritesModal from "$lib/components/FavoritesModal.svelte";
   import OpenWithMissingModal from "$lib/components/OpenWithMissingModal.svelte";
   import ProjectList from "$lib/components/ProjectList.svelte";
+  import SortControls from "$lib/components/SortControls.svelte";
 
   let projects = $state<Project[]>([]);
   let loading = $state(false);
@@ -17,12 +18,16 @@
   let binOpen = $state(false);
   let favoritesOpen = $state(false);
   let openWithMissingTarget = $state<Project | null>(null);
+  // Matches the order the main list has always shown by default (most
+  // recently opened first) — SortControls lets the user override it.
+  let sortBy = $state<SortBy>("last_opened");
+  let sortDirection = $state<SortDirection>("descending");
 
   async function loadProjects() {
     loading = true;
     error = "";
     try {
-      projects = await getAllProjects();
+      projects = await getAllProjects({ by: sortBy, direction: sortDirection });
     } catch (err) {
       error = (err as Error).message;
     } finally {
@@ -59,6 +64,10 @@
   }
 
   async function handleOpened() {
+    await loadProjects();
+  }
+
+  async function handleTrackersRefreshed() {
     await loadProjects();
   }
 
@@ -177,6 +186,10 @@
 
   <CreateProjectForm onCreated={handleCreated} onerror={handleError} />
 
+  <div class="mb-3 flex justify-end">
+    <SortControls bind:by={sortBy} bind:direction={sortDirection} />
+  </div>
+
   <ProjectList
     {projects}
     {loading}
@@ -186,6 +199,7 @@
     onSaved={handleSaved}
     onRequestDelete={handleRequestDelete}
     onOpened={handleOpened}
+    onTrackersRefreshed={handleTrackersRefreshed}
     onOpenWithAppMissing={handleOpenWithAppMissing}
     onerror={handleError}
   />

@@ -13,6 +13,7 @@
     onSaved,
     onRequestDelete,
     onOpened,
+    onTrackersRefreshed,
     onOpenWithAppMissing,
     onerror,
   }: {
@@ -24,6 +25,7 @@
     onSaved: () => void | Promise<void>;
     onRequestDelete: (project: Project) => void;
     onOpened: () => void | Promise<void>;
+    onTrackersRefreshed: () => void | Promise<void>;
     onOpenWithAppMissing: (project: Project) => void;
     onerror: (message: string) => void;
   } = $props();
@@ -47,6 +49,7 @@
               {onEdit}
               {onRequestDelete}
               {onOpened}
+              {onTrackersRefreshed}
               {onOpenWithAppMissing}
               {onerror}
             />

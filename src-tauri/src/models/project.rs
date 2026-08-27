@@ -1,6 +1,7 @@
 use crate::errors::ProjectError;
 use crate::models::update_project::UpdateProject;
 use crate::utils::filesystem::{check_directory_status, DirectoryStatus};
+use crate::utils::normalize::{normalize_directory, normalize_tags, remove_spaces};
 use crate::models::tracker::Tracker;
 
 use chrono::{DateTime, Utc};
@@ -42,7 +43,8 @@ pub struct Project {
     pub open_with: Option<String>,
     pub notes: Option<String>,
     pub client: Option<String>,
-    pub tracker: Option<Vec<Tracker>>,
+    #[serde(default)]
+    pub trackers: Vec<Tracker>,
 }
 
 /// Assigns each listed field from `$update` onto `$self` only when present
@@ -63,10 +65,10 @@ impl Project {
         directory: &str,
         existing: &[Project],
     ) -> Result<(), ProjectError> {
-        let normalized_directory = Self::normalize_directory(directory);
+        let normalized_directory = normalize_directory(directory);
         if existing
             .iter()
-            .any(|p| Self::normalize_directory(&p.directory) == normalized_directory)
+            .any(|p| normalize_directory(&p.directory) == normalized_directory)
         {
             return Err(ProjectError::DuplicateDirectory(directory.to_string()));
         }
@@ -87,31 +89,6 @@ impl Project {
         }
         Ok(())
     }
-
-    fn remove_spaces(name: &str) -> String {
-        name.replace(' ', "_")
-    }
-
-    fn normalize_tag(tag: &str) -> String {
-        let trimmed = tag.trim();
-        let mut chars = trimmed.chars();
-        match chars.next() {
-            Some(first) => first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
-            None => String::new(),
-        }
-    }
-
-    fn normalize_tags(tags: Vec<String>) -> Vec<String> {
-        let mut normalized = Vec::new();
-        for tag in tags {
-            let tag = Self::normalize_tag(&tag);
-            if !tag.is_empty() && !normalized.contains(&tag) {
-                normalized.push(tag);
-            }
-        }
-        normalized
-    }
-
 
     fn validate_directory(directory: &str) -> Result<(), ProjectError> {
         match check_directory_status(directory) {
@@ -138,38 +115,6 @@ impl Project {
         }
     }
 
-    /// Normalizes a directory path so equivalent paths compare equal, e.g.
-    /// `D:\Projects\Friction\` and `D:\Projects\Friction` (trailing separator)
-    /// or `D:/Projects/Friction` (mixed slash style) all collapse to the same
-    /// string. Drive roots (`C:\`) are left intact rather than being stripped
-    /// down to `C:`, which would change their meaning.
-    ///
-    /// This does not normalize case, so `C:\Foo` and `c:\foo` are still
-    /// treated as different directories.
-    fn normalize_directory(directory: &str) -> String {
-        let trimmed = directory.trim();
-        let normalized_seps: String = trimmed
-            .chars()
-            .map(|c| {
-                if c == '/' || c == '\\' {
-                    std::path::MAIN_SEPARATOR
-                } else {
-                    c
-                }
-            })
-            .collect();
-
-        let stripped = normalized_seps.trim_end_matches(std::path::MAIN_SEPARATOR);
-
-        if stripped.is_empty() {
-            normalized_seps
-        } else if stripped.ends_with(':') {
-            format!("{stripped}{}", std::path::MAIN_SEPARATOR)
-        } else {
-            stripped.to_string()
-        }
-    }
-
     pub fn new(
         name: String,
         directory: String,
@@ -177,9 +122,9 @@ impl Project {
         tags: Option<Vec<String>>,
     ) -> Result<Self, ProjectError> {
         Self::validate_name(&name)?;
-        let directory = Self::normalize_directory(&directory);
+        let directory = normalize_directory(&directory);
         Self::validate_directory(&directory)?;
-        let name = Self::remove_spaces(&name);
+        let name = remove_spaces(&name);
         let now = Utc::now();
         let id = Uuid::new_v4().to_string();
 
@@ -192,12 +137,12 @@ impl Project {
             created_at: now,
             updated_at: now,
             last_opened_at: None,
-            tags: Self::normalize_tags(tags.unwrap_or_default()),
+            tags: normalize_tags(tags.unwrap_or_default()),
             favorite: false,
             open_with: None,
             notes: None,
             client: None,
-            tracker: None,
+            trackers: Vec::new(),
         })
     }
 
@@ -206,13 +151,13 @@ impl Project {
             Self::validate_name(name)?;
         }
 
-        let normalized_directory = update.directory.as_deref().map(Self::normalize_directory);
+        let normalized_directory = update.directory.as_deref().map(normalize_directory);
         if let Some(directory) = &normalized_directory {
             Self::validate_directory(directory)?;
         }
 
         if let Some(name) = update.name {
-            self.name = Self::remove_spaces(&name);
+            self.name = remove_spaces(&name);
         }
 
         if let Some(directory) = normalized_directory {
@@ -220,7 +165,7 @@ impl Project {
         }
 
         if let Some(tags) = update.tags {
-            self.tags = Self::normalize_tags(tags);
+            self.tags = normalize_tags(tags);
         }
 
         apply_if_present!(
@@ -269,37 +214,8 @@ mod tests {
             open_with: None,
             notes: None,
             client: None,
-            tracker: None,
+            trackers: Vec::new(),
         }
-    }
-
-    #[test]
-    fn normalizes_trailing_separator() {
-        assert_eq!(
-            Project::normalize_directory("D:\\Projects\\Friction\\"),
-            Project::normalize_directory("D:\\Projects\\Friction"),
-        );
-    }
-
-    #[test]
-    fn normalizes_mixed_separator_style() {
-        assert_eq!(
-            Project::normalize_directory("D:/Projects/Friction"),
-            Project::normalize_directory("D:\\Projects\\Friction"),
-        );
-    }
-
-    #[test]
-    fn preserves_root_path() {
-        let sep = std::path::MAIN_SEPARATOR.to_string();
-        assert_eq!(Project::normalize_directory(&sep), sep);
-    }
-
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn preserves_drive_root() {
-        assert_eq!(Project::normalize_directory("C:\\"), "C:\\");
-        assert_eq!(Project::normalize_directory("C:/"), "C:\\");
     }
 
     #[test]
@@ -389,7 +305,7 @@ mod tests {
         assert!(project.tags.is_empty());
         assert!(project.description.is_empty());
         assert!(project.last_opened_at.is_none());
-        assert!(project.tracker.is_none());
+        assert!(project.trackers.is_empty());
     }
 
     #[test]

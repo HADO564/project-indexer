@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { deleteProjectDirectory } from "$lib/api/projects";
+  import { deleteProjectDirectory, untrackProject } from "$lib/api/projects";
   import type { Project } from "$lib/api/types";
   import { buttonClass, dangerButtonClass } from "./styles";
 
@@ -15,6 +15,9 @@
     onerror?: (message: string) => void;
   } = $props();
 
+  type Mode = "disk" | "untrack";
+  let mode = $state<Mode>("disk");
+
   // Unchecked by default: deleting always removes the directory, but keeps
   // the tracked metadata around (soft-deleted, recoverable from the bin)
   // unless the user opts into the permanent purge.
@@ -28,7 +31,11 @@
   async function handleConfirm() {
     deleting = true;
     try {
-      await deleteProjectDirectory(project.id, permanentlyDeleteMetadata);
+      if (mode === "untrack") {
+        await untrackProject(project.id);
+      } else {
+        await deleteProjectDirectory(project.id, permanentlyDeleteMetadata);
+      }
       await onDeleted();
     } catch (err) {
       onerror?.((err as Error).message);
@@ -61,15 +68,48 @@
     >
       Delete "{project.name}"?
     </h2>
-    <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-      This deletes <code class="break-all">{project.directory}</code> from disk (cannot be undone).
-    </p>
-    <label class="mt-3 mb-4 flex items-start gap-2 text-sm text-red-700 dark:text-red-400">
-      <input type="checkbox" bind:checked={permanentlyDeleteMetadata} class="mt-0.5" />
-      <span>
-        Also permanently forget this project, instead of keeping it in the bin
-      </span>
-    </label>
+
+    <div class="mt-3 flex flex-col gap-2">
+      <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+        <input
+          type="radio"
+          name="delete-mode"
+          value="disk"
+          bind:group={mode}
+          class="mt-0.5"
+        />
+        <span>
+          Delete <code class="break-all">{project.directory}</code> from disk (cannot be undone)
+        </span>
+      </label>
+      <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+        <input
+          type="radio"
+          name="delete-mode"
+          value="untrack"
+          bind:group={mode}
+          class="mt-0.5"
+        />
+        <span>
+          Just remove it from this app — keep the folder on disk untouched
+        </span>
+      </label>
+    </div>
+
+    {#if mode === "disk"}
+      <label class="mt-3 mb-4 flex items-start gap-2 text-sm text-red-700 dark:text-red-400">
+        <input type="checkbox" bind:checked={permanentlyDeleteMetadata} class="mt-0.5" />
+        <span>
+          Also permanently forget this project, instead of keeping it in the bin
+        </span>
+      </label>
+    {:else}
+      <p class="mt-3 mb-4 text-sm text-gray-600 dark:text-gray-300">
+        The directory itself is left alone. You can re-add it later by creating a project
+        pointed at the same folder.
+      </p>
+    {/if}
+
     <div class="flex gap-2">
       <button type="button" onclick={handleConfirm} disabled={deleting} class={dangerButtonClass}>
         {deleting ? "Deleting…" : "Delete"}

@@ -65,10 +65,12 @@ pub fn run() {
             commands::projects::get_favorite_projects,
             commands::projects::delete_project,
             commands::projects::delete_project_directory,
+            commands::projects::untrack_project,
             commands::projects::restore_project,
             commands::system::list_installed_apps,
             commands::projects::open_project,
-            commands::projects::open_project_in_explorer
+            commands::projects::open_project_in_explorer,
+            commands::projects::refresh_project_trackers
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
