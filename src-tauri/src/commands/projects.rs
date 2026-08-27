@@ -1,7 +1,7 @@
 use crate::commands::system::{open_with_app_available, remove_directory};
 use crate::detectors::detect_project;
 use crate::errors::ProjectError;
-use crate::models::{Project, UpdateProject};
+use crate::models::{Project, Tracker, UpdateProject};
 use crate::store::ProjectStore;
 use crate::utils::{filter_deleted, filter_favorites, sort_projects, SortOptions};
 use std::path::Path;
@@ -58,6 +58,15 @@ pub fn refresh_project_trackers(app: AppHandle, id: String) -> Result<Project, P
     store.save_project(&project)?;
 
     Ok(project)
+}
+
+/// Runs detection against a directory that isn't a project yet — nothing is
+/// read from or written to the store. Lets the frontend preview what a
+/// directory looks like (e.g. to suggest a name from its git remote) before
+/// the user commits to [`create_project`].
+#[tauri::command]
+pub fn detect_project_trackers(directory: String) -> Result<Vec<Tracker>, ProjectError> {
+    detect_project(Path::new(&directory)).map_err(|e| ProjectError::Detection(e.to_string()))
 }
 
 #[tauri::command]
