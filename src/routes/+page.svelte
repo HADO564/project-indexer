@@ -7,6 +7,7 @@
   import ErrorBanner from "$lib/components/ErrorBanner.svelte";
   import FavoritesModal from "$lib/components/FavoritesModal.svelte";
   import OpenWithMissingModal from "$lib/components/OpenWithMissingModal.svelte";
+  import ProjectDetailModal from "$lib/components/ProjectDetailModal.svelte";
   import ProjectList from "$lib/components/ProjectList.svelte";
   import SortControls from "$lib/components/SortControls.svelte";
 
@@ -18,6 +19,11 @@
   let binOpen = $state(false);
   let favoritesOpen = $state(false);
   let openWithMissingTarget = $state<Project | null>(null);
+  // Stored as an id (not a snapshot) so the modal reflects the latest
+  // fetched data if trackers get refreshed while it's open — same
+  // convention as `editingId`.
+  let detailTargetId = $state<string | null>(null);
+  let detailTarget = $derived(projects.find((p) => p.id === detailTargetId) ?? null);
   // Matches the order the main list has always shown by default (most
   // recently opened first) — SortControls lets the user override it.
   let sortBy = $state<SortBy>("last_opened");
@@ -124,6 +130,15 @@
     openWithMissingTarget = null;
   }
 
+  function handleShowDetails(project: Project) {
+    detailTargetId = project.id;
+    error = "";
+  }
+
+  function handleCloseDetails() {
+    detailTargetId = null;
+  }
+
   async function handleOpenWithMissingResolved() {
     openWithMissingTarget = null;
     error = "";
@@ -201,6 +216,7 @@
     onOpened={handleOpened}
     onTrackersRefreshed={handleTrackersRefreshed}
     onOpenWithAppMissing={handleOpenWithAppMissing}
+    onShowDetails={handleShowDetails}
     onerror={handleError}
   />
 </main>
@@ -234,4 +250,8 @@
     onClose={handleCloseOpenWithMissing}
     onerror={handleError}
   />
+{/if}
+
+{#if detailTarget}
+  <ProjectDetailModal project={detailTarget} onClose={handleCloseDetails} />
 {/if}

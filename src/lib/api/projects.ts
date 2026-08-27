@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { toError } from "./errors";
-import type { CreateProjectInput, Project, SortOptions, UpdateProject } from "./types";
+import type { CreateProjectInput, Project, SortOptions, Tracker, UpdateProject } from "./types";
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {
   try {
@@ -106,6 +106,18 @@ export async function restoreProject(id: string): Promise<Project> {
 export async function refreshProjectTrackers(id: string): Promise<Project> {
   try {
     return await invoke<Project>("refresh_project_trackers", { id });
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+// Runs detection against a directory that isn't a project yet — nothing is
+// read from or written to the store. Used to preview a directory (e.g. to
+// suggest a name from its git remote) before the user commits to
+// createProject.
+export async function detectProjectTrackers(directory: string): Promise<Tracker[]> {
+  try {
+    return await invoke<Tracker[]>("detect_project_trackers", { directory });
   } catch (err) {
     throw toError(err);
   }
