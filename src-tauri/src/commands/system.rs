@@ -687,9 +687,7 @@ mod tests {
 
     #[test]
     fn missing_absolute_path_is_unavailable() {
-        assert!(!open_with_app_available(
-            "/definitely/not/a/real/app-xyz"
-        ));
+        assert!(!open_with_app_available("/definitely/not/a/real/app-xyz"));
     }
 
     #[test]
@@ -725,6 +723,8 @@ mod tests {
     #[test]
     fn a_full_command_line_checks_only_the_program() {
         assert!(open_with_app_available("ls -la /tmp"));
-        assert!(!open_with_app_available("/definitely/not/a/real/app-xyz -la"));
+        assert!(!open_with_app_available(
+            "/definitely/not/a/real/app-xyz -la"
+        ));
     }
 }

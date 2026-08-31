@@ -101,8 +101,7 @@ struct UprojectDescriptor {
 /// over time, and this detector only needs a handful of them.
 fn read_project_descriptor(uproject_path: &Path) -> Result<UprojectDescriptor, DetectorError> {
     let contents = fs::read_to_string(uproject_path)?;
-    serde_json::from_str(&contents)
-        .map_err(|e| DetectorError::from(UnrealError::ParseUproject(e)))
+    serde_json::from_str(&contents).map_err(|e| DetectorError::from(UnrealError::ParseUproject(e)))
 }
 
 /// Collapses an empty string to `None`, matching how [`GitInfo::repo_url`]

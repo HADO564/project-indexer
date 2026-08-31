@@ -1,10 +1,10 @@
-pub mod models;
-pub mod store;
 pub mod commands;
+pub mod detectors;
 pub mod errors;
 pub mod migrations;
+pub mod models;
+pub mod store;
 pub mod utils;
-pub mod detectors;
 
 use tauri::Manager;
 

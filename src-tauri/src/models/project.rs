@@ -1,8 +1,8 @@
 use crate::errors::ProjectError;
+use crate::models::tracker::Tracker;
 use crate::models::update_project::UpdateProject;
 use crate::utils::filesystem::{check_directory_status, DirectoryStatus};
 use crate::utils::normalize::{normalize_directory, normalize_tags, remove_spaces};
-use crate::models::tracker::Tracker;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -169,7 +169,13 @@ impl Project {
         }
 
         apply_if_present!(
-            self, update, description, favorite, open_with, notes, client
+            self,
+            update,
+            description,
+            favorite,
+            open_with,
+            notes,
+            client
         );
         self.updated_at = Utc::now();
 
@@ -244,7 +250,10 @@ mod tests {
     fn directory_health_flags_missing_directory_as_deleted_or_moved() {
         let missing = std::env::temp_dir().join("project-indexer-tests-missing-dir-xyz");
         let result = Project::check_directory_health(missing.to_str().unwrap());
-        assert!(matches!(result, Err(ProjectError::DirectoryDeletedOrMoved(_))));
+        assert!(matches!(
+            result,
+            Err(ProjectError::DirectoryDeletedOrMoved(_))
+        ));
     }
 
     #[test]
@@ -255,7 +264,10 @@ mod tests {
         let result = Project::check_directory_health(file.to_str().unwrap());
 
         std::fs::remove_file(&file).expect("should clean up temp file");
-        assert!(matches!(result, Err(ProjectError::DirectoryDeletedOrMoved(_))));
+        assert!(matches!(
+            result,
+            Err(ProjectError::DirectoryDeletedOrMoved(_))
+        ));
     }
 
     #[test]

@@ -18,10 +18,22 @@ pub struct UpdateProject {
     pub description: Option<String>,
     pub tags: Option<Vec<String>>,
     pub favorite: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_some")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_some"
+    )]
     pub open_with: Option<Option<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_some")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_some"
+    )]
     pub notes: Option<Option<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_some")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_some"
+    )]
     pub client: Option<Option<String>>,
 }
