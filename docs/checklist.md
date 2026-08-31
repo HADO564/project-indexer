@@ -1,6 +1,6 @@
 # Project Indexer — Checklist
 
-What's done and what's still open. Check items off as they land; add new ones under "Open" as they come up. See `accomplishments.md` for the dated story of how the checked items got done, and `knowledgebase.md` for how the finished pieces actually work.
+What's done and what's still open, feature by feature. Check items off as they land; add new ones under "Open" as they come up. See `accomplishments.md` for the dated story of how the checked items got done, `knowledgebase.md` for how the finished pieces actually work, and `architecture.md` for the non-feature quality backlog (invariants, detection semantics, testing, platform seams).
 
 ## Git tracker
 
@@ -39,14 +39,12 @@ What's done and what's still open. Check items off as they land; add new ones un
 - [x] `detect_project_trackers` command (preview detection before a project exists)
 - [x] `ProjectDetailModal` — project identity + one tab per detected tracker, generically rendered (`lib/trackers.ts`) so a future detector needs no new frontend code
 
-## Open
+## Open (features)
 
 - [ ] `GitInfo.contributors` (see above)
 - [ ] Unity detector — add `Tracker::Unity` + a `UnityDetector` together (register in `detectors/registry.rs`)
 - [ ] Blender detector — add `Tracker::Blender` + a `BlenderDetector` together
 - [ ] macOS support — `list_installed_apps` returns empty, app-launch falls through to the generic opener path
 - [ ] Global shortcut — plugin is registered but no shortcut is bound to any action
-- [ ] Frontend automated tests — `svelte-check` is the only frontend verification
-- [ ] Command-layer integration tests — `commands/projects.rs`/`commands/system.rs` are only exercised indirectly today
-- [ ] `PI-004` (`docs/KNOWN-ISSUES.md`) — NVIDIA DMABUF-workaround comment in `lib.rs` understates its own trigger scope; code is fine, wording needs a fix
-- [ ] Reconcile `package-lock.json` vs `pnpm-lock.yaml` — both present since early history, pick one
+
+Non-feature work (testing, platform seams, tech debt, PI-004, lockfiles) lives in `architecture.md`.
