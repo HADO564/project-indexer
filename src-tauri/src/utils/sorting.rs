@@ -245,10 +245,7 @@ mod tests {
 
     #[test]
     fn breaks_ties_on_same_name_by_id() {
-        let mut projects = vec![
-            project_named("b", "Same"),
-            project_named("a", "same"),
-        ];
+        let mut projects = vec![project_named("b", "Same"), project_named("a", "same")];
 
         sort_alphabetically(&mut projects);
 

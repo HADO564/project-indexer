@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum GitError{
+pub enum GitError {
     #[error("Failed to discover repository")]
     RepositoryDiscovery(#[source] git2::Error),
 

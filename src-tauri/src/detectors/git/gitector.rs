@@ -1,6 +1,6 @@
+use crate::detectors::detector::Detector;
 use git2::{BranchType, ErrorCode, Repository, StatusOptions};
 use std::path::Path;
-use crate::detectors::detector::Detector;
 
 use crate::errors::{DetectorError, GitError};
 use crate::models::git::GitInfo;
@@ -17,7 +17,11 @@ impl Detector for Gitector {
         };
 
         // Bare repositories have no work tree, so there's nothing to be dirty.
-        let dirty = if repo.is_bare() { false } else { is_dirty(&repo)? };
+        let dirty = if repo.is_bare() {
+            false
+        } else {
+            is_dirty(&repo)?
+        };
 
         let root = repo_root(&repo)
             .map(|p| p.display().to_string())
@@ -222,8 +226,15 @@ mod tests {
         };
         let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
 
-        repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &parent_refs)
-            .expect("should commit");
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            message,
+            &tree,
+            &parent_refs,
+        )
+        .expect("should commit");
     }
 
     #[test]
@@ -379,7 +390,11 @@ mod tests {
         std::fs::write(dir.join("README.md"), "hello").expect("should write file");
         commit_all(&repo, "initial commit");
 
-        let head_oid = repo.head().expect("should read HEAD").target().expect("should have a target");
+        let head_oid = repo
+            .head()
+            .expect("should read HEAD")
+            .target()
+            .expect("should have a target");
         repo.set_head_detached(head_oid)
             .expect("should detach HEAD");
 

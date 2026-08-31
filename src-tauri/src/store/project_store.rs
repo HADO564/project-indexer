@@ -1,11 +1,11 @@
 use crate::errors::ProjectError;
 use crate::migrations;
 use crate::models::Project;
+use crate::utils::sort_projects_by_recents;
 use serde_json::{from_value, to_value};
 use std::sync::Arc;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_store::{Store, StoreExt};
-use crate::utils::sort_projects_by_recents;
 
 pub struct ProjectStore<R: tauri::Runtime> {
     store: Arc<Store<R>>,
@@ -13,9 +13,9 @@ pub struct ProjectStore<R: tauri::Runtime> {
 
 impl<R: Runtime> ProjectStore<R> {
     pub fn new(app: &AppHandle<R>) -> Result<Self, ProjectError> {
-        let store = app
-            .store("projects.json")
-            .map_err(|e| ProjectError::Store(format!("Failed to initialize project store: {}", e)))?;
+        let store = app.store("projects.json").map_err(|e| {
+            ProjectError::Store(format!("Failed to initialize project store: {}", e))
+        })?;
         Ok(Self { store })
     }
 
