@@ -1,15 +1,16 @@
 use crate::commands::system::{open_with_app_available, remove_directory};
-use crate::detectors::detect_project;
+use crate::detectors::DetectorRunner;
 use crate::errors::ProjectError;
 use crate::models::{Project, Tracker, UpdateProject};
 use crate::store::ProjectStore;
 use crate::utils::{filter_deleted, filter_favorites, sort_projects, SortOptions};
 use std::path::Path;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Runtime, State};
 
 #[tauri::command]
 pub fn create_project(
     app: AppHandle,
+    detectors: State<'_, DetectorRunner>,
     name: String,
     directory: String,
     description: Option<String>,
@@ -23,15 +24,13 @@ pub fn create_project(
     let mut project = Project::new(name, directory, description, tags)?;
 
     // Best-effort: a project is still worth tracking even if we can't tell
-    // what kind of project it is (a detector bug, a permissions hiccup on a
-    // git call, etc). `refresh_project_trackers` lets the frontend retry
-    // this explicitly, where a failure is worth surfacing to the user.
-    match detect_project(Path::new(&project.directory)) {
-        Ok(trackers) => project.trackers = trackers,
-        Err(e) => eprintln!(
-            "Failed to detect project type for '{}': {}",
-            project.directory, e
-        ),
+    // what kind of project it is. Detection is resilient — whatever detectors
+    // succeeded still count — and `refresh_project_trackers` lets the frontend
+    // retry the rest explicitly, where a failure is worth surfacing.
+    let detection = detectors.detect_project(Path::new(&project.directory));
+    project.trackers = detection.trackers;
+    for error in &detection.errors {
+        eprintln!("Detector error for '{}': {}", project.directory, error);
     }
 
     store.save_project(&project)?;
@@ -42,18 +41,31 @@ pub fn create_project(
 /// Re-runs project-type detection (git, and whatever else is registered)
 /// against an existing project's directory and persists the result.
 ///
-/// Unlike the best-effort detection in [`create_project`], a detection
-/// failure here is returned to the caller — this is an explicit,
-/// user-triggered retry, so silently doing nothing would be confusing.
+/// Unlike the best-effort detection in [`create_project`], this is
+/// all-or-nothing: any detector failure is returned to the caller and the
+/// stored trackers are left untouched. It's an explicit, user-triggered
+/// retry, so a half-applied refresh would be more confusing than a clear
+/// failure.
 #[tauri::command]
-pub fn refresh_project_trackers(app: AppHandle, id: String) -> Result<Project, ProjectError> {
+pub fn refresh_project_trackers(
+    app: AppHandle,
+    detectors: State<'_, DetectorRunner>,
+    id: String,
+) -> Result<Project, ProjectError> {
     let store = ProjectStore::new(&app)?;
 
     let mut project = store
         .get_project(&id)?
         .ok_or_else(|| ProjectError::NotFound(id.clone()))?;
 
-    project.trackers = detect_project(Path::new(&project.directory))
+    // A directory that's since been deleted or moved gets a clear error of
+    // its own, rather than surfacing as a raw I/O failure from whichever
+    // detector happened to touch the filesystem first.
+    Project::check_directory_health(&project.directory)?;
+
+    project.trackers = detectors
+        .detect_project(Path::new(&project.directory))
+        .into_result()
         .map_err(|e| ProjectError::Detection(e.to_string()))?;
     store.save_project(&project)?;
 
@@ -64,9 +76,19 @@ pub fn refresh_project_trackers(app: AppHandle, id: String) -> Result<Project, P
 /// read from or written to the store. Lets the frontend preview what a
 /// directory looks like (e.g. to suggest a name from its git remote) before
 /// the user commits to [`create_project`].
+///
+/// Advisory, so it's best-effort: a detector that fails just contributes
+/// nothing to the preview rather than failing the whole call.
 #[tauri::command]
-pub fn detect_project_trackers(directory: String) -> Result<Vec<Tracker>, ProjectError> {
-    detect_project(Path::new(&directory)).map_err(|e| ProjectError::Detection(e.to_string()))
+pub fn detect_project_trackers(
+    detectors: State<'_, DetectorRunner>,
+    directory: String,
+) -> Vec<Tracker> {
+    let detection = detectors.detect_project(Path::new(&directory));
+    for error in &detection.errors {
+        eprintln!("Detector error previewing '{}': {}", directory, error);
+    }
+    detection.trackers
 }
 
 #[tauri::command]

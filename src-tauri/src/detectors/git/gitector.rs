@@ -9,11 +9,7 @@ use crate::models::tracker::Tracker;
 pub struct Gitector;
 
 impl Detector for Gitector {
-    fn detect(&self, path: &Path) -> Result<bool, DetectorError> {
-        Ok(is_repo(path)?)
-    }
-
-    fn get_info(&self, path: &Path) -> Result<Option<Tracker>, DetectorError> {
+    fn detect(&self, path: &Path) -> Result<Option<Tracker>, DetectorError> {
         let repo = match open_repo(path) {
             Ok(repo) => repo,
             Err(GitError::NotRepository(_)) => return Ok(None),
@@ -63,19 +59,6 @@ pub fn open_repo(path: &Path) -> Result<Repository, GitError> {
         ErrorCode::NotFound => GitError::NotRepository(path.display().to_string()),
         _ => GitError::RepositoryDiscovery(e),
     })
-}
-
-/// Whether `path` sits inside a git work tree.
-///
-/// Only a genuine discovery failure (an unreadable directory, a corrupt
-/// repository) surfaces as an error; a path that is merely outside any
-/// repository is `Ok(false)`.
-pub fn is_repo(path: &Path) -> Result<bool, GitError> {
-    match open_repo(path) {
-        Ok(_) => Ok(true),
-        Err(GitError::NotRepository(_)) => Ok(false),
-        Err(e) => Err(e),
-    }
 }
 
 /// Name of the branch HEAD is on, or `None` when HEAD names a commit rather
@@ -244,39 +227,33 @@ mod tests {
     }
 
     #[test]
-    fn detect_is_true_for_a_git_repository() {
+    fn detect_recognizes_a_git_repository() {
         let dir = temp_dir("detect-true");
         init_repo(&dir);
 
-        assert!(Gitector.detect(&dir).expect("should detect"));
+        let result = Gitector.detect(&dir).expect("should detect");
+
+        assert!(matches!(result, Some(Tracker::Git(_))));
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn detect_is_false_for_a_plain_directory() {
+    fn detect_returns_none_for_a_plain_directory() {
         let dir = temp_dir("detect-false");
 
-        assert!(!Gitector.detect(&dir).expect("should detect"));
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn get_info_returns_none_for_a_non_repository() {
-        let dir = temp_dir("get-info-none");
-
-        let result = Gitector.get_info(&dir).expect("should get info");
+        let result = Gitector.detect(&dir).expect("should detect");
 
         assert!(result.is_none());
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn get_info_reports_a_freshly_initialized_repo_with_no_commits() {
+    fn detect_reports_a_freshly_initialized_repo_with_no_commits() {
         let dir = temp_dir("get-info-unborn");
         init_repo(&dir);
 
         let tracker = Gitector
-            .get_info(&dir)
+            .detect(&dir)
             .expect("should get info")
             .expect("should recognize the repo");
 
@@ -295,14 +272,14 @@ mod tests {
     }
 
     #[test]
-    fn get_info_reports_a_repo_with_a_commit() {
+    fn detect_reports_a_repo_with_a_commit() {
         let dir = temp_dir("get-info-committed");
         let repo = init_repo(&dir);
         std::fs::write(dir.join("README.md"), "hello").expect("should write file");
         commit_all(&repo, "initial commit");
 
         let tracker = Gitector
-            .get_info(&dir)
+            .detect(&dir)
             .expect("should get info")
             .expect("should recognize the repo");
 
@@ -319,7 +296,7 @@ mod tests {
     }
 
     #[test]
-    fn get_info_reports_dirty_state_for_untracked_files() {
+    fn detect_reports_dirty_state_for_untracked_files() {
         let dir = temp_dir("get-info-dirty");
         let repo = init_repo(&dir);
         std::fs::write(dir.join("README.md"), "hello").expect("should write file");
@@ -328,7 +305,7 @@ mod tests {
         std::fs::write(dir.join("scratch.txt"), "wip").expect("should write untracked file");
 
         let tracker = Gitector
-            .get_info(&dir)
+            .detect(&dir)
             .expect("should get info")
             .expect("should recognize the repo");
 
@@ -341,14 +318,14 @@ mod tests {
     }
 
     #[test]
-    fn get_info_reports_the_origin_remote_url() {
+    fn detect_reports_the_origin_remote_url() {
         let dir = temp_dir("get-info-remote");
         let repo = init_repo(&dir);
         repo.remote("origin", "https://example.com/user/repo.git")
             .expect("should add remote");
 
         let tracker = Gitector
-            .get_info(&dir)
+            .detect(&dir)
             .expect("should get info")
             .expect("should recognize the repo");
 
@@ -364,7 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn get_info_reports_every_local_branch() {
+    fn detect_reports_every_local_branch() {
         let dir = temp_dir("get-info-branches");
         let repo = init_repo(&dir);
         std::fs::write(dir.join("README.md"), "hello").expect("should write file");
@@ -379,7 +356,7 @@ mod tests {
             .expect("should create branch");
 
         let tracker = Gitector
-            .get_info(&dir)
+            .detect(&dir)
             .expect("should get info")
             .expect("should recognize the repo");
 
@@ -396,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn get_info_reports_a_detached_head() {
+    fn detect_reports_a_detached_head() {
         let dir = temp_dir("get-info-detached");
         let repo = init_repo(&dir);
         std::fs::write(dir.join("README.md"), "hello").expect("should write file");
@@ -407,7 +384,7 @@ mod tests {
             .expect("should detach HEAD");
 
         let tracker = Gitector
-            .get_info(&dir)
+            .detect(&dir)
             .expect("should get info")
             .expect("should recognize the repo");
 

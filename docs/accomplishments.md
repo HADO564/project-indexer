@@ -52,3 +52,21 @@ A dated record of what's been completed, in the order it landed. Append new entr
 ## 2026-08-30 — Docs restructure
 
 - Replaced the single evolving `docs/README.md` summary with this knowledgebase/accomplishments/checklist split, plus verified the then-current state: 53 Rust tests passing, `cargo clippy` clean (2 pre-existing warnings), `npm run check` clean (8 pre-existing warnings, all in `EditProjectForm.svelte`, documented in `KNOWN-ISSUES.md` PI-003 as a false positive).
+
+## 2026-08-30 — Detection consolidated around one operation
+
+- Made `DetectorRunner::detect_project(&Path) -> Result<Vec<Tracker>, DetectorError>` the single canonical detection operation. Supporting changes:
+  - `Detector` trait collapsed from two methods (`detect() -> bool` + `get_info() -> Option<Tracker>`, the former only ever called by tests) to one: `detect(&Path) -> Result<Option<Tracker>, DetectorError>`. `Gitector`/`UnrealDetector` lost their redundant presence-check impls; `Gitector::is_repo` (now unused) removed.
+  - `detectors/registry.rs` added — `default_detectors()` is the one place detectors are registered. `DetectorRunner::default()` delegates to it.
+  - `DetectorRunner` now built once at startup into Tauri managed state; `create_project` / `refresh_project_trackers` / `detect_project_trackers` take `State<'_, DetectorRunner>` instead of calling a free `detect_project` function (removed). Frontend `invoke` calls unchanged.
+  - `DetectorError` gained an `Other(Box<dyn Error + Send + Sync>)` catch-all so a new detector with its own error type needn't edit the shared enum.
+  - Placeholder `Tracker::Unity` / `Tracker::Blender` variants (no detector behind them) dropped from the enum and `types.ts` — re-add each with its detector.
+  - Dead empty `src-tauri/src/state/` module deleted.
+
+## 2026-08-31 — Detection made resilient
+
+- Follow-up from a senior-standards review of the consolidation above.
+  - `detect_project` no longer aborts all detection on the first detector error. It returns `Detection { trackers, errors }` and is infallible by construction — a failing detector lands in `errors` without discarding the trackers other detectors produced or stopping the ones after it. `Detection::into_result()` is the all-or-nothing view.
+  - `create_project` and `detect_project_trackers` are now best-effort (keep `trackers`, log `errors`); `detect_project_trackers` returns `Vec<Tracker>` directly. `refresh_project_trackers` stays all-or-nothing via `into_result()` and now runs `Project::check_directory_health` first, so a moved/deleted directory reports `DirectoryDeletedOrMoved` instead of a raw detector I/O string.
+  - `DetectorError`/managed-state/registry decisions from the review were kept as-is (the error enum earns its keep via `?` ergonomics inside detectors; managed state was a deliberate choice for the config seam).
+  - 53 Rust tests (added one for the resilience path — a deliberately-failing detector alongside `Gitector`). `cargo clippy` / `npm run check` clean (same pre-existing warnings).

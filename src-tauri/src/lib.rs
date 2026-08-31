@@ -42,6 +42,10 @@ pub fn run() {
     disable_dmabuf_renderer_on_nvidia();
 
     tauri::Builder::default()
+        // The detector set is built once and shared: commands pull it back
+        // out with `State<DetectorRunner>` rather than constructing detectors
+        // per call. See `detectors::registry` to register a new detector.
+        .manage(detectors::DetectorRunner::default())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_window_state::Builder::new().build())

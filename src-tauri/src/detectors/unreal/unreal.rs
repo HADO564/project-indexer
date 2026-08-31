@@ -11,11 +11,7 @@ use crate::models::unreal::UnrealInfo;
 pub struct UnrealDetector;
 
 impl Detector for UnrealDetector {
-    fn detect(&self, path: &Path) -> Result<bool, DetectorError> {
-        Ok(find_project_file(path)?.is_some())
-    }
-
-    fn get_info(&self, path: &Path) -> Result<Option<Tracker>, DetectorError> {
+    fn detect(&self, path: &Path) -> Result<Option<Tracker>, DetectorError> {
         let Some(uproject_path) = find_project_file(path)? else {
             return Ok(None);
         };
@@ -221,34 +217,38 @@ mod tests {
     }
 
     #[test]
-    fn detect_is_true_for_a_directory_with_a_uproject() {
+    fn detect_recognizes_a_directory_with_a_uproject() {
         let dir = temp_dir("detect-true");
         write_uproject(&dir, "MyGame", "{}");
 
-        assert!(UnrealDetector.detect(&dir).expect("should detect"));
+        let result = UnrealDetector.detect(&dir).expect("should detect");
+
+        assert!(matches!(result, Some(Tracker::Unreal(_))));
         fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn detect_is_false_for_a_plain_directory() {
+    fn detect_returns_none_for_a_plain_directory() {
         let dir = temp_dir("detect-false");
 
-        assert!(!UnrealDetector.detect(&dir).expect("should detect"));
-        fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn get_info_returns_none_without_a_uproject() {
-        let dir = temp_dir("get-info-none");
-
-        let result = UnrealDetector.get_info(&dir).expect("should get info");
+        let result = UnrealDetector.detect(&dir).expect("should detect");
 
         assert!(result.is_none());
         fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
-    fn get_info_parses_descriptor_fields() {
+    fn detect_returns_none_without_a_uproject() {
+        let dir = temp_dir("get-info-none");
+
+        let result = UnrealDetector.detect(&dir).expect("should get info");
+
+        assert!(result.is_none());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn detect_parses_descriptor_fields() {
         let dir = temp_dir("get-info-fields");
         write_uproject(
             &dir,
@@ -266,7 +266,7 @@ mod tests {
         );
 
         let tracker = UnrealDetector
-            .get_info(&dir)
+            .detect(&dir)
             .expect("should get info")
             .expect("should find project");
 
@@ -285,12 +285,12 @@ mod tests {
     }
 
     #[test]
-    fn get_info_treats_missing_optional_fields_as_absent() {
+    fn detect_treats_missing_optional_fields_as_absent() {
         let dir = temp_dir("get-info-missing-fields");
         write_uproject(&dir, "MyGame", "{}");
 
         let tracker = UnrealDetector
-            .get_info(&dir)
+            .detect(&dir)
             .expect("should get info")
             .expect("should find project");
 
@@ -307,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn get_info_reads_the_configured_source_control_provider() {
+    fn detect_reads_the_configured_source_control_provider() {
         let dir = temp_dir("get-info-vcs");
         write_uproject(&dir, "MyGame", "{}");
 
@@ -320,7 +320,7 @@ mod tests {
         .expect("should write ini");
 
         let tracker = UnrealDetector
-            .get_info(&dir)
+            .detect(&dir)
             .expect("should get info")
             .expect("should find project");
 
@@ -333,7 +333,7 @@ mod tests {
     }
 
     #[test]
-    fn get_info_treats_an_explicit_none_provider_as_absent() {
+    fn detect_treats_an_explicit_none_provider_as_absent() {
         let dir = temp_dir("get-info-vcs-none");
         write_uproject(&dir, "MyGame", "{}");
 
@@ -346,7 +346,7 @@ mod tests {
         .expect("should write ini");
 
         let tracker = UnrealDetector
-            .get_info(&dir)
+            .detect(&dir)
             .expect("should get info")
             .expect("should find project");
 
