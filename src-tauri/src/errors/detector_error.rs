@@ -3,11 +3,17 @@ use thiserror::Error;
 use crate::errors::GitError;
 use crate::errors::UnrealError;
 
-/// Errors a [`crate::detectors::detector::Detector`] can raise while
-/// inspecting a path. Shared across all detector implementations (git,
-/// Unity, Godot, Unreal, MATLAB, ...) — a tool-specific error type gets its
-/// own variant here (as [`GitError`] does) rather than `Detector` growing a
-/// per-tool error type.
+/// Errors a [`Detector`](crate::detectors::Detector) can raise while
+/// inspecting a path.
+///
+/// Most detectors only touch the filesystem and can lean on the `Io` variant.
+/// The first-party git and Unreal detectors carry richer, structured error
+/// types, so those get a dedicated `#[from]` variant. A new detector with its
+/// own error type doesn't have to edit this enum — it boxes into `Other`:
+///
+/// ```ignore
+/// something().map_err(|e| DetectorError::Other(Box::new(e)))?;
+/// ```
 #[derive(Debug, Error)]
 pub enum DetectorError {
     #[error("Failed to read path: {0}")]
@@ -18,6 +24,9 @@ pub enum DetectorError {
 
     #[error(transparent)]
     Unreal(#[from] UnrealError),
+
+    #[error(transparent)]
+    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
 /// Tauri serializes command errors over IPC as JSON, so `DetectorError` needs

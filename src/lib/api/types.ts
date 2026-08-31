@@ -45,12 +45,11 @@ export interface UnrealInfo {
 
 // Mirrors src-tauri/src/models/tracker.rs. Serde's default (externally
 // tagged) enum representation: a variant with data becomes `{ VariantName:
-// <data> }`, a plain unit variant becomes just its name as a string.
+// <data> }`, and a plain unit variant (none today) would be just its name as
+// a string — trackers.ts handles both shapes generically.
 export type Tracker =
   | { Git: GitInfo }
-  | { Unreal: UnrealInfo }
-  | "Unity"
-  | "Blender";
+  | { Unreal: UnrealInfo };
 
 // Partial update: omit a key to leave that field unchanged. For
 // open_with/notes/client, an explicit `null` clears the field (the Rust

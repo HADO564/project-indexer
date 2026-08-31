@@ -114,7 +114,8 @@ export async function refreshProjectTrackers(id: string): Promise<Project> {
 // Runs detection against a directory that isn't a project yet — nothing is
 // read from or written to the store. Used to preview a directory (e.g. to
 // suggest a name from its git remote) before the user commits to
-// createProject.
+// createProject. Best-effort on the backend: a failing detector just
+// contributes nothing, so this only throws on an IPC-level failure.
 export async function detectProjectTrackers(directory: string): Promise<Tracker[]> {
   try {
     return await invoke<Tracker[]>("detect_project_trackers", { directory });
