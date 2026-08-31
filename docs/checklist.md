@@ -8,7 +8,7 @@ What's done and what's still open. Check items off as they land; add new ones un
 - [x] `Gitector` connected to project detection (`detectors/registry.rs`)
 - [x] `Tracker::Git` populated end to end (`create_project` / `refresh_project_trackers`)
 - [x] Git info exposed to the frontend (`TrackerBadges` + full field list in `ProjectDetailModal`)
-- [x] `Gitector` unit tests (9 — detect/no-repo, unborn HEAD, committed HEAD, dirty, remote URL, branches, detached HEAD)
+- [x] `Gitector` unit tests (8 — recognizes-repo/plain-dir, unborn HEAD, committed HEAD, dirty, remote URL, branches, detached HEAD)
 - [ ] `GitInfo.contributors` — deliberately deferred, still `Vec::new()`. Planned: `git2::Repository::revwalk()`, field becomes `Vec<Contributor { name, email }>` rather than plain strings. Deferred over the cost of walking full history on every detection run.
 
 ## Unreal tracker
