@@ -52,6 +52,27 @@ export type Tracker =
   | { Git: GitInfo }
   | { Unreal: UnrealInfo };
 
+// Mirrors src-tauri/src/commands/inspect.rs
+export type DetectorStatus = "detected" | "not_detected" | "failed";
+
+export interface DetectorResult {
+  kind: string;
+  status: DetectorStatus;
+  tracker?: Tracker;
+  error?: string;
+}
+
+export interface DirectoryStatus {
+  ok: boolean;
+  message?: string;
+}
+
+export interface ProjectInspection {
+  project: Project;
+  directory_status: DirectoryStatus;
+  results: DetectorResult[];
+}
+
 // Partial update: omit a key to leave that field unchanged. For
 // open_with/notes/client, an explicit `null` clears the field (the Rust
 // side distinguishes "key absent" from "key present but null" via a

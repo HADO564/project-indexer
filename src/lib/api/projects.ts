@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { toError } from "./errors";
-import type { CreateProjectInput, Project, SortOptions, Tracker, UpdateProject } from "./types";
+import type { CreateProjectInput, Project, ProjectInspection, SortOptions, Tracker, UpdateProject } from "./types";
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {
   try {
@@ -119,6 +119,22 @@ export async function refreshProjectTrackers(id: string): Promise<Project> {
 export async function detectProjectTrackers(directory: string): Promise<Tracker[]> {
   try {
     return await invoke<Tracker[]>("detect_project_trackers", { directory });
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+// Read-only: loads a project and runs a live detection pass without
+// persisting. `only` re-runs a single detector by kind. Backs /project/[id].
+export async function inspectProject(
+  id: string,
+  opts?: { only?: string },
+): Promise<ProjectInspection> {
+  try {
+    return await invoke<ProjectInspection>("inspect_project", {
+      id,
+      only: opts?.only ?? null,
+    });
   } catch (err) {
     throw toError(err);
   }
