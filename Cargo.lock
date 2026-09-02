@@ -2862,9 +2862,7 @@ name = "project-indexer"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "git2",
  "indexer-core",
- "parselnk",
  "serde",
  "serde_json",
  "tauri",
@@ -2878,7 +2876,6 @@ dependencies = [
  "tauri-plugin-window-state",
  "thiserror 2.0.20",
  "uuid",
- "winreg 0.56.0",
 ]
 
 [[package]]

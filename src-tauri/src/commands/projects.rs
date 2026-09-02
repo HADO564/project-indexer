@@ -1,10 +1,11 @@
-use crate::commands::system::{open_with_app_available, remove_directory};
-use crate::detectors::DetectorRunner;
 use crate::store::ProjectStore;
-use crate::utils::filesystem::{check_directory_status, DirectoryStatus};
+use indexer_core::detectors::DetectorRunner;
 use indexer_core::domain::sorting::{filter_deleted, filter_favorites, sort_projects, SortOptions};
 use indexer_core::domain::{Project, Tracker, UpdateProject};
 use indexer_core::error::ProjectError;
+use indexer_core::platform::{
+    check_directory_status, open_with_app_available, remove_directory, DirectoryStatus,
+};
 use std::path::Path;
 use tauri::{AppHandle, Runtime, State};
 
@@ -43,7 +44,7 @@ pub fn create_project(
 /// against an existing project's directory and persists the result.
 ///
 /// Unlike the best-effort detection in [`create_project`], this is
-/// all-or-nothing ([`crate::detectors::Detection::into_result`]): any detector failure is
+/// all-or-nothing ([`indexer_core::detectors::Detection::into_result`]): any detector failure is
 /// returned to the caller and the stored trackers are left untouched. It's an
 /// explicit, user-triggered retry, so a half-applied refresh — a persisted
 /// tracker set silently missing whatever the failing detector produces — is

@@ -4,9 +4,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::detectors::detector::Detector;
-use indexer_core::domain::tracker::Tracker;
-use indexer_core::domain::unreal::UnrealInfo;
-use indexer_core::error::{DetectorError, UnrealError};
+use crate::domain::tracker::Tracker;
+use crate::domain::unreal::UnrealInfo;
+use crate::error::{DetectorError, UnrealError};
 
 pub struct UnrealDetector;
 
