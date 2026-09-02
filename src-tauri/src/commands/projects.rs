@@ -6,6 +6,7 @@ use indexer_core::error::ProjectError;
 use indexer_core::platform::{
     check_directory_status, open_with_app_available, remove_directory, DirectoryStatus,
 };
+use indexer_core::ports::AppLauncher;
 use std::path::Path;
 use tauri::{AppHandle, Runtime, State};
 
@@ -321,8 +322,9 @@ fn open_directory_and_mark_opened<R: Runtime>(
     mut project: Project,
     open_with: Option<&str>,
 ) -> Result<Project, ProjectError> {
-    crate::commands::system::open_in_app(&project.directory, open_with)
-        .map_err(ProjectError::OpenFailed)?;
+    crate::adapters::OpenerLauncher
+        .open(&project.directory, open_with)
+        .map_err(|e| ProjectError::OpenFailed(e.0))?;
     project.mark_as_opened_recently();
     store.save_project(&project)?;
     Ok(project)
