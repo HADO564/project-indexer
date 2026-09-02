@@ -23,7 +23,7 @@
   `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`
 - **The JS toolchain is pnpm** (reconciled in Task 1): `beforeDevCommand`/`beforeBuildCommand` are `pnpm dev`/`pnpm build`, `package.json` pins `packageManager: pnpm@11.21.0`, `pnpm-lock.yaml` is the committed lockfile, there is no `package-lock.json`. Use `pnpm` for everything (`pnpm install`, `pnpm run tauri dev`, `pnpm build`, `pnpm test`). Because `node_modules` is now pnpm-managed and the lockfile matches, `pnpm dev` no longer relocates it — commit `pnpm-lock.yaml` changes normally.
 - **Kill the running dev app before any `cargo build`** — the Windows linker cannot overwrite `project-indexer.exe` while it runs.
-- `cargo fmt` clean, `cargo clippy` clean bar the 2 known warnings (`sort_by_key`, module-inception), `npm run check` clean bar the 8 known `EditProjectForm` warnings.
+- `cargo fmt` clean, `cargo clippy` clean bar the 2 known warnings (`sort_by_key`, module-inception), `pnpm run check` clean bar the 8 known `EditProjectForm` warnings.
 
 ---
 
@@ -186,8 +186,7 @@ Expected: three crates compile; a warning that `indexer_core::placeholder` is un
 
 - [ ] **Step 6: Verify the app still runs**
 
-Run: `npm run tauri dev`, confirm the window opens and the project list loads, close it.
-Run: `git checkout -- pnpm-lock.yaml`
+Run: `pnpm run tauri dev`, confirm the window opens and the project list loads, close it.
 
 - [ ] **Step 7: Commit**
 
@@ -485,7 +484,7 @@ Expected: all moved model/normalize/sorting/error tests pass, plus the 8 new `na
 
 Kill any running dev app. Run: `cargo build -p project-indexer`
 Expected: compiles (warnings about the soon-to-be-moved `detectors`/`utils` are fine).
-Run: `npm run tauri dev`, create a project, edit it, favorite it, delete it, restore it — all work. Close. `git checkout -- pnpm-lock.yaml`.
+Run: `pnpm run tauri dev`, create a project, edit it, favorite it, delete it, restore it — all work. Close.
 
 - [ ] **Step 14: `cargo fmt` and commit**
 
@@ -654,7 +653,7 @@ Expected: **no output.**
 
 - [ ] **Step 10: Build and smoke-test**
 
-Kill dev app. `cargo build -p project-indexer`. `npm run tauri dev` → create a project in a real git repo dir, confirm the git badge appears; open "add project" and Browse, confirm name suggestion still works; check the "open with" app picker lists apps. Close. `git checkout -- pnpm-lock.yaml`.
+Kill dev app. `cargo build -p project-indexer`. `pnpm run tauri dev` → create a project in a real git repo dir, confirm the git badge appears; open "add project" and Browse, confirm name suggestion still works; check the "open with" app picker lists apps. Close.
 
 - [ ] **Step 11: `cargo fmt` and commit**
 
@@ -1716,7 +1715,7 @@ Remove `open_in_app` (and any now-unused helpers it alone used) from `src-tauri/
 
 - [ ] **Step 4: Build + smoke-test**
 
-Kill dev app. `cargo build -p project-indexer`. `npm run tauri dev` → set a project's "open with" to a real editor, click Open, confirm it launches; on Windows confirm VS Code opens a folder (the `ELECTRON_RUN_AS_NODE` scrub). Close. `git checkout -- pnpm-lock.yaml`.
+Kill dev app. `cargo build -p project-indexer`. `pnpm run tauri dev` → set a project's "open with" to a real editor, click Open, confirm it launches; on Windows confirm VS Code opens a folder (the `ELECTRON_RUN_AS_NODE` scrub). Close.
 
 - [ ] **Step 5: fmt + commit**
 
@@ -1985,7 +1984,7 @@ git rm -r src-tauri/src/store
 - [ ] **Step 5: Full build + manual regression pass**
 
 Kill dev app. `cargo build --workspace`. `cargo test --workspace`.
-`npm run tauri dev` and exercise **every** flow:
+`pnpm run tauri dev` and exercise **every** flow:
 - create a project (real dir), see trackers detected
 - Browse in the create form → name pre-fills
 - edit name / tags / description / favorite / notes / client / open-with
@@ -2000,7 +1999,7 @@ Kill dev app. `cargo build --workspace`. `cargo test --workspace`.
 - the "directory gone" bin icon (delete a project's folder outside the app, relaunch)
 - sort controls
 
-Confirm `projects.db` (not `projects.json`) is created in the app config dir. Close. `git checkout -- pnpm-lock.yaml`.
+Confirm `projects.db` (not `projects.json`) is created in the app config dir. Close.
 
 - [ ] **Step 6: fmt + commit**
 
@@ -2067,14 +2066,14 @@ async function handleDirectoryPicked(dir: string) {
 
 - [ ] **Step 3: Type-check + manual test**
 
-Run: `npm run check`
+Run: `pnpm run check`
 Expected: clean bar the 8 known `EditProjectForm` warnings.
 
-Run: `npm run tauri dev` → open the create form, Browse to a git repo directory → name fills with the repo name; Browse to a plain directory → name fills with the folder name; type a name first, then Browse → name is not overwritten. Close. `git checkout -- pnpm-lock.yaml`.
+Run: `pnpm run tauri dev` → open the create form, Browse to a git repo directory → name fills with the repo name; Browse to a plain directory → name fills with the folder name; type a name first, then Browse → name is not overwritten. Close.
 
 - [ ] **Step 4: Run frontend unit tests**
 
-Run: `npm test`
+Run: `pnpm test`
 Expected: the 14 `trackers.test.ts` cases pass (untouched).
 
 - [ ] **Step 5: Commit**
@@ -2173,7 +2172,7 @@ After Task 9, run the broad review (subagent-driven-development dispatches this 
 - No `unwrap()` on the `Mutex` lock that could poison-cascade in a way that matters (acceptable, but confirm).
 - The `restore` service method exists and is wired.
 - All 72 original tests present (grep `#[test]` counts before/after) plus the new ones.
-- `npm run build` succeeds; `npm run check` clean bar the known 8.
+- `pnpm build` succeeds; `pnpm run check` clean bar the known 8.
 
 ## Self-review notes (done while writing this plan)
 
