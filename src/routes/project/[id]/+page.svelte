@@ -38,7 +38,14 @@
       }
       loadError = "";
     } catch (err) {
-      loadError = (err as Error).message;
+      // A per-tab re-detect (`only` set) that fails must not collapse the
+      // whole view — leave `inspection` intact and surface it in the banner.
+      // Only a full load writes `loadError`.
+      if (only) {
+        banner = (err as Error).message;
+      } else {
+        loadError = (err as Error).message;
+      }
     } finally {
       loading = false;
     }
@@ -70,14 +77,17 @@
   }
 
   async function handleRefresh() {
+    // Set `loading` up front so the button's `disabled={loading}` covers the
+    // `refreshProjectTrackers` await too — a fast double-click can't double-fire.
+    loading = true;
     let refreshError = "";
     try {
       await refreshProjectTrackers(id);
     } catch (err) {
       refreshError = (err as Error).message;
     }
-    // Repaint from a fresh inspect regardless; load() clears `banner`, so
-    // re-apply the refresh error afterwards.
+    // Repaint from a fresh inspect regardless; load() clears `banner` and
+    // manages `loading` from here, so re-apply the refresh error afterwards.
     await load();
     if (refreshError) banner = refreshError;
   }
@@ -87,6 +97,12 @@
     await load();
   }
 </script>
+
+<svelte:window
+  onkeydown={(e) => {
+    if (editing && e.key === "Escape") editing = false;
+  }}
+/>
 
 <main class="mx-auto max-w-3xl px-4 py-8">
   <a href="/" class="text-sm text-blue-600 hover:underline dark:text-blue-400">← All projects</a>
@@ -137,10 +153,15 @@
       </div>
 
       {#if detected.length > 0}
-        <div class="mt-3 flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-700">
+        <div
+          role="tablist"
+          class="mt-3 flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-700"
+        >
           {#each detected as r}
             <button
               type="button"
+              role="tab"
+              aria-selected={activeKind === r.kind}
               onclick={() => (activeKind = r.kind)}
               class={`rounded-t-md px-3 py-1.5 text-sm font-medium ${
                 activeKind === r.kind
@@ -155,7 +176,7 @@
 
         {#each detected as r}
           {#if activeKind === r.kind}
-            <div class="p-3">
+            <div role="tabpanel" class="p-3">
               <div class="mb-2 flex justify-end">
                 <button
                   type="button"
@@ -179,15 +200,16 @@
     class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
     role="presentation"
     onclick={() => (editing = false)}
-    onkeydown={(e) => e.key === "Escape" && (editing = false)}
   >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- click only stops the backdrop's close-on-click-outside; Escape is
+         handled globally by <svelte:window>, so there's no keyboard pair -->
     <div
       class="w-11/12 max-w-lg"
       role="dialog"
       aria-modal="true"
       tabindex="-1"
       onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => e.stopPropagation()}
     >
       <EditProjectForm
         project={inspection.project}
