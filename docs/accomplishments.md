@@ -67,3 +67,56 @@ A dated record of what's been completed, in the order it landed. Append new entr
   - Dead empty `src-tauri/src/state/` module deleted.
   - 53 lib tests (one redundant git test dropped in the trait collapse, one resilience test added — a deliberately-failing detector alongside `Gitector`). `cargo build` / `cargo clippy` / `npm run check` clean (same pre-existing warnings).
 - `8602bd0` `style: apply rustfmt across src-tauri` — the tree was never rustfmt-clean (mixed 2-space indent, hand-wrapped call chains, unsorted `use`/`mod` lines). Ran `cargo fmt` once as a standalone commit; no behavior change.
+
+## 2026-08-31 — Project view
+
+The `/project/[id]` detail view (branch `feat/project-view`), plus the backend
+work it needed. Nine commits: `c6245ea` `e0024c2` `d5d33e4` `1842582`
+`4c941ae` `6868943` `c37647e` `56edf33`, then this docs pass.
+
+- **`Detector::kind() -> &'static str`** (`"git"`, `"unreal"`) — a stable,
+  lowercase detector identity. The frontend no longer infers *detection*
+  identity from serde shape; `trackers.ts` still reads the variant name for
+  tab labels only. Checks off the "explicit tracker/detector identity"
+  backlog item (`Tracker::kind()` itself wasn't needed — the outcome `kind`
+  covers every call site).
+- **`Detection` carries `outcomes`** — `Vec<DetectorOutcome>`, one
+  `DetectorOutcome::{Detected { kind, tracker } | NotDetected { kind } |
+  Failed { kind, error }}` per detector consulted, replacing the parallel
+  `{ trackers, errors }` lists. `.trackers()` / `.errors()` project them out;
+  `.into_result()` is unchanged (still all-or-nothing, still guarded by
+  `into_result_discards_partial_trackers_on_any_error`). `DetectorRunner::inspect(path, only)`
+  added — the same pass restricted to one detector `kind`, for per-tab re-detect.
+- **`GitInfo.web_url: Option<String>`** — browser-openable form of the remote,
+  `git@` / `ssh://` / `https://` all normalized to `https://host/owner/repo`
+  with the trailing `.git` stripped, derived by `Gitector`. `None` when the
+  remote isn't a recognizable http/ssh git URL. Mirrored in `types.ts`.
+- **`commands/inspect.rs` — `inspect_project(id, only) -> ProjectInspection`**
+  — read-only: loads the stored project, runs a live detection pass against
+  its directory, returns `{ project, directory_status: { ok, message? },
+  results: [{ kind, status, tracker?, error? }] }`. Does **not** persist;
+  `refresh_project_trackers` stays the only write path. A missing directory
+  comes back as `directory_status.ok = false` with empty results, not a
+  command error, so the view can still render identity. Registered in `lib.rs`.
+- **`/project/[id]` route** (`+page.svelte` + `+page.ts`, `prerender = false`)
+  replacing `ProjectDetailModal` (deleted). `ProjectIdentity.svelte` (the
+  identity `<dl>`, lifted out of the modal), a per-detector status strip, one
+  tab per detected tracker rendered by the generic **`TrackerPanel.svelte`**,
+  per-tab re-detect, an Edit overlay, and Refresh (the persist action).
+  `ProjectCard`'s "Details" is now `<a href="/project/{id}">`.
+- **`trackers.ts` typed fields** — `trackerFields()` returns `text` / `code` /
+  `link` / `path` / `chips` / `flag`, inferred from each key's name and value
+  shape, zero per-tracker-kind code. `http(s)://` → link, `git@` / `ssh` →
+  copyable `code` (not a broken link), `*_root` / `*_path` / `*_dir` → path,
+  `*hash*` / `*commit*` → code, arrays → chips, true booleans → flag.
+  `TrackerPanel` renders each type with open / reveal / copy affordances
+  (clipboard failure swallowed, open/reveal failure → banner).
+- **`src/lib/api/`** — `inspectProject()` (projects.ts), `openExternalUrl()` +
+  `revealPath()` (opener.ts), the inspection DTOs (types.ts).
+- **`vitest`** added (dev-dep, `test` script, `test` block in `vite.config.js`
+  — the repo uses `.js`). `src/lib/trackers.test.ts` — 10 tests over the
+  field-type inference. Now a second frontend check alongside `svelte-check`.
+- Final checks green: `cargo test --lib` 61 passing, `cargo fmt --check`
+  clean, `cargo clippy --lib` only the 2 pre-existing warnings (`sort_by_key`,
+  module-name), `cargo build` clean; `npm test` 10 passing, `npm run check` 0
+  errors (8 pre-existing `EditProjectForm` warnings), `npm run build` succeeds.

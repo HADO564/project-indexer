@@ -20,8 +20,9 @@ about direction, not mechanics.
                             │  invoke()  (lib/api/* mirrors commands 1:1)
             ┌───────────────▼───────────────┐
             │        Tauri commands         │
-            │  commands/projects.rs  ·  system.rs
-            │  (CRUD + detection orchestration + launch)
+            │  commands/projects.rs · system.rs · inspect.rs
+            │  (CRUD + detection orchestration + launch;
+            │   inspect.rs = read-only live detection)
             └──────┬─────────────────┬──────┘
                    │                 │
         ┌──────────▼──────┐   ┌──────▼───────────────┐
@@ -29,7 +30,7 @@ about direction, not mechanics.
         │  (tauri-plugin- │   │   registry.rs picks  │
         │   store JSON)   │   │   the detector set   │
         └──────┬──────────┘   └──────┬───────────────┘
-               │                     │  detect_project → Detection{trackers,errors}
+               │                     │  detect_project → Detection{outcomes}
         ┌──────▼──────┐     ┌────────┼────────┐
         │ migrations/ │     ▼        ▼        ▼
         │ (stamp v1)  │  Gitector  Unreal   (Unity…)
@@ -45,11 +46,16 @@ platform abstraction for `system.rs` (it's `#[cfg(target_os)]` branches).
 Load-bearing decisions. Break one only on purpose, and add a test that fails
 if it regresses.
 
-1. **A new detector is "implement + register" — nothing else.** A detector
-   touches its own module, one line in `detectors/registry.rs`, a `Tracker`
-   variant, and its `*Info` model. It must not require changes to the runner,
-   the command layer, `DetectorError` (the `Other` variant is the escape
-   hatch), or the frontend.
+1. **A new detector is "implement + register" — nothing else.** It touches
+   its own module, one line in `detectors/registry.rs`, a `Tracker`
+   variant, its `*Info` model, and `Detector::kind()`. **Zero frontend
+   code:** the generic `TrackerPanel` renders any tracker, inferring each
+   field's affordance from its name/shape — `*_url` / `https://…` → link,
+   `*_root` / `*_path` / `*_dir` → path, `*hash*` / `*commit*` → code,
+   arrays → chips, booleans → flags. A field named off-convention just
+   renders as plain text. No runner, command-layer, or `DetectorError`
+   change either — the `Other` variant is the escape hatch for a detector's
+   own error type.
 2. **Basic detection stays cheap and bounded.** `detect_project` runs on
    every `create_project` and every browse-prefill keystroke-ish action. A
    detector that needs to walk history, parse a dependency graph, or scan
@@ -82,25 +88,32 @@ if it regresses.
 
 ## Detection semantics
 
-The runner already returns `Detection { trackers, errors }`, but the *meaning*
-of the states isn't written down anywhere, so the next detector author will
-guess. The taxonomy:
+The runner returns `Detection { outcomes }` — one `DetectorOutcome` per
+detector consulted, in registration order — and the taxonomy is now a doc
+comment on `DetectorOutcome`. The states:
 
 | State | How it's represented | Example |
 |---|---|---|
-| **Not mine** | absent from both lists | a plain directory, to `Gitector` |
-| **Detected** | entry in `trackers` | a git repo → `Tracker::Git(info)` |
-| **Detected, partial** | entry in `trackers` with `None` fields | git repo with no remote (`repo_url: None`) — a normal state, not an error |
-| **Detector failed** | entry in `errors` | libgit2 can't read a corrupt repo; `.uproject` is malformed JSON |
-| **Path unusable** | `errors`, or refused earlier by `check_directory_health` | directory deleted mid-operation |
+| **Not mine** | `DetectorOutcome::NotDetected` | a plain directory, to `Gitector` |
+| **Detected** | `DetectorOutcome::Detected { tracker }` | a git repo → `Tracker::Git(info)` |
+| **Detected, partial** | `Detected` with `None` fields on the tracker | git repo with no remote (`repo_url: None`) — a normal state, not an error |
+| **Detector failed** | `DetectorOutcome::Failed { error }` | libgit2 can't read a corrupt repo; `.uproject` is malformed JSON |
+| **Path unusable** | `Failed`, or refused earlier by `check_directory_health` | directory deleted mid-operation |
+
+`Detection::trackers()` and `errors()` project the `Detected` / `Failed`
+outcomes back out for best-effort callers; `into_result()` is the
+all-or-nothing view.
 
 The load-bearing distinction: **"malformed `.uproject`" and "not an Unreal
 project" are not the same outcome** and must never collapse into one. A
 detector returns `Ok(None)` for "not mine" and `Err` for "mine but broken".
 
-Gap: the frontend consumes `trackers` and drops `errors`. A user whose Unreal
-detection fails silently sees "no Unreal tracker", indistinguishable from a
-non-Unreal project. Per-detector status needs to reach the UI — see backlog.
+The persist paths (`create_project`, `refresh_project_trackers`) still store
+only `trackers`. The `/project/[id]` view closed the visibility gap a
+different way: it calls `inspect_project` (read-only, live) and renders every
+outcome — `● git · ○ unreal — not detected · ▲ unity — <error>` — so a
+detector that fails is no longer indistinguishable from one that found
+nothing.
 
 ## Recorded decisions
 
@@ -123,9 +136,10 @@ prior good state to protect there.
 
 *Revisit when:* there are enough independent detectors that losing an
 unrelated tracker to one detector's transient failure is the common case. The
-alternative is to persist `trackers` and keep `errors` as per-detector status
-(needs UI — "Git: ok · Unity: failed"). That's a deliberate change, not a
-detector quietly learning to tolerate partial state.
+alternative is to persist the `Detected` outcomes and keep the `Failed` ones
+as per-detector status (the `/project/[id]` view already shows this live from
+`inspect_project`; this would carry it into the stored record too). That's a
+deliberate change, not a detector quietly learning to tolerate partial state.
 
 *Guarded by:* `into_result_discards_partial_trackers_on_any_error` (and the
 `Detection::into_result` doc comment).
@@ -137,11 +151,13 @@ Curated and reordered from a broader architectural review. Prioritized by
 
 ### Now — cheap, and makes the next detector cheaper
 
-- [ ] **Explicit tracker/detector identity.** Add `Tracker::kind(&self) -> &'static str`
-      and a matching `Detector::kind()`. The frontend currently infers the
-      kind from the serde shape (`Object.keys(tracker)[0]` in `trackers.ts`) —
-      clever, but it couples UI semantics to serialization. Keep the generic
-      field rendering; just stop deriving *identity* from JSON structure.
+- [x] **Explicit tracker/detector identity.** `Detector::kind() -> &'static str`
+      (`"git"`, `"unreal"`) lands with each detector and tags every
+      `DetectorOutcome`; `inspect_project` surfaces it to the frontend as a
+      real `kind` string. `trackers.ts` still reads the *variant* name off the
+      serde shape for tab labels, but detection identity no longer rides on
+      JSON structure. (`Tracker::kind()` itself wasn't needed — the outcome
+      `kind` covers every call site.)
 - [ ] **Write down the detection semantics** (the table above) as a doc
       comment on `Detection` / the `Detector` trait, and add a test that a
       malformed descriptor is an `Err`, not `Ok(None)`.
@@ -157,9 +173,12 @@ Curated and reordered from a broader architectural review. Prioritized by
 
 ### Next — before or alongside the Unity detector
 
-- [ ] **Per-detector status to the UI.** Surface `Detection.errors` (with the
-      detector `kind`) so the detail view can show "Git: detected · Unreal:
-      failed · Unity: not detected" rather than only successes.
+- [x] **Per-detector status to the UI.** `inspect_project` returns one
+      `DetectorResult { kind, status, tracker?, error? }` per detector and the
+      `/project/[id]` view renders the full strip — "Git: detected · Unreal:
+      failed · Unity: not detected" — not just successes. Read-only and live;
+      the stored record is still successes-only (see "Refresh is
+      all-or-nothing").
 - [ ] **Extract detection orchestration** out of `commands/projects.rs` into a
       testable function/module seam. *Not* a full `services/` layer — the file
       is 300 lines, that's premature. Just make the create/refresh/preview
