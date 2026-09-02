@@ -61,6 +61,34 @@ What's done and what's still open, feature by feature. Check items off as they l
 - [x] `open_in_app` strips `ELECTRON_RUN_AS_NODE` so Electron `open_with` targets launch (not run as Node)
 - [x] List doesn't flash "Loading…" on refetch; sort control heights matched
 
+## Frontend-agnostic core
+
+The Rust backend restructured so the GUI is one frontend over a Tauri-free
+library crate. Spec:
+`docs/superpowers/specs/2026-09-02-frontend-agnostic-core-design.md`.
+
+- [x] Cargo workspace — root `[workspace]` (`src-tauri`, `crates/core`, `crates/cli`)
+- [x] `indexer-core` library crate — `domain` / `ports` / `application` / `detectors` / `platform` / `infra` / `error`, no `tauri` / `clap` in its dep tree (compiler-enforced)
+- [x] `crates/cli` (`indexer-cli`) — one-line stub for the Spec 2 observer CLI
+- [x] `ProjectReader` + `ProjectRepository` port (`ProjectReader` is the read-only half for an external consumer like devmon)
+- [x] `AppLauncher` port + `OpenerLauncher` adapter in `src-tauri` (the only place `tauri-plugin-opener` is still used)
+- [x] `ProjectService` — one method per command, orchestration lifted verbatim out of the Tauri handlers; `find_by_directory` / `ensure_project` added for Spec 2
+- [x] `SqliteRepository` (`rusqlite`, bundled, WAL, `foreign_keys=ON`) at `app_config_dir/projects.db` — `Project` as a JSON blob + promoted `is_deleted` / `directory_normalized` / `updated_at` + a derived `project_tags` table + `meta`; `user_version` migration runner + version-skew guard
+- [x] `#[tauri::command]` functions are ~3-line pass-throughs over `State<Arc<ProjectService>>`; `AppHandle` gone from every signature
+- [x] Name suggestion moved to `core::domain::naming` + a `suggest_project_name` command (was inline JS in `CreateProjectForm.svelte`)
+- [x] `tauri-plugin-store` + `store/` + `migrations/` deleted; `serde_json` / `chrono` / `uuid` / `thiserror` dropped from `src-tauri`; dead `@tauri-apps/plugin-store` npm dep removed
+- [x] Zero user-visible change — same windows, command names, payloads, behaviour
+
+## Test counts (Rust, `cargo test -p indexer-core`, Windows)
+
+91 executed (+11 `#[cfg(unix/linux)]` not run on Windows); `cargo test -p project-indexer` is 0.
+
+- [x] `Gitector` (11), `UnrealDetector` (10), detector-runner + `results_from`
+- [x] `normalize`, `sorting`, `Project` invariants / soft-delete / health checks
+- [x] `naming` (8) — SSH/HTTPS remotes, `.git` suffix, trailing separators, no-remote fallback, empty
+- [x] `SqliteRepository` (8) — round-trip, upsert, idempotent+cascading delete, `list` incl. deleted, `find_by_directory`, corrupt blob, fresh-DB schema, refuses-newer-DB
+- [x] `ProjectService` (15) — dup rejects, best-effort create, open (missing dir / missing app / success), all-or-nothing refresh, bin-only delete, `delete_directory` both branches, restore, inspect-bad-dir, `ensure_project` idempotency
+
 ## Open (features)
 
 - [ ] `GitInfo.contributors` (see above)
@@ -68,5 +96,8 @@ What's done and what's still open, feature by feature. Check items off as they l
 - [ ] Blender detector — add `Tracker::Blender` + a `BlenderDetector` together
 - [ ] macOS support — `list_installed_apps` returns empty, app-launch falls through to the generic opener path
 - [ ] Global shortcut — plugin is registered but no shortcut is bound to any action
+- [ ] **Spec 2 — observer CLI.** Fill in `crates/cli`: `indexer <cmd>` wraps a real command, matches argv+cwd+exit against recognizers, records project facts through `ProjectService`. Plain subcommands too.
+- [ ] **Updater fast-follows** (see `architecture.md` "Cross-app & updates"): `tauri-plugin-updater` wiring + `core::updates::latest_stable`, a dismissible GUI release-notification chip, CLI `self-update` + stderr hint, GUI on-demand minisign-verified CLI download, tag→signed-bundle→GitHub-Release CI.
+- [ ] `detect_project_trackers` command / `detectProjectTrackers` in `src/lib/api/projects.ts` — no frontend callers since Task 8 (name pre-fill moved to `suggest_project_name`). Kept deliberately: the command is still registered for a future CLI preview / Spec 2. Remove the JS wrapper if it's still unused when the API surface is next revised.
 
 Non-feature work (testing, platform seams, tech debt, PI-004, lockfiles) lives in `architecture.md`.

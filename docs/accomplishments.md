@@ -156,3 +156,66 @@ continued), plus two feature adds and an open-with fix.
 - Green: `cargo test --lib` 61, `cargo fmt`/`clippy` clean, `cargo build`
   clean; `npm test` 14, `npm run check` 0 errors, `npm run build` clean.
   Open verified in the running app.
+
+## 2026-09-03 — Frontend-agnostic core
+
+Branch `refactor/frontend-agnostic-core`. Spec 1 of 2
+(`docs/superpowers/specs/2026-09-02-frontend-agnostic-core-design.md`): the Rust
+backend restructured so the GUI is one frontend over a Tauri-free library crate,
+with SQLite replacing the JSON store. **Zero user-visible change** — same
+windows, command names, IPC payloads, and behaviour throughout. Nine tasks, each
+ending green and committable.
+
+- **Cargo workspace.** Root `[workspace]` over `src-tauri`, `crates/core`
+  (`indexer-core`), `crates/cli` (`indexer-cli` — a one-line stub for the Spec 2
+  observer CLI). Dependency direction is compiler-enforced: `src-tauri →
+  indexer-core`, and a `use tauri::` in `core` fails to build.
+- **`indexer-core`.** All domain logic, orchestration and persistence, in
+  `domain` / `ports` / `application` / `detectors` / `platform` / `infra` /
+  `error`. `models/` + `utils/{normalize,sorting}` → `domain`; `errors/` →
+  `error`; `detectors/` moved wholesale; `utils/filesystem` + the non-Tauri
+  half of `system.rs` (installed-app discovery, the `.desktop` parser,
+  `remove_directory`) → `platform`. `git2` / `winreg` / `parselnk` moved with
+  them.
+- **`ProjectService`** (`core::application`) — one method per Tauri command,
+  logic lifted verbatim out of the handlers, plus `find_by_directory` and
+  `ensure_project` added for Spec 2. Holds `Arc<dyn ProjectRepository>` +
+  `Arc<dyn AppLauncher>` + `Arc<DetectorRunner>`.
+- **Two ports.** `ProjectReader` (get / list / find_by_directory — the
+  read-only half, for an external consumer like devmon) +
+  `ProjectRepository: ProjectReader` (save / delete); `AppLauncher` (open /
+  is_available). New port errors `RepositoryError` / `LauncherError`, mapped in
+  the service to `ProjectError::Store` / `::OpenFailed`.
+- **SQLite swap.** `tauri-plugin-store` dropped entirely. `SqliteRepository`
+  (`rusqlite`, `bundled`, WAL, `busy_timeout`, `foreign_keys=ON`) at
+  `app_config_dir()/projects.db` — `Project` as a serde-JSON `data` blob +
+  promoted `is_deleted` / `directory_normalized` / `updated_at` columns, `tags`
+  mirrored into a derived `project_tags` table, a `meta(app, schema_version)`
+  table. Schema evolution is a numbered `user_version` runner against
+  `CURRENT_SCHEMA_VERSION`, with a version-skew guard (`open` refuses a DB from
+  a newer binary). No autosave, no flush-on-close hook — writes are synchronous.
+  **No JSON→SQLite import** — the app had no production data; the
+  `serde_json::Value` migration layer (`migrations/`) was deleted, not ported.
+- **`src-tauri` is now an adapter.** Every `#[tauri::command]` is a ~3-line
+  pass-through over `State<Arc<ProjectService>>` (`AppHandle` gone from every
+  signature). `adapters/opener_launcher.rs` (`OpenerLauncher impl AppLauncher`)
+  is the one genuine adapter and the only remaining `tauri-plugin-opener` use;
+  the Windows `ELECTRON_RUN_AS_NODE` env-scrub moved into it verbatim. `lib.rs`
+  `setup` opens the DB and assembles the service into managed state. Removed:
+  `store/`, `migrations/`, the flush hook, the separate `.manage(DetectorRunner)`.
+- **Name suggestion moved to Rust.** `repo_name_from_url` /
+  `folder_name_from_directory` / `suggest_project_name` ported from
+  `CreateProjectForm.svelte` into `core::domain::naming` (unit-tested for the
+  first time) behind a new `suggest_project_name` command; the inline JS
+  helpers and the dead `@tauri-apps/plugin-store` npm dependency were deleted.
+- **Dependency trim.** `src-tauri` dropped `serde_json` / `chrono` / `uuid` /
+  `thiserror` — and `serde` — now that it holds no models or errors of its own.
+- **JS toolchain committed to pnpm** — `packageManager: pnpm@11.21.0`,
+  `beforeDevCommand` / `beforeBuildCommand` are `pnpm dev` / `pnpm build`, no
+  `package-lock.json`.
+- **Tests.** The pre-refactor 72 moved into `core` and pass unchanged; net 91
+  executed on Windows (72 − 1 deleted `serde_json::Value` migration test + 8
+  `naming` + 8 `SqliteRepository` + 15 `ProjectService`, with the `results_from`
+  test relocated). `cargo test -p project-indexer` is now 0. Frontend: 14
+  `trackers.test.ts` vitest cases untouched, `pnpm run check` 0 errors / 8
+  known `EditProjectForm` warnings, `pnpm run build` clean.
