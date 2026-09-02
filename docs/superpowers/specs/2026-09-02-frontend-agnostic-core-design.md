@@ -525,7 +525,7 @@ persistence design here must let devmon integrate later with no rework.
 | Separate database files | `projects.db` is project-indexer's alone. devmon owns `devmon.db` with its own `user_version`. Two apps never share one file or one migration lifecycle. devmon `ATTACH`es `projects.db` **read-only** for reporting joins. |
 | Stable foreign key | `projects.id` is a UUID, generated once, never reused (invariant 3). devmon stores `project_id` values referencing it. **No tombstones:** if project-indexer purges a project, devmon doesn't need it either — devmon's Mondrian forest trains on a rolling ~1-month window, so anything old enough to be orphaned is already out of scope. A purged `project_id` simply stops resolving. |
 | Attribution lookup | `projects.directory_normalized` (indexed) and `project_tags.tag` (indexed). devmon normalizes an observed path with the same rule and looks the project up — ideally by depending on the `indexer-core` crate (`ProjectReader::find_by_directory`) rather than reimplementing normalization. |
-| Compatibility check | `meta` table (`app`, `schema_version`) — an external reader confirms it's looking at a project-indexer DB of a version it understands before joining. |
+| Compatibility check | `meta(key, value)` table carrying `app` and `schema_version` rows — an external reader confirms it's looking at a project-indexer DB of a version it understands before joining. |
 | Time correlation | all timestamps are RFC3339 UTC strings (`chrono::DateTime<Utc>`), already the case. |
 | Concurrent read while GUI writes | WAL mode + `busy_timeout`. |
 | Read-only API surface | `ProjectReader` trait (get / list / find_by_directory) is separate from `ProjectRepository`; devmon consumes the read half. |

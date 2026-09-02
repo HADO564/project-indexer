@@ -246,8 +246,9 @@ rely on `#[serde(default)]` / `Option<T>` (invariant 8).
 `projects.db` is project-indexer's alone. A planned separate app, **devmon** (an
 activity/work tracker), will `ATTACH` it **read-only** to attribute observed
 activity to projects. The persistence design keeps that possible without rework:
-stable UUID PK, indexed `directory_normalized`, a `meta(app, schema_version)`
-table an external reader checks before joining, RFC3339 UTC timestamps
+stable UUID PK, indexed `directory_normalized`, a `meta(key, value)` table
+carrying `app` and `schema_version` rows an external reader checks before
+joining, RFC3339 UTC timestamps
 throughout, WAL + `busy_timeout` for concurrent read-while-write, and a
 read-only `ProjectReader` trait devmon can depend on (ideally via the
 `indexer-core` crate, reusing `normalize` + `find_by_directory` rather than

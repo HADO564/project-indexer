@@ -216,6 +216,8 @@ ending green and committable.
 - **Tests.** The pre-refactor 72 moved into `core` and pass unchanged; net 91
   executed on Windows (72 − 1 deleted `serde_json::Value` migration test + 8
   `naming` + 8 `SqliteRepository` + 15 `ProjectService`, with the `results_from`
-  test relocated). `cargo test -p project-indexer` is now 0. Frontend: 14
+  test relocated — 102 `#[test]` attributes total, 11 of them
+  `#[cfg(unix/linux)]`-gated, so 91 run on Windows).
+  `cargo test -p project-indexer` is now 0. Frontend: 14
   `trackers.test.ts` vitest cases untouched, `pnpm run check` 0 errors / 8
   known `EditProjectForm` warnings, `pnpm run build` clean.

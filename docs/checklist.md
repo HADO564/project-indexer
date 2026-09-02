@@ -81,12 +81,12 @@ library crate. Spec:
 
 ## Test counts (Rust, `cargo test -p indexer-core`, Windows)
 
-91 executed (+11 `#[cfg(unix/linux)]` not run on Windows); `cargo test -p project-indexer` is 0.
+94 executed (+11 `#[cfg(unix/linux)]` not run on Windows); `cargo test -p project-indexer` is 0.
 
 - [x] `Gitector` (11), `UnrealDetector` (10), detector-runner + `results_from`
 - [x] `normalize`, `sorting`, `Project` invariants / soft-delete / health checks
 - [x] `naming` (8) — SSH/HTTPS remotes, `.git` suffix, trailing separators, no-remote fallback, empty
-- [x] `SqliteRepository` (8) — round-trip, upsert, idempotent+cascading delete, `list` incl. deleted, `find_by_directory`, corrupt blob, fresh-DB schema, refuses-newer-DB
+- [x] `SqliteRepository` (11) — round-trip, upsert, idempotent+cascading delete (tag mirror asserted non-empty first), tag-mirror populate+replace, `list` incl. deleted, `find_by_directory` (normalized index + prefers live most-recent row), corrupt blob, fresh-DB schema, file-backed `open` creates schema (wal / `user_version` / `meta.schema_version`), refuses-newer-DB
 - [x] `ProjectService` (15) — dup rejects, best-effort create, open (missing dir / missing app / success), all-or-nothing refresh, bin-only delete, `delete_directory` both branches, restore, inspect-bad-dir, `ensure_project` idempotency
 
 ## Open (features)
