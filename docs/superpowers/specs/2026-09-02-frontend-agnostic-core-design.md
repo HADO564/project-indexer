@@ -64,6 +64,11 @@ requirement is the concrete trigger they were waiting for.
 - **devmon itself, or any of its tables.** This spec only ensures `projects.db`
   is *shaped* so devmon can integrate later (see "Cross-app compatibility") —
   it builds none of it.
+- **The auto-updater and release CI.** `tauri-plugin-updater` wiring, the
+  "update available" UI, minisign keys, and the tag→signed-bundle→GitHub-Release
+  pipeline are a fast-follow. This spec only makes the schema-migration path
+  safe for a self-updating app (version-skew guard, tested migrations) — see
+  "App updates".
 
 ## Decisions locked during brainstorming
 
@@ -356,12 +361,17 @@ feature actually needs it. Until then the blob is scanned in Rust.
   `project_tags`), missing row is `Ok`.
 - A row whose `data` fails to deserialize → `RepositoryError::Corrupt`
   (fail loud — matches today's `rejects_a_record_missing_its_identity`).
-- **Schema evolution:** a numbered runner keyed on `PRAGMA user_version`.
-  `v0→v1` creates the tables (`meta`, `projects`, `project_tags`) and seeds
-  `meta`. A future field change that serde `#[serde(default)]` / `Option<T>`
-  can't absorb becomes a numbered step that rewrites the `data` blobs in a
-  transaction. This is the *only* migration mechanism — there is no separate
-  `serde_json::Value` layer.
+- **Schema evolution:** a numbered runner keyed on `PRAGMA user_version`,
+  against `CURRENT_SCHEMA_VERSION` (a `const` in `core`). `v0→v1` creates the
+  tables (`meta`, `projects`, `project_tags`) and seeds `meta`. A future field
+  change that serde `#[serde(default)]` / `Option<T>` can't absorb becomes a
+  numbered step that rewrites the `data` blobs in a transaction. This is the
+  *only* migration mechanism — there is no separate `serde_json::Value` layer.
+- **Version-skew guard:** if the DB's `user_version` >
+  `CURRENT_SCHEMA_VERSION`, `open` returns
+  `RepositoryError::Backend("database is from a newer version of Project
+  Indexer")` and does not touch the data. Matters once the app auto-updates
+  (see "App updates") — a downgraded binary must fail loud, not corrupt.
 
 ### `error/`
 
@@ -521,6 +531,40 @@ persistence design here must let devmon integrate later with no rework.
 **Explicitly not in this DB:** none of devmon's activity/metric/model tables.
 Those live in `devmon.db`. `projects.db` stays about projects.
 
+**devmon depends on `indexer-core`** — as a path dep if the two ever share a
+workspace, otherwise a `git` dependency on this repo pinned to a release tag.
+Either way it's a normal library crate; nothing in this spec blocks it.
+
+## App updates (GitHub Releases)
+
+The desktop app is intended to self-update from the project's GitHub Releases
+(`tauri-plugin-updater`, Tauri v2 — GitHub Releases is a first-class endpoint;
+bundles signed with minisign). **Wiring the updater is a fast-follow, not part
+of this spec.** But the spec must not design a migration story that makes
+auto-update unsafe, so these consequences land now:
+
+- **A newer binary opening an older `projects.db` is the normal case** once the
+  app ships and updates itself. The `user_version` runner in
+  `SqliteRepository::open` is load-bearing infrastructure, not a placeholder —
+  every schema change is a numbered, tested step.
+- **Version-skew guard:** `open` refuses a DB whose `user_version` exceeds the
+  binary's `CURRENT_SCHEMA_VERSION` — returns
+  `RepositoryError::Backend("database is from a newer version of Project
+  Indexer")`, never a mangled read. A user who downgrades gets a clear message.
+- **Migration testing is promoted, not retired.** The "Migration fixtures"
+  backlog item in `architecture.md` stays. A `v(N)→v(N+1)` step ships with a
+  test that seeds a `user_version = N` database with representative rows and
+  asserts the upgraded result.
+- **devmon** reads `meta.schema_version` before its read-only `ATTACH`; that's
+  how it detects a project-indexer that auto-updated ahead of it and degrades
+  gracefully instead of misreading.
+- **`core` is unaffected.** The updater is entirely a `src-tauri` concern
+  (`tauri-plugin-updater` + a small "update available" affordance). A separately
+  distributed CLI later updates by its own channel.
+
+CI implication (fast-follow): tag → build signed bundles per platform → publish
+to GitHub Releases with the updater manifest.
+
 ## Invariants
 
 ### Preserved (all existing `architecture.md` invariants hold)
@@ -555,6 +599,11 @@ Those live in `devmon.db`. `projects.db` stays about projects.
     command doc-comment to a `ProjectService::refresh_trackers` doc-comment;
     the guard test moves to a service test
     (`refresh_leaves_stored_trackers_untouched_when_a_detector_fails`).
+12. **The binary owns forward migration; it never reads a newer DB.**
+    `SqliteRepository::open` runs `user_version` steps up to
+    `CURRENT_SCHEMA_VERSION` and refuses anything higher. Every step is a
+    tested, numbered transaction. This is what makes shipping auto-updates
+    safe. Guarded by the version-skew repository test.
 
 ## Testing
 
@@ -562,7 +611,7 @@ Those live in `devmon.db`. `projects.db` stays about projects.
 |---|---|
 | Existing 72 tests | Move with their code into `core`; pass unchanged. `cargo test -p indexer-core`. |
 | `ProjectService` (new) | `SqliteRepository::in_memory()` + a `FakeLauncher` (records calls, returns configured results). One test per flow: dup-name reject, dup-dir reject, best-effort create with a real git temp dir, all-or-nothing refresh, open (missing dir → `DirectoryDeletedOrMoved`, missing app → `OpenWithAppMissing`, success → launcher args + `mark_opened` persisted), bin-only delete guard, `delete_directory` both branches, restore, list/deleted/favorites filtering + ordering, inspect (bad dir → `DirectoryState { ok: false }` not an `Err`), `ensure_project` idempotency. |
-| `SqliteRepository` (new) | round-trip a `Project`; upsert replaces; `delete` idempotent; `list` returns deleted + active; `find_by_directory` hits the index; save populates `project_tags`, a tag change replaces those rows, `delete` cascades them; corrupt `data` → `RepositoryError::Corrupt`; `PRAGMA journal_mode` = `wal`; `open` on a fresh path creates the schema at `user_version = 1` with `meta` seeded (`app`, `schema_version`). |
+| `SqliteRepository` (new) | round-trip a `Project`; upsert replaces; `delete` idempotent; `list` returns deleted + active; `find_by_directory` hits the index; save populates `project_tags`, a tag change replaces those rows, `delete` cascades them; corrupt `data` → `RepositoryError::Corrupt`; `PRAGMA journal_mode` = `wal`; `open` on a fresh path creates the schema at `user_version = 1` with `meta` seeded; `open` on a DB whose `user_version` exceeds `CURRENT_SCHEMA_VERSION` → `RepositoryError::Backend`, data untouched. |
 | `src-tauri` | `cargo build` gate + one smoke test that the `setup` closure assembles a `ProjectService` (using a temp dir) without panicking. Command wrappers too thin to unit-test. |
 | Frontend | Unchanged behaviour. `CreateProjectForm` swaps its inline JS name logic (`repoNameFromUrl` / `folderNameFromDirectory` / `suggestProjectName` — currently untested) for the `suggest_project_name` command. The 14 `trackers.test.ts` vitest cases are untouched; `svelte-check` stays green. The name logic gains real coverage for the first time — as Rust unit tests in `core::domain::naming` (Task 2). |
 | CI | `cargo test --workspace`, `cargo clippy --workspace`, `cargo fmt --check`, `npm test`, `npm run check`, `npm run build`. |
@@ -604,10 +653,12 @@ rejecting its neighbour.
    `ProjectRepository: ProjectReader`, `AppLauncher`.
    `core::infra::sqlite_repository` — `rusqlite` (bundled), `open` / `in_memory`,
    WAL + `busy_timeout` + `foreign_keys = ON`, the schema (`meta` + `projects` +
-   `project_tags` + indexes), the `user_version` runner (`v0→v1` creates the
-   tables and seeds `meta`), all `ProjectReader` + `ProjectRepository` methods
-   (`save` maintains `project_tags` in the same transaction). Repository tests
-   with `in_memory()`.
+   `project_tags` + indexes), `CURRENT_SCHEMA_VERSION` const, the `user_version`
+   runner (`v0→v1` creates the tables and seeds `meta`) with the version-skew
+   guard (`open` refuses `user_version > CURRENT_SCHEMA_VERSION`), all
+   `ProjectReader` + `ProjectRepository` methods (`save` maintains `project_tags`
+   in the same transaction). Repository tests with `in_memory()`, including a
+   hand-set high `user_version` that `open` rejects.
 
 5. **`ProjectService`.** All methods from the table, logic lifted verbatim from
    `commands/projects.rs` + `commands/inspect.rs`. `find_by_directory` /
@@ -643,11 +694,13 @@ rejecting its neighbour.
    store", "Tauri-free `core` crate", "one `ProjectRepository`, all
    persistence through it", "`projects.db` is a cross-app contract — devmon"),
    retire the "extract detection orchestration" and "platform provider traits"
-   backlog items as done, note the `serde_json::Value` migration layer's
-   removal. Update `knowledgebase.md` (module inventory, persistence section),
-   `checklist.md` (new section), `KNOWN-ISSUES.md` if PI-003's line refs move.
-   Add `accomplishments.md` entry. Register Spec 2 (observer CLI) as the next
-   initiative.
+   backlog items as done, note the `serde_json::Value` layer's removal, and
+   **keep — do not retire — "Migration fixtures"** (promoted: auto-update makes
+   cross-version schema migration a live concern). Update `knowledgebase.md`
+   (module inventory, persistence section), `checklist.md` (new section),
+   `KNOWN-ISSUES.md` if PI-003's line refs move. Add `accomplishments.md`
+   entry. Register the fast-follows (auto-updater wiring + CI signing/release)
+   and Spec 2 (observer CLI) as the next initiatives.
 
 Task 6 may fold into 7 during planning.
 
