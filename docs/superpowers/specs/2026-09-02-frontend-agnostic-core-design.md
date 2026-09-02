@@ -64,13 +64,13 @@ requirement is the concrete trigger they were waiting for.
 - **devmon itself, or any of its tables.** This spec only ensures `projects.db`
   is *shaped* so devmon can integrate later (see "Cross-app compatibility") —
   it builds none of it.
-- **The updater, the release notification, and release CI.**
+- **The updater, release notification, installer packaging, and release CI.**
   `tauri-plugin-updater` wiring, the GUI "update available" chip, `core::updates`,
-  the CLI `self-update` command, minisign keys, and the
-  tag→signed-bundle→GitHub-Release pipeline are all fast-follow. This spec only
-  makes the schema-migration path safe for a self-updating app (version-skew
-  guard, tested migrations) and names the shared release-check seam — see
-  "App updates".
+  the CLI `self-update` command, the GUI installer's "add CLI to PATH" option,
+  minisign keys, and the tag→signed-bundle→GitHub-Release pipeline are all
+  fast-follow. This spec only makes the schema-migration path safe for a
+  self-updating app (version-skew guard, tested migrations) and names the seams
+  — see "App updates".
 
 ## Decisions locked during brainstorming
 
@@ -594,6 +594,30 @@ Small and non-blocking, matching the terminal aesthetic:
   scoop, that channel updates it too; `self-update` is for the standalone
   download.
 
+### GUI installer bundles the CLI (fast-follow)
+
+The `project-indexer` CLI binary is always shipped *inside* the GUI bundle
+(`tauri.conf.json` `bundle.resources` — it's a small standalone binary with no
+GUI deps). The installer then offers to put it on `PATH`:
+
+- **Windows (NSIS):** an optional component — *"Add the `project-indexer`
+  command-line tool to PATH"*, checked by default. On select, a small shim
+  `project-indexer.cmd` on `PATH` that `exec`s the bundled binary, so a later
+  app auto-update also updates the effective CLI. (The GUI itself is launched
+  from its Start-Menu shortcut, never `PATH` — no name clash.)
+- **macOS:** a menu item *"Shell Command: Install `project-indexer` in PATH"*
+  (the VS Code pattern) that symlinks `/usr/local/bin/project-indexer` → the
+  binary inside `Project Indexer.app`. Nothing touches `PATH` without the user
+  asking.
+- **Linux:** the `.deb`/`.rpm` simply place the CLI at `/usr/bin/project-indexer`
+  (no "option" — that's the platform norm); the standalone CLI ships as
+  `project-indexer-cli` which the GUI package `Recommends:`. AppImage: a GUI
+  action to copy the CLI out.
+
+The shim/symlink approach means the CLI a user got via the GUI installer stays
+current through the GUI's own updater; the standalone CLI download uses
+`self-update`.
+
 CI implication (fast-follow): tag → build signed bundles per platform → publish
 to GitHub Releases with the updater manifest **and** the raw CLI binaries as
 release assets (named by target triple, for `self_update` to find).
@@ -733,8 +757,8 @@ rejecting its neighbour.
    (module inventory, persistence section), `checklist.md` (new section),
    `KNOWN-ISSUES.md` if PI-003's line refs move. Add `accomplishments.md`
    entry. Register the fast-follows (updater + `core::updates` + GUI
-   release-notification chip + CLI `self-update` + signing/release CI) and
-   Spec 2 (observer CLI) as the next initiatives.
+   release-notification chip + CLI `self-update` + GUI-installer CLI bundling +
+   signing/release CI) and Spec 2 (observer CLI) as the next initiatives.
 
 Task 6 may fold into 7 during planning.
 
