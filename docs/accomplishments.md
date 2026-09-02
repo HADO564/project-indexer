@@ -119,3 +119,40 @@ work it needed. Nine commits on the branch, then this docs pass.
   clean, `cargo clippy --lib` only the 2 pre-existing warnings (`sort_by_key`,
   module-name), `cargo build` clean; `npm test` 10 passing, `npm run check` 0
   errors (8 pre-existing `EditProjectForm` warnings), `npm run build` succeeds.
+
+## 2026-09-02 — GUI v1
+
+The first real visual pass on the desktop UI (branch `feat/project-view`,
+continued), plus two feature adds and an open-with fix.
+
+- **Terminal restyle.** Dropped the Tailwind grey/blue + `prefers-color-scheme`
+  dual theme for a single committed dark look driven by semantic tokens in
+  `@theme` (`--color-void` / `-panel` / `-line` / `-phos` / `-accent` / `-gold`
+  / `-rust`). Cool-slate surfaces, off-white text, cyan interactive accent,
+  gold for state, rust for errors. `VT323` (SIL OFL) bundled in `static/fonts/`
+  as the display face; system mono for data. Bordered not shadowed, 2px
+  radius. `styles.ts` + every component swept off raw colour classes.
+  `color-scheme: dark` retires PI-001's bug class (no light menulist to fight).
+- **`trackerColor(kind)`.** Hand-picked hues for git/unreal/unity/blender/…,
+  a stable name-hashed hue for anything new, all `hsl(H 65% 70%)` so the text
+  contrasts on the dark ground without per-tracker tuning. On card badges, the
+  `/project/[id]` status strip, and the active tab. +4 vitest cases (14 total).
+- **Card action menu.** Open / Details / Detect / Edit / Delete collapse into
+  a `···` dropdown so the row can't collide with a long project name.
+- **Directory-gone marker.** New `list_missing_directories` command (ids of
+  live projects whose folder is deleted/moved; inaccessible ≠ gone). The list
+  fetches it once per load and shows an amber bin icon with the path struck
+  through.
+- **Open-with fix.** `open_in_app` on Windows now launches a chosen `.exe`
+  directly via `std::process::Command` with `ELECTRON_RUN_AS_NODE` /
+  `ELECTRON_NO_ATTACH_CONSOLE` stripped, instead of `ShellExecuteExW`. Root
+  cause: running the app from a VS Code terminal inherits `ELECTRON_RUN_AS_NODE=1`,
+  which makes `Code.exe <folder>` run as Node and `require()` the folder
+  instead of opening it — while ShellExecute still reported success.
+- **Polish.** `/project/[id]` Edit overlay got a solid surface + title bar
+  (was see-through); undetected detectors fold into a "Not detected (N)"
+  disclosure; the list no longer flashes "Loading…" on a re-sort; sort
+  `<select>` and direction button matched to one height.
+- Green: `cargo test --lib` 61, `cargo fmt`/`clippy` clean, `cargo build`
+  clean; `npm test` 14, `npm run check` 0 errors, `npm run build` clean.
+  Open verified in the running app.

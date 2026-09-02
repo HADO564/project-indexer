@@ -49,6 +49,17 @@ What's done and what's still open, feature by feature. Check items off as they l
 - [x] `GitInfo.web_url` (SSH→HTTPS) — "open remote" for any project in git
 - [x] Per-tab re-detect, jump-to-Edit, Refresh
 - [x] `vitest` covering the `trackers.ts` inference rules
+- [x] Edit overlay has a solid surface; undetected detectors fold into a disclosure
+
+## GUI v1
+
+- [x] Single dark "terminal" theme — semantic `@theme` tokens, VT323 (OFL) display font, cyan/gold/rust accents; every component off raw Tailwind colours
+- [x] `color-scheme: dark` — retires the light/dark `<select>` bug class (PI-001)
+- [x] `trackerColor(kind)` — per-kind badge/strip/tab hue, contrast-safe by construction
+- [x] Project-card actions in a `···` menu
+- [x] `list_missing_directories` + bin-icon marker for a project whose folder is gone
+- [x] `open_in_app` strips `ELECTRON_RUN_AS_NODE` so Electron `open_with` targets launch (not run as Node)
+- [x] List doesn't flash "Loading…" on refetch; sort control heights matched
 
 ## Open (features)
 
