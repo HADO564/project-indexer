@@ -21,7 +21,7 @@
 - **`rusqlite` uses `features = ["bundled"]`** — no system SQLite, needs a C compiler (present on all CI runners).
 - Every commit message ends with:
   `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`
-- **Do not commit `pnpm-lock.yaml`.** `npm run tauri dev` dirties it via `beforeDevCommand: "pnpm dev"`; run `git checkout -- pnpm-lock.yaml` before each commit.
+- **The JS toolchain is pnpm** (reconciled in Task 1): `beforeDevCommand`/`beforeBuildCommand` are `pnpm dev`/`pnpm build`, `package.json` pins `packageManager: pnpm@11.21.0`, `pnpm-lock.yaml` is the committed lockfile, there is no `package-lock.json`. Use `pnpm` for everything (`pnpm install`, `pnpm run tauri dev`, `pnpm build`, `pnpm test`). Because `node_modules` is now pnpm-managed and the lockfile matches, `pnpm dev` no longer relocates it — commit `pnpm-lock.yaml` changes normally.
 - **Kill the running dev app before any `cargo build`** — the Windows linker cannot overwrite `project-indexer.exe` while it runs.
 - `cargo fmt` clean, `cargo clippy` clean bar the 2 known warnings (`sort_by_key`, module-inception), `npm run check` clean bar the 8 known `EditProjectForm` warnings.
 
