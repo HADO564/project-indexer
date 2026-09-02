@@ -1,8 +1,15 @@
 mod adapters;
 pub mod commands;
-pub mod store;
+
+use std::sync::Arc;
 
 use tauri::Manager;
+
+use indexer_core::application::ProjectService;
+use indexer_core::detectors::DetectorRunner;
+use indexer_core::infra::SqliteRepository;
+
+use crate::adapters::OpenerLauncher;
 
 /// Works around WebKitGTK's DMABUF renderer failing on NVIDIA's proprietary
 /// driver, where it can't allocate GBM buffers. The window then either comes
@@ -38,24 +45,28 @@ pub fn run() {
     disable_dmabuf_renderer_on_nvidia();
 
     tauri::Builder::default()
-        // The detector set is built once and shared: commands pull it back
-        // out with `State<DetectorRunner>` rather than constructing detectors
-        // per call. See `indexer_core::detectors::registry` to register a new
-        // detector.
-        .manage(indexer_core::detectors::DetectorRunner::default())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                if let Err(e) = store::ProjectStore::flush(window.app_handle()) {
-                    eprintln!("Failed to flush project store on close: {}", e);
-                }
-            }
+        // Persistence and orchestration live in `indexer_core`. The whole
+        // service — a SQLite-backed repository, the app launcher adapter and
+        // the shared detector set — is built once here and handed to the
+        // commands as managed `Arc<ProjectService>` state.
+        .setup(|app| {
+            let dir = app.path().app_config_dir()?;
+            std::fs::create_dir_all(&dir)?;
+            let repo = SqliteRepository::open(&dir.join("projects.db"))
+                .map_err(|e| format!("failed to open project database: {e}"))?;
+            let service = ProjectService::new(
+                Arc::new(repo),
+                Arc::new(OpenerLauncher),
+                Arc::new(DetectorRunner::default()),
+            );
+            app.manage(Arc::new(service));
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::projects::create_project,
@@ -74,6 +85,7 @@ pub fn run() {
             commands::projects::open_project_in_explorer,
             commands::projects::refresh_project_trackers,
             commands::projects::detect_project_trackers,
+            commands::projects::suggest_project_name,
             commands::inspect::inspect_project
         ])
         .run(tauri::generate_context!())
