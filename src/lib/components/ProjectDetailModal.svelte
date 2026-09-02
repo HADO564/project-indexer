@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Project } from "$lib/api/types";
-  import { trackerFields, trackerKind } from "$lib/trackers";
+  import { trackerKind } from "$lib/trackers";
   import { cardClass } from "./styles";
+  import TrackerPanel from "./TrackerPanel.svelte";
 
   let {
     project,
@@ -120,33 +121,8 @@
 
       {#each project.trackers as tracker, i}
         {#if activeIndex === i}
-          {@const fields = trackerFields(tracker)}
           <div role="tabpanel" class="p-3">
-            {#if fields.length === 0}
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                No additional details available yet.
-              </p>
-            {:else}
-              <dl class="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-sm">
-                {#each fields as field}
-                  <dt class="text-gray-500 dark:text-gray-400">{field.label}</dt>
-                  <dd class="break-all text-gray-900 dark:text-gray-100">
-                    {#if field.isLink}
-                      <a
-                        href={field.value}
-                        target="_blank"
-                        rel="noreferrer"
-                        class="text-blue-600 hover:underline dark:text-blue-400"
-                      >
-                        {field.value}
-                      </a>
-                    {:else}
-                      {field.value}
-                    {/if}
-                  </dd>
-                {/each}
-              </dl>
-            {/if}
+            <TrackerPanel {tracker} />
           </div>
         {/if}
       {/each}
