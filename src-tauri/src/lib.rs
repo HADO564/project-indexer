@@ -3,7 +3,9 @@ pub mod commands;
 
 use std::sync::Arc;
 
-use tauri::Manager;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Manager, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use indexer_core::application::ProjectService;
@@ -40,6 +42,49 @@ fn disable_dmabuf_renderer_on_nvidia() {
     }
 }
 
+/// Brings the main window back to the foreground — used by the tray icon, the
+/// tray menu, and a second launch of the app (single-instance).
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+/// Builds the system-tray icon: left-click restores the window, right-click
+/// opens a small menu (Show / Quit). Closing the window only hides it (see the
+/// `CloseRequested` handler), so the tray is how you get back — or quit.
+fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, "show", "Show Project Indexer", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
+
+    TrayIconBuilder::with_id("main")
+        .icon(app.default_window_icon().expect("bundled app icon").clone())
+        .tooltip("Project Indexer")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_main_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
 /// Resolve the config dir and open the SQLite-backed project store. Every
 /// failure here is one the user must be told about rather than crash on.
 fn open_repository(app: &tauri::App) -> Result<SqliteRepository, String> {
@@ -60,7 +105,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // A second launch (e.g. from the Start Menu while hidden to tray)
+            // just brings the running window forward.
+            show_main_window(app);
+        }))
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -92,7 +141,20 @@ pub fn run() {
                 Arc::new(DetectorRunner::default()),
             );
             app.manage(Arc::new(service));
+
+            setup_tray(app.handle())?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Closing the main window hides it to the tray instead of quitting,
+            // so the app keeps running in the background. "Quit" on the tray
+            // menu is the real exit.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::projects::create_project,
