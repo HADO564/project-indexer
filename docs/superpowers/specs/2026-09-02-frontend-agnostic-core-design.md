@@ -64,10 +64,12 @@ requirement is the concrete trigger they were waiting for.
 - **devmon itself, or any of its tables.** This spec only ensures `projects.db`
   is *shaped* so devmon can integrate later (see "Cross-app compatibility") —
   it builds none of it.
-- **The auto-updater and release CI.** `tauri-plugin-updater` wiring, the
-  "update available" UI, minisign keys, and the tag→signed-bundle→GitHub-Release
-  pipeline are a fast-follow. This spec only makes the schema-migration path
-  safe for a self-updating app (version-skew guard, tested migrations) — see
+- **The updater, the release notification, and release CI.**
+  `tauri-plugin-updater` wiring, the GUI "update available" chip, `core::updates`,
+  the CLI `self-update` command, minisign keys, and the
+  tag→signed-bundle→GitHub-Release pipeline are all fast-follow. This spec only
+  makes the schema-migration path safe for a self-updating app (version-skew
+  guard, tested migrations) and names the shared release-check seam — see
   "App updates".
 
 ## Decisions locked during brainstorming
@@ -558,12 +560,43 @@ auto-update unsafe, so these consequences land now:
 - **devmon** reads `meta.schema_version` before its read-only `ATTACH`; that's
   how it detects a project-indexer that auto-updated ahead of it and degrades
   gracefully instead of misreading.
-- **`core` is unaffected.** The updater is entirely a `src-tauri` concern
-  (`tauri-plugin-updater` + a small "update available" affordance). A separately
-  distributed CLI later updates by its own channel.
+- **`core` is unaffected** by the *mechanism*. A single shared helper —
+  `core::updates::latest_stable(repo) -> Result<Option<semver::Version>>`
+  (feature-gated, `ureq`, reads the GitHub Releases API, ignores pre-releases)
+  — is the one place that defines "what's the newest stable release." Both the
+  GUI notification and the CLI self-update call it, so they never disagree.
+
+### GUI — release notification (fast-follow)
+
+Small and non-blocking, matching the terminal aesthetic:
+
+- On launch (then at most once per 24h while open), `tauri-plugin-updater`'s
+  `check()` hits the GitHub Releases manifest. Stable channel only.
+- If a newer stable version exists: a thin dismissible chip in the header —
+  `▲ v1.3.0` — opening a small popover with the release notes (the GitHub
+  release body) and a **Download / Install** action (`tauri-plugin-updater`
+  `downloadAndInstall`, or just open the release page).
+- **Never a modal, never a nag.** Dismissing it for version *X* suppresses it
+  until *X+1*. Dismissed-version state: a `localStorage` key (a per-viewer UI
+  preference; losing it just re-shows one chip). Degrades silently with no
+  network.
+
+### CLI — updates (fast-follow, lands with the CLI itself)
+
+- **`indexer self-update`** — the `self_update` crate: checks GitHub Releases,
+  downloads the asset for the current target, replaces the running binary.
+- **Passive hint** — on any other command, if `core::updates::latest_stable`
+  (throttled to once/day via a timestamp file in the config dir) reports a
+  newer version, print one line to **stderr**: `note: indexer v1.3.0 is
+  available — run 'indexer self-update'`. Suppressed by `--quiet` and when
+  stderr isn't a TTY.
+- **Package managers still work** — if installed via `cargo install` / brew /
+  scoop, that channel updates it too; `self-update` is for the standalone
+  download.
 
 CI implication (fast-follow): tag → build signed bundles per platform → publish
-to GitHub Releases with the updater manifest.
+to GitHub Releases with the updater manifest **and** the raw CLI binaries as
+release assets (named by target triple, for `self_update` to find).
 
 ## Invariants
 
@@ -699,8 +732,9 @@ rejecting its neighbour.
    cross-version schema migration a live concern). Update `knowledgebase.md`
    (module inventory, persistence section), `checklist.md` (new section),
    `KNOWN-ISSUES.md` if PI-003's line refs move. Add `accomplishments.md`
-   entry. Register the fast-follows (auto-updater wiring + CI signing/release)
-   and Spec 2 (observer CLI) as the next initiatives.
+   entry. Register the fast-follows (updater + `core::updates` + GUI
+   release-notification chip + CLI `self-update` + signing/release CI) and
+   Spec 2 (observer CLI) as the next initiatives.
 
 Task 6 may fold into 7 during planning.
 
