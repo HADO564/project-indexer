@@ -1,9 +1,11 @@
-// Generic helpers over `Tracker` that work for any variant — including ones
-// added after this file was written. `Tracker`'s serde shape (see
-// api/types.ts) makes the variant name the tracker's single object key when
-// it carries data (`{ Git: {...} }`), or the bare string itself when it
-// doesn't (`"Unity"`), so both the label and the field list can be read off
-// that shape directly instead of switching on known variant names.
+// Generic helpers over `Tracker` that work for any variant, including ones
+// added after this file was written. Field *semantics* (is this a link? a
+// path? a copyable id?) are inferred from the key name and value shape — see
+// `inferType` — so no per-tracker-kind code lives here or in the UI. Naming a
+// detector's `*Info` fields per the convention below is how a field gets an
+// affordance:
+//   *_url / *_root / *_path / *_dir  → link|path      *hash* / *commit* → code
+//   arrays → chips                    booleans → flag (shown only when true)
 import type { Tracker } from "./api/types";
 
 export function trackerKind(tracker: Tracker): string {
@@ -16,10 +18,15 @@ function trackerPayload(tracker: Tracker): Record<string, unknown> | null {
   return (tracker as Record<string, unknown>)[kind] as Record<string, unknown>;
 }
 
+export type FieldType = "text" | "code" | "link" | "path" | "chips" | "flag";
+
 export interface TrackerField {
   label: string;
-  value: string;
-  isLink: boolean;
+  type: FieldType;
+  /** Display/copy text for text|code|link|path. Empty for chips|flag. */
+  text: string;
+  /** Chip values; empty otherwise. */
+  items: string[];
 }
 
 function humanizeKey(key: string): string {
@@ -27,31 +34,41 @@ function humanizeKey(key: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-function formatValue(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : null;
-  const str = String(value);
-  return str.length > 0 ? str : null;
+function inferType(key: string, value: unknown): FieldType | null {
+  if (typeof value === "boolean") return "flag";
+  if (Array.isArray(value)) return value.length > 0 ? "chips" : null;
+  if (value === null || value === undefined || value === "") return null;
+  const s = String(value);
+  if (/^https?:\/\//i.test(s)) return "link";
+  if (/^(git@|ssh:\/\/)/i.test(s)) return "code";
+  if (/(^|_)(path|root|dir)$|directory/i.test(key)) return "path";
+  if (/hash|commit/i.test(key)) return "code";
+  return "text";
 }
 
-// Field list for a tracker's detail view: every non-empty key in its
-// payload, humanized into a label/value pair. A bare unit-variant tracker
-// (no payload yet) yields an empty list rather than an error.
 export function trackerFields(tracker: Tracker): TrackerField[] {
   const payload = trackerPayload(tracker);
   if (!payload) return [];
 
   const fields: TrackerField[] = [];
   for (const [key, value] of Object.entries(payload)) {
-    const formatted = formatValue(value);
-    if (formatted === null) continue;
+    const type = inferType(key, value);
+    if (type === null) continue;
 
-    fields.push({
-      label: humanizeKey(key),
-      value: formatted,
-      isLink: /url$/i.test(key) && /^https?:\/\//i.test(formatted),
-    });
+    if (type === "flag") {
+      if (value === true) fields.push({ label: humanizeKey(key), type, text: "", items: [] });
+      continue;
+    }
+    if (type === "chips") {
+      fields.push({
+        label: humanizeKey(key),
+        type,
+        text: "",
+        items: (value as unknown[]).map(String),
+      });
+      continue;
+    }
+    fields.push({ label: humanizeKey(key), type, text: String(value), items: [] });
   }
   return fields;
 }
