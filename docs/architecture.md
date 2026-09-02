@@ -102,6 +102,34 @@ Gap: the frontend consumes `trackers` and drops `errors`. A user whose Unreal
 detection fails silently sees "no Unreal tracker", indistinguishable from a
 non-Unreal project. Per-detector status needs to reach the UI — see backlog.
 
+## Recorded decisions
+
+Choices that could plausibly have gone the other way, settled on purpose so
+they don't drift into "that's just how it ended up". Each is guarded by a
+test whose name is the sign that changing it is a real decision.
+
+### Refresh is all-or-nothing
+
+`refresh_project_trackers` — the explicit, user-triggered "re-scan this
+project" — persists the detection result verbatim or not at all. If any
+registered detector errors, the command fails and the stored trackers are
+left untouched; it does **not** save the detectors that happened to succeed.
+
+*Why:* detection results are stored as-is and drive the detail view. A
+persisted tracker set silently missing whatever a failing detector would have
+produced is a worse outcome than a visible "refresh failed" the user can
+retry. `create_project` and the browse preview stay best-effort — there's no
+prior good state to protect there.
+
+*Revisit when:* there are enough independent detectors that losing an
+unrelated tracker to one detector's transient failure is the common case. The
+alternative is to persist `trackers` and keep `errors` as per-detector status
+(needs UI — "Git: ok · Unity: failed"). That's a deliberate change, not a
+detector quietly learning to tolerate partial state.
+
+*Guarded by:* `into_result_discards_partial_trackers_on_any_error` (and the
+`Detection::into_result` doc comment).
+
 ## Quality backlog
 
 Curated and reordered from a broader architectural review. Prioritized by
@@ -121,9 +149,6 @@ Curated and reordered from a broader architectural review. Prioritized by
       (clean, dirty, unborn, detached; minimal, plugins, source-control)
       instead of building every scenario by hand in each test. Pays for itself
       at Unity/Blender.
-- [ ] **Lock the refresh decision with a test.** `refresh_project_trackers` is
-      deliberately all-or-nothing (`Detection::into_result`). Add a test so a
-      future "just persist what succeeded" change is a conscious one.
 - [ ] **Reconcile lockfiles.** Both `package-lock.json` and `pnpm-lock.yaml`
       are committed; there's no `packageManager` field. Pick one, delete the
       other, add `packageManager` to `package.json`. (Recent work used `npm`;

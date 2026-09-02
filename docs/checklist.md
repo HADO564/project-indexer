@@ -32,6 +32,7 @@ What's done and what's still open, feature by feature. Check items off as they l
 - [x] `DetectorError::Other` catch-all so a new detector needn't touch the shared enum
 - [x] Resilient detection — `Detection { trackers, errors }`; one detector failing doesn't discard the others
 - [x] `refresh_project_trackers` checks directory health before detecting
+- [x] Refresh all-or-nothing is a recorded decision (`architecture.md`) with a guard test, not incidental
 
 ## Detection UX
 

@@ -42,10 +42,13 @@ pub fn create_project(
 /// against an existing project's directory and persists the result.
 ///
 /// Unlike the best-effort detection in [`create_project`], this is
-/// all-or-nothing: any detector failure is returned to the caller and the
-/// stored trackers are left untouched. It's an explicit, user-triggered
-/// retry, so a half-applied refresh would be more confusing than a clear
-/// failure.
+/// all-or-nothing ([`crate::detectors::Detection::into_result`]): any detector failure is
+/// returned to the caller and the stored trackers are left untouched. It's an
+/// explicit, user-triggered retry, so a half-applied refresh — a persisted
+/// tracker set silently missing whatever the failing detector produces — is
+/// worse than a visible failure. This is a recorded decision, not incidental;
+/// the alternative (persist successes, surface per-detector errors) is
+/// documented in `docs/architecture.md` and guarded by a runner test.
 #[tauri::command]
 pub fn refresh_project_trackers(
     app: AppHandle,
