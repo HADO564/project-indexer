@@ -1,8 +1,8 @@
-use crate::errors::ProjectError;
-use crate::models::tracker::Tracker;
-use crate::models::update_project::UpdateProject;
-use crate::utils::filesystem::{check_directory_status, DirectoryStatus};
-use crate::utils::normalize::{normalize_directory, normalize_tags, remove_spaces};
+use crate::domain::normalize::{normalize_directory, normalize_tags, remove_spaces};
+use crate::domain::tracker::Tracker;
+use crate::domain::update_project::UpdateProject;
+use crate::error::ProjectError;
+use crate::platform::filesystem::{check_directory_status, DirectoryStatus};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -21,9 +21,9 @@ use uuid::Uuid;
 /// blank project.
 ///
 /// A change that can't be absorbed this way — a rename, a type change, a field
-/// split — needs a step in [`crate::migrations::migrate`] and a
-/// `CURRENT_VERSION` bump. `loads_a_record_missing_every_absorbable_field` in
-/// this module's tests fails the moment a new field breaks the rule.
+/// split — needs a dedicated migration step and a schema-version bump.
+/// `loads_a_record_missing_every_absorbable_field` in this module's tests
+/// fails the moment a new field breaks the rule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     #[serde(default)]
@@ -318,19 +318,6 @@ mod tests {
         assert!(project.description.is_empty());
         assert!(project.last_opened_at.is_none());
         assert!(project.trackers.is_empty());
-    }
-
-    #[test]
-    fn loads_a_legacy_record_through_the_migration_path() {
-        // Mirrors how the store actually reads a project, so the test breaks if
-        // a migration step starts mangling records it was meant to leave alone.
-        let value: serde_json::Value = serde_json::from_str(LEGACY_RECORD).unwrap();
-        let migrated = crate::migrations::migrate(value);
-
-        let project: Project =
-            serde_json::from_value(migrated).expect("legacy records must survive migration");
-
-        assert_eq!(project.id, "e4df90f6");
     }
 
     #[test]

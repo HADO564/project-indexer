@@ -4,9 +4,9 @@ use serde::Serialize;
 use tauri::{AppHandle, State};
 
 use crate::detectors::{Detection, DetectorOutcome, DetectorRunner};
-use crate::errors::ProjectError;
-use crate::models::{Project, Tracker};
 use crate::store::ProjectStore;
+use indexer_core::domain::{Project, Tracker};
+use indexer_core::error::ProjectError;
 
 /// Read-only snapshot of a project plus a live detection pass. Nothing is
 /// persisted — `refresh_project_trackers` is the write path.
@@ -120,9 +120,9 @@ pub fn inspect_project(
 mod tests {
     use super::*;
     use crate::detectors::{Detection, DetectorOutcome};
-    use crate::errors::DetectorError;
-    use crate::models::git::GitInfo;
-    use crate::models::tracker::Tracker;
+    use indexer_core::domain::git::GitInfo;
+    use indexer_core::domain::tracker::Tracker;
+    use indexer_core::error::DetectorError;
 
     fn sample_git_tracker() -> Tracker {
         Tracker::Git(GitInfo {

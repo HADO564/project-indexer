@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use crate::errors::DetectorError;
-use crate::models::tracker::Tracker;
+use indexer_core::domain::tracker::Tracker;
+use indexer_core::error::DetectorError;
 
 /// A pluggable project-type detector (git, Unity, Godot, Unreal, MATLAB, ...).
 ///

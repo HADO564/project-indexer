@@ -1,10 +1,9 @@
 use thiserror::Error;
 
-use crate::errors::GitError;
-use crate::errors::UnrealError;
+use crate::error::GitError;
+use crate::error::UnrealError;
 
-/// Errors a [`Detector`](crate::detectors::Detector) can raise while
-/// inspecting a path.
+/// Errors a detector can raise while inspecting a path.
 ///
 /// Most detectors only touch the filesystem and can lean on the `Io` variant.
 /// The first-party git and Unreal detectors carry richer, structured error
@@ -31,7 +30,7 @@ pub enum DetectorError {
 
 /// Tauri serializes command errors over IPC as JSON, so `DetectorError` needs
 /// `Serialize` to be usable as a command's `Err` type directly — same
-/// approach as [`crate::errors::ProjectError`].
+/// approach as [`crate::error::ProjectError`].
 impl serde::Serialize for DetectorError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
