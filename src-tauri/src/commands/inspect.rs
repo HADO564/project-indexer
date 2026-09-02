@@ -3,8 +3,8 @@ use std::path::Path;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
-use crate::detectors::{Detection, DetectorOutcome, DetectorRunner};
 use crate::store::ProjectStore;
+use indexer_core::detectors::{Detection, DetectorOutcome, DetectorRunner};
 use indexer_core::domain::{Project, Tracker};
 use indexer_core::error::ProjectError;
 
@@ -119,7 +119,7 @@ pub fn inspect_project(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::detectors::{Detection, DetectorOutcome};
+    use indexer_core::detectors::{Detection, DetectorOutcome};
     use indexer_core::domain::git::GitInfo;
     use indexer_core::domain::tracker::Tracker;
     use indexer_core::error::DetectorError;

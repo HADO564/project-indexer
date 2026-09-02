@@ -2,8 +2,8 @@ use std::path::Path;
 
 use crate::detectors::detector::Detector;
 use crate::detectors::registry::default_detectors;
-use indexer_core::domain::tracker::Tracker;
-use indexer_core::error::DetectorError;
+use crate::domain::tracker::Tracker;
+use crate::error::DetectorError;
 
 /// The outcome of running the registered detectors against a path: one
 /// [`DetectorOutcome`] per detector consulted, in registration order.
@@ -142,7 +142,7 @@ impl Default for DetectorRunner {
 mod tests {
     use super::*;
     use crate::detectors::git::Gitector;
-    use indexer_core::domain::git::GitInfo;
+    use crate::domain::git::GitInfo;
     use std::path::PathBuf;
 
     fn sample_git_tracker() -> Tracker {

@@ -2,9 +2,9 @@ use crate::detectors::detector::Detector;
 use git2::{BranchType, ErrorCode, Repository, StatusOptions};
 use std::path::Path;
 
-use indexer_core::domain::git::GitInfo;
-use indexer_core::domain::tracker::Tracker;
-use indexer_core::error::{DetectorError, GitError};
+use crate::domain::git::GitInfo;
+use crate::domain::tracker::Tracker;
+use crate::error::{DetectorError, GitError};
 
 pub struct Gitector;
 
