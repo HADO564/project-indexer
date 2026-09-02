@@ -11,3 +11,6 @@ vite.config.ts.timestamp-*
 
 # brainstorming visual-companion scratch
 .superpowers/
+
+# Cargo workspace
+/target/
