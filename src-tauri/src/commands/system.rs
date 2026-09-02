@@ -1,4 +1,4 @@
-use crate::models::InstalledApp;
+use indexer_core::domain::InstalledApp;
 
 /// Recursively deletes a directory from disk, treating an already-missing
 /// directory as success (deleting is idempotent: the goal state — the
@@ -156,7 +156,7 @@ fn windows_path_extensions() -> Vec<String> {
 
 #[cfg(windows)]
 mod windows_impl {
-    use crate::models::InstalledApp;
+    use indexer_core::domain::InstalledApp;
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
     use winreg::{HKCU, HKLM};
@@ -268,7 +268,7 @@ mod windows_impl {
 
 #[cfg(target_os = "linux")]
 mod linux_impl {
-    use crate::models::InstalledApp;
+    use indexer_core::domain::InstalledApp;
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
 

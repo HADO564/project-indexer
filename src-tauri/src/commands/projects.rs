@@ -1,10 +1,10 @@
 use crate::commands::system::{open_with_app_available, remove_directory};
 use crate::detectors::DetectorRunner;
-use crate::errors::ProjectError;
-use crate::models::{Project, Tracker, UpdateProject};
 use crate::store::ProjectStore;
 use crate::utils::filesystem::{check_directory_status, DirectoryStatus};
-use crate::utils::{filter_deleted, filter_favorites, sort_projects, SortOptions};
+use indexer_core::domain::sorting::{filter_deleted, filter_favorites, sort_projects, SortOptions};
+use indexer_core::domain::{Project, Tracker, UpdateProject};
+use indexer_core::error::ProjectError;
 use std::path::Path;
 use tauri::{AppHandle, Runtime, State};
 

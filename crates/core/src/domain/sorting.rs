@@ -1,4 +1,4 @@
-use crate::models::Project;
+use crate::domain::Project;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
