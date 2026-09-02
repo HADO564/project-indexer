@@ -6,8 +6,7 @@ pub fn repo_name_from_url(url: &str) -> Option<String> {
     let without_git = trimmed.strip_suffix(".git").unwrap_or(trimmed);
     without_git
         .split(['/', ':'])
-        .filter(|s| !s.is_empty())
-        .next_back()
+        .rfind(|s| !s.is_empty())
         .map(str::to_string)
 }
 
@@ -17,8 +16,7 @@ pub fn folder_name_from_directory(directory: &str) -> Option<String> {
         .trim()
         .trim_end_matches(['\\', '/'])
         .split(['\\', '/'])
-        .filter(|s| !s.is_empty())
-        .next_back()
+        .rfind(|s| !s.is_empty())
         .map(str::to_string)
 }
 

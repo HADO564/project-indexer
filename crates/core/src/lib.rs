@@ -1,3 +1,4 @@
+pub mod application;
 pub mod detectors;
 pub mod domain;
 pub mod error;
@@ -5,6 +6,7 @@ pub mod infra;
 pub mod platform;
 pub mod ports;
 
+pub use application::{ProjectInspection, ProjectService};
 pub use detectors::{Detection, DetectorOutcome, DetectorRunner};
 pub use domain::{GitInfo, InstalledApp, Project, Tracker, UnrealInfo, UpdateProject};
 pub use error::{

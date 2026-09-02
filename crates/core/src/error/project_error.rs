@@ -39,6 +39,18 @@ pub enum ProjectError {
     Detection(String),
 }
 
+impl From<crate::error::RepositoryError> for ProjectError {
+    fn from(e: crate::error::RepositoryError) -> Self {
+        ProjectError::Store(e.to_string())
+    }
+}
+
+impl From<crate::error::LauncherError> for ProjectError {
+    fn from(e: crate::error::LauncherError) -> Self {
+        ProjectError::OpenFailed(e.0)
+    }
+}
+
 /// Tauri serializes command errors as their `Display` string, so the JS
 /// side keeps seeing the same plain-string error it always has.
 impl serde::Serialize for ProjectError {
