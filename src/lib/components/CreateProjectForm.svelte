@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { createProject, detectProjectTrackers } from "$lib/api/projects";
-  import type { CreateProjectInput, GitInfo, Tracker } from "$lib/api/types";
+  import { createProject, suggestProjectName } from "$lib/api/projects";
+  import type { CreateProjectInput } from "$lib/api/types";
   import DirectoryField from "./DirectoryField.svelte";
   import { cardClass, inputClass, labelClass, primaryButtonClass } from "./styles";
 
@@ -25,45 +25,14 @@
       .filter((t) => t.length > 0);
   }
 
-  function isGitTracker(tracker: Tracker): tracker is { Git: GitInfo } {
-    return typeof tracker !== "string" && "Git" in tracker;
-  }
 
-  // "https://github.com/user/my-repo.git" / "git@github.com:user/my-repo.git" -> "my-repo"
-  function repoNameFromUrl(url: string): string | null {
-    const withoutTrailingSlash = url.trim().replace(/\/+$/, "");
-    const withoutGitSuffix = withoutTrailingSlash.endsWith(".git")
-      ? withoutTrailingSlash.slice(0, -4)
-      : withoutTrailingSlash;
-    return withoutGitSuffix.split(/[/:]/).filter(Boolean).pop() ?? null;
-  }
-
-  // "D:\Projects\Friction\" / "/home/user/friction/" -> "friction"
-  function folderNameFromDirectory(directory: string): string | null {
-    const withoutTrailingSlash = directory.trim().replace(/[\\/]+$/, "");
-    return withoutTrailingSlash.split(/[\\/]/).filter(Boolean).pop() ?? null;
-  }
-
-  // Prefers the git remote's repo name (what "using the gitector feature"
-  // means here) and falls back to the folder's own name for anything else
-  // (not a repo, or a repo with no remote configured).
-  function suggestProjectName(trackers: Tracker[], directory: string): string | null {
-    const repoUrl = trackers.find(isGitTracker)?.Git.repo_url;
-    return (repoUrl && repoNameFromUrl(repoUrl)) || folderNameFromDirectory(directory);
-  }
-
-  // Best-effort: runs detection against the picked directory to suggest a
-  // name. Never overwrites a name the user already typed, and a detection
-  // failure just means no suggestion — not worth surfacing as an error.
   async function handleDirectoryPicked(dir: string) {
     if (name.trim().length > 0) return;
     try {
-      const trackers = await detectProjectTrackers(dir);
-      if (name.trim().length > 0) return;
-      const suggested = suggestProjectName(trackers, dir);
+      const suggested = await suggestProjectName(dir);
       if (suggested) name = suggested;
     } catch {
-      // No suggestion — the user can still type a name manually.
+      // No suggestion — the user types a name manually.
     }
   }
 

@@ -149,3 +149,14 @@ export async function inspectProject(
     throw toError(err);
   }
 }
+
+// Backend-computed project-name suggestion for a picked directory: the git
+// remote's repo name if the dir is a repo with a remote, else the folder
+// name; null when neither. Best-effort — only throws on IPC failure.
+export async function suggestProjectName(directory: string): Promise<string | null> {
+  try {
+    return await invoke<string | null>("suggest_project_name", { directory });
+  } catch (err) {
+    throw toError(err);
+  }
+}
