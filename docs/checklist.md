@@ -8,7 +8,7 @@ What's done and what's still open, feature by feature. Check items off as they l
 - [x] `Gitector` connected to project detection (`detectors/registry.rs`)
 - [x] `Tracker::Git` populated end to end (`create_project` / `refresh_project_trackers`)
 - [x] Git info exposed to the frontend (`TrackerBadges` on the list, full field list in `TrackerPanel` on `/project/[id]`)
-- [x] `Gitector` unit tests (8 — recognizes-repo/plain-dir, unborn HEAD, committed HEAD, dirty, remote URL, branches, detached HEAD)
+- [x] `Gitector` unit tests (11 — recognizes-repo/plain-dir, unborn HEAD, committed HEAD, dirty, remote URL, branches, detached HEAD, `web_url` normalization, `kind`)
 - [ ] `GitInfo.contributors` — deliberately deferred, still `Vec::new()`. Planned: `git2::Repository::revwalk()`, field becomes `Vec<Contributor { name, email }>` rather than plain strings. Deferred over the cost of walking full history on every detection run.
 
 ## Unreal tracker
@@ -21,7 +21,7 @@ What's done and what's still open, feature by feature. Check items off as they l
 - [x] Source-control provider detection (`SourceControlSettings.ini`)
 - [x] `Detector::detect()` returning `Option<Tracker>`
 - [x] Returns `Tracker::Unreal(UnrealInfo)`
-- [x] `UnrealDetector` unit tests (9)
+- [x] `UnrealDetector` unit tests (10 — incl. `kind`)
 
 ## Detection plumbing
 
