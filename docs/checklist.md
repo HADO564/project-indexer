@@ -7,7 +7,7 @@ What's done and what's still open, feature by feature. Check items off as they l
 - [x] `GitInfo` model
 - [x] `Gitector` connected to project detection (`detectors/registry.rs`)
 - [x] `Tracker::Git` populated end to end (`create_project` / `refresh_project_trackers`)
-- [x] Git info exposed to the frontend (`TrackerBadges` + full field list in `ProjectDetailModal`)
+- [x] Git info exposed to the frontend (`TrackerBadges` on the list, full field list in `TrackerPanel` on `/project/[id]`)
 - [x] `Gitector` unit tests (8 — recognizes-repo/plain-dir, unborn HEAD, committed HEAD, dirty, remote URL, branches, detached HEAD)
 - [ ] `GitInfo.contributors` — deliberately deferred, still `Vec::new()`. Planned: `git2::Repository::revwalk()`, field becomes `Vec<Contributor { name, email }>` rather than plain strings. Deferred over the cost of walking full history on every detection run.
 
@@ -25,20 +25,30 @@ What's done and what's still open, feature by feature. Check items off as they l
 
 ## Detection plumbing
 
-- [x] `DetectorRunner::detect_project` is the single canonical detection operation
-- [x] `Detector` trait is one method (`detect(&Path) -> Result<Option<Tracker>, DetectorError>`)
+- [x] `DetectorRunner::detect_project` is the single canonical detection operation (`inspect(path, only)` is the same pass scoped to one detector `kind`)
+- [x] `Detector` trait is two methods — `kind() -> &'static str` (stable identity) + `detect(&Path) -> Result<Option<Tracker>, DetectorError>`
 - [x] `detectors/registry.rs` — one place to register a detector
 - [x] `DetectorRunner` in Tauri managed state; commands take `State<'_, DetectorRunner>`
 - [x] `DetectorError::Other` catch-all so a new detector needn't touch the shared enum
-- [x] Resilient detection — `Detection { trackers, errors }`; one detector failing doesn't discard the others
+- [x] Resilient detection — `Detection { outcomes }`, one `DetectorOutcome::{Detected,NotDetected,Failed}` per detector; one detector failing doesn't discard the others (`.trackers()` / `.errors()` project them out)
+- [x] Explicit detector identity — `Detector::kind()` tags every outcome; the frontend no longer infers detection identity from JSON shape (`architecture.md` backlog)
 - [x] `refresh_project_trackers` checks directory health before detecting
-- [x] Refresh all-or-nothing is a recorded decision (`architecture.md`) with a guard test, not incidental
+- [x] Refresh all-or-nothing is a recorded decision (`architecture.md`) with a guard test (`into_result_discards_partial_trackers_on_any_error`), not incidental
 
 ## Detection UX
 
 - [x] Browse-to-prefill: suggest a project name from the picked directory (git remote repo name, else folder name)
 - [x] `detect_project_trackers` command (preview detection before a project exists)
-- [x] `ProjectDetailModal` — project identity + one tab per detected tracker, generically rendered (`lib/trackers.ts`) so a future detector needs no new frontend code
+- [x] Per-project detail view — project identity + one tab per detected tracker, generically rendered (`lib/trackers.ts`) so a future detector needs no new frontend code (see "Project view" below; started as `ProjectDetailModal`, now the `/project/[id]` route)
+
+## Project view
+
+- [x] `/project/[id]` route replaces `ProjectDetailModal`
+- [x] Live read-only detection on open (`inspect_project`) + per-detector status strip
+- [x] Generic `TrackerPanel` — typed fields, open/reveal/copy affordances, no per-kind UI code
+- [x] `GitInfo.web_url` (SSH→HTTPS) — "open remote" for any project in git
+- [x] Per-tab re-detect, jump-to-Edit, Refresh
+- [x] `vitest` covering the `trackers.ts` inference rules
 
 ## Open (features)
 
