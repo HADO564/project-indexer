@@ -25,6 +25,12 @@ that `core` is shaped correctly now; it is not built here.
 - The detector subsystem already proves the pattern works (trait + registry +
   runner, held in managed state). This spec applies the same shape to
   persistence and orchestration.
+- **There is no production data.** The app has no real users; every current
+  `projects.json` is throwaway test data. So there is no migration-from-JSON
+  step, no import task, and no need to carry the existing
+  `serde_json::Value`-level migration layer (which existed only to upgrade
+  pre-existing stored records). A fresh SQLite database on first run is the
+  whole story.
 
 `docs/architecture.md` currently argues *against* a full service layer ("the
 file is 300 lines, that's premature") and for deferring platform traits until
@@ -36,6 +42,13 @@ requirement is the concrete trigger they were waiting for.
 - **The observer CLI itself.** `crates/cli/` is created as a stub only.
 - **A separate slim CLI-only binary.** Deferred; the workspace is laid out to
   accept it.
+- **Any data migration / JSON import.** No production data exists. First run
+  creates an empty `projects.db`; a stray `projects.json` is ignored.
+- **The `serde_json::Value` migration layer** (`migrations::migrate`,
+  `CURRENT_VERSION`, the `schema_version` stamp). Deleted, not moved. Its only
+  purpose was upgrading legacy stored JSON. Structural schema evolution now
+  lives in the SQLite `user_version` runner; field additions rely on serde
+  `#[serde(default)]` / `Option<T>` as before.
 - **Any CLI dispatch inside the GUI binary.** `src-tauri` stays GUI-only — no
   argv sniffing, no `core::cli`, no `clap`.
 - **A fully relational SQLite schema.** `Project` is stored as a JSON blob with
@@ -57,7 +70,7 @@ requirement is the concrete trigger they were waiting for.
 | Frontends | GUI and (future) CLI are separate binaries/packages, each a thin adapter over `core`. Neither contains the other. `project-indexer` is the command name both install. |
 | Ports | Two: `ProjectRepository`, `AppLauncher`. `Detector` already exists. Filtering/sorting are service logic, not ports. |
 | Persistence | Drop `tauri-plugin-store`. One `SqliteRepository` in `core` (rusqlite, bundled, WAL), used by every frontend. `Project` stored as a JSON blob + promoted columns. |
-| Legacy data | One-time import from `projects.json` on first run; source renamed `.imported`. Existing installs lose nothing. |
+| Existing data | None (no real users). Fresh `projects.db` on first run; no importer. The `serde_json::Value` migration layer is deleted — schema evolution moves to SQLite `user_version`. |
 | Orchestration | One `ProjectService` in `core`, one method per current command, logic lifted verbatim. |
 | Errors | `ProjectError` stays the single public app error with its `Display`→string `Serialize`. Ports get small errors (`RepositoryError`, `LauncherError`) mapped in the service. |
 | Name inference | `repo_name_from_url` / folder-name fallback move from `CreateProjectForm.svelte` into `core::domain::naming`, exposed as a `suggest_project_name` command. |
@@ -80,8 +93,7 @@ project-indexer/
 │   │       ├── application/        service (ProjectService), inspection (DTOs)
 │   │       ├── detectors/          detector, runner, registry, git/, unreal/
 │   │       ├── platform/           filesystem, installed_apps/{windows,linux}
-│   │       ├── infra/              sqlite_repository, legacy_import
-│   │       ├── migrations/         migrate(Value) — blob-level schema stamp
+│   │       ├── infra/              sqlite_repository
 │   │       └── error/              project_error, repository, launcher,
 │   │                               detector_error, git, unreal
 │   └── cli/                        stub bin — prints "not implemented", placeholder Cargo.toml
@@ -110,8 +122,8 @@ indexer-core ──X──►  tauri, tauri-plugin-*, clap
 ```
 
 Inside `core`: `application` → `ports` + `domain` + `detectors` + `infra`;
-`domain` depends on nothing but std/serde/chrono/uuid; `platform`, `infra`,
-`migrations` are leaf modules.
+`domain` depends on nothing but std/serde/chrono/uuid; `platform` and `infra`
+are leaf modules.
 
 ### `core` Cargo.toml (dependencies)
 
@@ -280,7 +292,7 @@ impl ProjectRepository for SqliteRepository { /* ... */ }
 ```sql
 CREATE TABLE projects (
     id                   TEXT PRIMARY KEY,
-    data                 TEXT    NOT NULL,   -- full Project as serde JSON, run through migrate()
+    data                 TEXT    NOT NULL,   -- full Project as serde JSON
     is_deleted           INTEGER NOT NULL,   -- promoted: list filtering
     directory_normalized TEXT    NOT NULL,   -- promoted: find_by_directory / dup check
     updated_at           TEXT    NOT NULL    -- promoted: sorting
@@ -289,37 +301,18 @@ CREATE INDEX idx_projects_is_deleted           ON projects(is_deleted);
 CREATE INDEX idx_projects_directory_normalized ON projects(directory_normalized);
 ```
 
-- `save`: `INSERT ... ON CONFLICT(id) DO UPDATE` with `data = migrate(to_value(project))`
+- `save`: `INSERT ... ON CONFLICT(id) DO UPDATE` with `data = to_string(project)`
   and the three promoted columns recomputed.
-- `get` / `find_by_directory`: one `SELECT`, `migrate(from_str(data))` →
-  `from_value::<Project>`.
+- `get` / `find_by_directory`: one `SELECT`, `from_str::<Project>(data)`.
 - `list`: `SELECT data` over all rows, deserialize each.
 - `delete`: `DELETE WHERE id = ?1`, missing row is `Ok`.
 - A row whose `data` fails to deserialize → `RepositoryError::Corrupt`
   (fail loud — matches today's `rejects_a_record_missing_its_identity`).
-- **Schema migrations:** a numbered runner keyed on `PRAGMA user_version`.
-  `v0→v1` creates the table. Future structural changes are added steps. This
-  replaces the JSON `schema_version` stamp as the *structural* mechanism; the
-  serde `#[serde(default)]` / `Option<T>` backward-compat rule for `Project`
-  stays, and `migrations::migrate` still runs on the blob (cheap, already
-  tested).
-
-```rust
-// infra/legacy_import.rs
-/// If `json_path` exists, import every record (through migrate()) into `repo`,
-/// then rename `json_path` -> `<json_path>.imported`. No-op if the file is gone.
-/// Returns the number of records imported.
-pub fn import_legacy_json(json_path: &Path, repo: &SqliteRepository) -> Result<usize, RepositoryError>;
-```
-
-Called once from `src-tauri`'s `setup` before the service is assembled.
-Idempotent by construction: after the first run the file is `.imported` and
-the import is skipped.
-
-### `migrations/`
-
-Moved unchanged. `migrate(Value) -> Value` still stamps `schema_version` and is
-still the hook for blob-shape changes serde defaults can't absorb.
+- **Schema evolution:** a numbered runner keyed on `PRAGMA user_version`.
+  `v0→v1` creates the table. A future field change that serde
+  `#[serde(default)]` / `Option<T>` can't absorb becomes a numbered step that
+  rewrites the `data` blobs in a transaction. This is the *only* migration
+  mechanism — there is no separate `serde_json::Value` layer.
 
 ### `error/`
 
@@ -412,9 +405,7 @@ tauri::Builder::default()
     .setup(|app| {
         let dir = app.path().app_config_dir()?;
         std::fs::create_dir_all(&dir)?;
-        let db_path = dir.join("projects.db");
-        let repo = SqliteRepository::open(&db_path)?;
-        import_legacy_json(&dir.join("projects.json"), &repo)?;
+        let repo = SqliteRepository::open(&dir.join("projects.db"))?;
         let service = ProjectService::new(
             Arc::new(repo),
             Arc::new(OpenerLauncher),
@@ -431,21 +422,16 @@ tauri::Builder::default()
 Removed: `tauri-plugin-store` (dep + plugin line), the
 `.manage(DetectorRunner::default())` line (folded into the service), the
 `on_window_event(CloseRequested)` flush hook (writes are synchronous now), the
-whole `src-tauri/src/store/` module.
+whole `src-tauri/src/store/` module, and `src-tauri/src/migrations/` (deleted,
+not moved).
 
-### Path compatibility — RISK, must be verified in Task 5/6
+### Database location
 
-`tauri-plugin-store` writes `projects.json` to
-`app.path().app_config_dir()`. The new code reads/writes `projects.db` in the
-**same directory**, and the importer reads `projects.json` from there. If that
-directory resolves identically to where the plugin actually wrote (it should —
-same API), existing data imports cleanly. The import task MUST:
-1. confirm the plugin's real on-disk path on each platform (Windows
-   `%APPDATA%\<identifier>`, Linux `~/.config/<identifier>`, macOS
-   `~/Library/Application Support/<identifier>`),
-2. include a test that drives `import_legacy_json` against a fixture file
-   with the plugin's exact `{ "<id>": {<project>} }` shape,
-3. leave the `.imported` backup in place (never delete the source).
+`app.path().app_config_dir().join("projects.db")` — the same directory
+`tauri-plugin-store` used for `projects.json`. No compatibility constraint:
+there is no data to carry over, so the DB is simply created empty on first
+run. A leftover `projects.json` from testing is ignored (a future cleanup
+could delete it, but it's not worth a task).
 
 ## Data flow
 
@@ -477,10 +463,13 @@ reason SQLite beats a shared JSON file here.
 6. "What a project is" vs "what opens it" stay decoupled — **unchanged**
    (`Tracker` vs `AppLauncher`/`open_with`).
 7. Detectors independent and unordered — **unchanged**.
-8. Old stored records keep loading — **unchanged**: `#[serde(default)]` /
-   `Option<T>` rule + `migrate()` still apply to the blob;
-   `loads_a_record_missing_every_absorbable_field` moves to `core` and still
-   guards it.
+8. Forward-compatible record shape — **kept, simplified**: new `Project`
+   fields stay `Option<T>` or `#[serde(default)]`;
+   `loads_a_record_missing_every_absorbable_field` and
+   `rejects_a_record_missing_its_identity` move to `core` and still guard it.
+   What's gone: the `serde_json::Value` `migrate()` step and its
+   `schema_version` stamp (legacy-only). A shape change serde can't absorb is
+   now a `user_version` migration step.
 
 ### New
 
@@ -501,10 +490,9 @@ reason SQLite beats a shared JSON file here.
 |---|---|
 | Existing 72 tests | Move with their code into `core`; pass unchanged. `cargo test -p indexer-core`. |
 | `ProjectService` (new) | `SqliteRepository::in_memory()` + a `FakeLauncher` (records calls, returns configured results). One test per flow: dup-name reject, dup-dir reject, best-effort create with a real git temp dir, all-or-nothing refresh, open (missing dir → `DirectoryDeletedOrMoved`, missing app → `OpenWithAppMissing`, success → launcher args + `mark_opened` persisted), bin-only delete guard, `delete_directory` both branches, restore, list/deleted/favorites filtering + ordering, inspect (bad dir → `DirectoryState { ok: false }` not an `Err`), `ensure_project` idempotency. |
-| `SqliteRepository` (new) | round-trip a `Project`; upsert replaces; `delete` idempotent; `list` returns deleted + active; `find_by_directory` hits the index; corrupt `data` → `RepositoryError::Corrupt`; `PRAGMA journal_mode` = `wal`. |
-| Legacy import (new) | fixture `projects.json` in the plugin's exact shape → `import_legacy_json` → every record present in SQLite via `migrate()`, source renamed `.imported`, second run is a no-op. |
+| `SqliteRepository` (new) | round-trip a `Project`; upsert replaces; `delete` idempotent; `list` returns deleted + active; `find_by_directory` hits the index; corrupt `data` → `RepositoryError::Corrupt`; `PRAGMA journal_mode` = `wal`; `open` on a fresh path creates the schema at `user_version = 1`. |
 | `src-tauri` | `cargo build` gate + one smoke test that the `setup` closure assembles a `ProjectService` (using a temp dir) without panicking. Command wrappers too thin to unit-test. |
-| Frontend | Unchanged behaviour. `CreateProjectForm` swaps its inline JS name logic (`repoNameFromUrl` / `folderNameFromDirectory` / `suggestProjectName` — currently untested) for the `suggest_project_name` command. The 14 `trackers.test.ts` vitest cases are untouched; `svelte-check` stays green. The name logic gains real coverage for the first time — as Rust unit tests in `core::domain::naming` (Task 4). |
+| Frontend | Unchanged behaviour. `CreateProjectForm` swaps its inline JS name logic (`repoNameFromUrl` / `folderNameFromDirectory` / `suggestProjectName` — currently untested) for the `suggest_project_name` command. The 14 `trackers.test.ts` vitest cases are untouched; `svelte-check` stays green. The name logic gains real coverage for the first time — as Rust unit tests in `core::domain::naming` (Task 2). |
 | CI | `cargo test --workspace`, `cargo clippy --workspace`, `cargo fmt --check`, `npm test`, `npm run check`, `npm run build`. |
 
 ## Tasks
@@ -518,12 +506,18 @@ rejecting its neighbour.
    far). `cargo build --workspace` green; `cargo tauri dev` still launches the
    app.
 
-2. **Domain + errors → `core`.** Move `models/` → `core::domain`, `errors/` →
-   `core::error`, `utils/normalize.rs` + `utils/sorting.rs` → `core::domain`.
-   Add `RepositoryError`, `LauncherError`. Re-export from `core::lib`. Fix all
-   `src-tauri` imports. Moved unit tests pass under `cargo test -p indexer-core`.
-   `cargo tauri dev` still works (commands still compile against the moved
-   types).
+2. **Domain + errors + naming → `core`.** Move `models/` → `core::domain`,
+   `errors/` → `core::error`, `utils/normalize.rs` + `utils/sorting.rs` →
+   `core::domain`. Add `RepositoryError`, `LauncherError`. Write
+   `core::domain::naming` (`repo_name_from_url`, `folder_name_from_directory`,
+   `suggest_project_name`) ported from `CreateProjectForm.svelte`, with unit
+   tests (SSH/HTTPS remotes, `.git` suffix, trailing separators, no-remote
+   fallback). Delete `src-tauri/src/migrations/` and every `migrate()` call
+   site; drop the two legacy-migration tests, keep
+   `loads_a_record_missing_every_absorbable_field` /
+   `rejects_a_record_missing_its_identity`. Re-export from `core::lib`; fix all
+   `src-tauri` imports. `cargo test -p indexer-core` green; `cargo tauri dev`
+   still works.
 
 3. **Detectors + platform → `core`.** Move `detectors/` wholesale. Move
    `utils/filesystem.rs` → `core::platform::filesystem`; move `system.rs`'s
@@ -534,70 +528,59 @@ rejecting its neighbour.
    `list_installed_apps` (delegating) and `open_in_app` (temporarily). Tests
    pass.
 
-4. **Migrations → `core`; `domain::naming`.** Move `migrations/`. Write
-   `core::domain::naming` (`repo_name_from_url`, `folder_name_from_directory`,
-   `suggest_project_name`) ported from `CreateProjectForm.svelte`, with unit
-   tests covering SSH/HTTPS remotes, `.git` suffix, trailing separators,
-   no-remote fallback.
-
-5. **Ports + `SqliteRepository`.** `core::ports::{repository, launcher}`.
+4. **Ports + `SqliteRepository`.** `core::ports::{repository, launcher}`.
    `core::infra::sqlite_repository` — `rusqlite` (bundled), `open` / `in_memory`,
-   WAL + `busy_timeout`, the schema, the `user_version` migration runner, all
-   five `ProjectRepository` methods. Repository tests with `in_memory()`.
-   Confirm and document the plugin's real `projects.json` path per platform in
-   this task's notes.
+   WAL + `busy_timeout`, the schema, the `user_version` runner (`v0→v1` creates
+   the table), all five `ProjectRepository` methods. Repository tests with
+   `in_memory()`.
 
-6. **Legacy importer.** `core::infra::legacy_import::import_legacy_json`. Test
-   with a fixture in the plugin's `{ id: project }` shape; assert import +
-   rename + no-op-on-rerun.
-
-7. **`ProjectService`.** All methods from the table, logic lifted verbatim from
+5. **`ProjectService`.** All methods from the table, logic lifted verbatim from
    `commands/projects.rs` + `commands/inspect.rs`. `find_by_directory` /
    `ensure_project` added. Inspection DTOs → `core::application::inspection`
    with the `DirectoryStatusDto`→`DirectoryState` rename. Full service test
    suite (in-memory SQLite + `FakeLauncher`). The all-or-nothing guard test
    lands here.
 
-8. **`OpenerLauncher` adapter.** `src-tauri::adapters::opener_launcher` — impl
+6. **`OpenerLauncher` adapter.** `src-tauri::adapters::opener_launcher` — impl
    `AppLauncher`, body = today's `open_in_app` + `is_available` via
    `core::platform::open_with_app_available`. Delete `src-tauri`'s copy of
    `open_in_app`. `commands/system.rs` is now just `list_installed_apps`.
 
-9. **Thin commands + wiring.** Rewrite every `#[tauri::command]` as a
+7. **Thin commands + wiring.** Rewrite every `#[tauri::command]` as a
    `State<Arc<ProjectService>>` pass-through. Add `suggest_project_name`. Wire
-   `lib.rs` `setup` (SQLite open → import → assemble → manage). Remove
+   `lib.rs` `setup` (SQLite open → assemble → manage). Remove
    `tauri-plugin-store` (dep, plugin line, `store/` module), the flush hook,
    the separate `.manage(DetectorRunner)`. `cargo tauri dev`: exercise
    create/list/edit/favorite/open/delete/restore/refresh/inspect by hand — GUI
    behaves exactly as before, now on SQLite.
 
-10. **Frontend name suggestion.** `CreateProjectForm.svelte` calls
-    `invoke("suggest_project_name", { directory })` on directory-pick instead of
-    the inline helpers. Delete `repoNameFromUrl` / `folderNameFromDirectory` /
-    `suggestProjectName` (no vitest cases exist for them — the coverage now
-    lives in `core::domain::naming`). `svelte-check` + the 14 `trackers.test.ts`
-    cases stay green. Manually verify: pick a git-repo directory in the Browse
-    dialog → name field pre-fills with the remote repo name; pick a plain
-    directory → fills with the folder name.
+8. **Frontend name suggestion.** `CreateProjectForm.svelte` calls
+   `invoke("suggest_project_name", { directory })` on directory-pick instead of
+   the inline helpers. Delete `repoNameFromUrl` / `folderNameFromDirectory` /
+   `suggestProjectName` (no vitest cases exist for them — the coverage now
+   lives in `core::domain::naming`). `svelte-check` + the 14 `trackers.test.ts`
+   cases stay green. Manually verify: pick a git-repo directory in the Browse
+   dialog → name field pre-fills with the remote repo name; pick a plain
+   directory → fills with the folder name.
 
-11. **Docs.** Rewrite `architecture.md`: new diagram (workspace / crate
-    boundary), invariants 9–11, recorded decisions ("SQLite as a document
-    store", "Tauri-free `core` crate", "one `ProjectRepository`, all
-    persistence through it"), retire the "extract detection orchestration" and
-    "platform provider traits" backlog items as done. Update `knowledgebase.md`
-    (module inventory, persistence section), `checklist.md` (new section),
-    `KNOWN-ISSUES.md` if PI-003's line refs move. Add `accomplishments.md`
-    entry. Register Spec 2 (observer CLI) as the next initiative.
+9. **Docs.** Rewrite `architecture.md`: new diagram (workspace / crate
+   boundary), invariants 9–11, recorded decisions ("SQLite as a document
+   store", "Tauri-free `core` crate", "one `ProjectRepository`, all
+   persistence through it"), retire the "extract detection orchestration" and
+   "platform provider traits" backlog items as done, note the
+   `serde_json::Value` migration layer's removal. Update `knowledgebase.md`
+   (module inventory, persistence section), `checklist.md` (new section),
+   `KNOWN-ISSUES.md` if PI-003's line refs move. Add `accomplishments.md`
+   entry. Register Spec 2 (observer CLI) as the next initiative.
 
-Task 8 may fold into 9 during planning.
+Task 6 may fold into 7 during planning.
 
 ## Risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
 | `rusqlite` bundled needs a C compiler in CI | Standard on all three runners (MSVC / clang). Documented as a build prerequisite. First-build time increases ~10–20s; cached afterward. |
-| Existing `projects.json` not found / wrong shape → silent data loss | Importer is a dedicated task with a platform-path audit + fixture test; source is renamed, never deleted; if the file is absent the app starts empty exactly as a fresh install would. |
-| Moving 30+ files across a crate boundary breaks imports in bulk | Tasks 2–4 move by concern, each ending green. `cargo tauri dev` is re-verified after 2, 3, 9. |
+| Moving 30+ files across a crate boundary breaks imports in bulk | Tasks 2–3 move by concern, each ending green. `cargo tauri dev` is re-verified after 2, 3, 7. |
 | Windows linker can't relink `project-indexer.exe` while the dev app runs (known issue) | Kill the running app before `cargo build` in each task; noted for implementers. |
 | `pnpm-lock.yaml` churn from `pnpm dev` (known issue) | `git checkout -- pnpm-lock.yaml` before each commit; unaffected by this work but implementers will hit it. |
 | Trait objects (`Arc<dyn ProjectRepository>`) vs generics — managed-state ergonomics | `Arc<dyn>` chosen deliberately (matches `Box<dyn Detector>`); `ProjectService` is a concrete type in managed state, so commands stay non-generic. |
