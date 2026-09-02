@@ -22,11 +22,23 @@ pub struct Detection {
 }
 
 impl Detection {
-    /// `Ok(trackers)` only if every detector ran cleanly; otherwise `Err` with
-    /// the first failure and the partial trackers discarded.
+    /// The all-or-nothing view: `Ok(trackers)` only if every detector ran
+    /// cleanly, otherwise `Err` with the first failure and the partial
+    /// trackers **discarded**.
     ///
-    /// For a persisted, user-triggered detection run where a half-applied
-    /// result would be more confusing than a clear failure.
+    /// Deliberate domain decision (see `docs/architecture.md`). Detection
+    /// results are persisted verbatim, so `refresh_project_trackers` — an
+    /// explicit, user-triggered "re-scan everything" — either fully succeeds
+    /// or changes nothing: a stored tracker set that's silently missing
+    /// whatever the failing detector would have produced is worse than a
+    /// visible "refresh failed, try again".
+    ///
+    /// The alternative, once detectors are numerous and truly independent, is
+    /// to persist `trackers` and record `errors` separately (per-detector
+    /// status). That's a real change with UI implications — make it on
+    /// purpose, not by having a detector quietly start tolerating partial
+    /// state. `into_result_discards_partial_trackers_on_any_error` guards the
+    /// current contract.
     pub fn into_result(self) -> Result<Vec<Tracker>, DetectorError> {
         match self.errors.into_iter().next() {
             Some(error) => Err(error),
@@ -87,7 +99,21 @@ impl Default for DetectorRunner {
 mod tests {
     use super::*;
     use crate::detectors::git::Gitector;
+    use crate::models::git::GitInfo;
     use std::path::PathBuf;
+
+    fn sample_git_tracker() -> Tracker {
+        Tracker::Git(GitInfo {
+            repo_root: "/tmp/x".to_string(),
+            dirty: false,
+            detached_head: false,
+            repo_url: None,
+            contributors: Vec::new(),
+            curr_branch: Some("main".to_string()),
+            branches: None,
+            commit_hash: None,
+        })
+    }
 
     /// `DetectorRunner` must stay usable in Tauri's managed app state
     /// (`App::manage`, which requires `Send + Sync + 'static`). The check
@@ -155,9 +181,31 @@ mod tests {
         assert!(matches!(detection.trackers.as_slice(), [Tracker::Git(_)]));
         assert_eq!(detection.errors.len(), 1);
 
-        // ...and the all-or-nothing view still reports the failure.
-        assert!(detection.into_result().is_err());
-
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn into_result_returns_every_tracker_when_no_detector_failed() {
+        let detection = Detection {
+            trackers: vec![sample_git_tracker()],
+            errors: Vec::new(),
+        };
+
+        let trackers = detection.into_result().expect("clean detection is Ok");
+        assert!(matches!(trackers.as_slice(), [Tracker::Git(_)]));
+    }
+
+    /// The deliberate all-or-nothing contract behind `refresh_project_trackers`
+    /// (see `Detection::into_result` and `docs/architecture.md`): a partial
+    /// success is reported as a failure, never half-persisted. If this test is
+    /// changed, the persistence behaviour is changing — do it on purpose.
+    #[test]
+    fn into_result_discards_partial_trackers_on_any_error() {
+        let detection = Detection {
+            trackers: vec![sample_git_tracker()],
+            errors: vec![DetectorError::Other("unity detector blew up".into())],
+        };
+
+        assert!(detection.into_result().is_err());
     }
 }
