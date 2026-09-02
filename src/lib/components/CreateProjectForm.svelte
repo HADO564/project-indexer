@@ -30,6 +30,7 @@
     if (name.trim().length > 0) return;
     try {
       const suggested = await suggestProjectName(dir);
+      if (name.trim().length > 0) return; // user may have typed while we awaited
       if (suggested) name = suggested;
     } catch {
       // No suggestion — the user types a name manually.

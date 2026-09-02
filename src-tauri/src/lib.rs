@@ -4,6 +4,7 @@ pub mod commands;
 use std::sync::Arc;
 
 use tauri::Manager;
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use indexer_core::application::ProjectService;
 use indexer_core::detectors::DetectorRunner;
@@ -39,6 +40,19 @@ fn disable_dmabuf_renderer_on_nvidia() {
     }
 }
 
+/// Resolve the config dir and open the SQLite-backed project store. Every
+/// failure here is one the user must be told about rather than crash on.
+fn open_repository(app: &tauri::App) -> Result<SqliteRepository, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("could not locate the app config directory: {e}"))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+    SqliteRepository::open(&dir.join("projects.db"))
+        .map_err(|e| format!("failed to open the project database: {e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -56,10 +70,22 @@ pub fn run() {
         // the shared detector set — is built once here and handed to the
         // commands as managed `Arc<ProjectService>` state.
         .setup(|app| {
-            let dir = app.path().app_config_dir()?;
-            std::fs::create_dir_all(&dir)?;
-            let repo = SqliteRepository::open(&dir.join("projects.db"))
-                .map_err(|e| format!("failed to open project database: {e}"))?;
+            // Opening the store can fail for reasons the user needs to see —
+            // most importantly the version-skew guard ("database is from a
+            // newer version of Project Indexer"). Propagating the error out of
+            // `setup` unwinds into `run()`'s `.expect(...)` and, in a release
+            // GUI build, that's a window that never appears with no message.
+            // So surface it in a blocking modal and exit non-zero instead.
+            let repo = match open_repository(app) {
+                Ok(repo) => repo,
+                Err(e) => {
+                    app.dialog()
+                        .message(format!("Project Indexer can't start:\n\n{e}"))
+                        .kind(MessageDialogKind::Error)
+                        .blocking_show();
+                    std::process::exit(1);
+                }
+            };
             let service = ProjectService::new(
                 Arc::new(repo),
                 Arc::new(OpenerLauncher),

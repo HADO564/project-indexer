@@ -99,7 +99,7 @@ pub fn filter_deleted(projects: &[Project], options: SortOptions) -> Vec<Project
 /// of lowercasing inside a `sort_by` comparator: the key is computed once
 /// per element up front rather than on every comparison the sort makes
 /// (clippy flags the naive `sort_by` version for the same reason elsewhere
-/// in this codebase — see `system.rs`'s installed-apps sort). The `id`
+/// in this codebase — see `platform/app_discovery.rs`'s installed-apps sort). The `id`
 /// tiebreaker keeps ordering deterministic across runs when two projects
 /// share a name once case is ignored, since this also runs on
 /// `HashMap`-sourced input with no inherent order — same reasoning as
