@@ -11,6 +11,10 @@ use crate::models::unreal::UnrealInfo;
 pub struct UnrealDetector;
 
 impl Detector for UnrealDetector {
+    fn kind(&self) -> &'static str {
+        "unreal"
+    }
+
     fn detect(&self, path: &Path) -> Result<Option<Tracker>, DetectorError> {
         let Some(uproject_path) = find_project_file(path)? else {
             return Ok(None);
@@ -355,5 +359,10 @@ mod tests {
 
         assert_eq!(info.vcs_provider, None);
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn kind_is_unreal() {
+        assert_eq!(UnrealDetector.kind(), "unreal");
     }
 }

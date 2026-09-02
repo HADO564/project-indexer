@@ -22,6 +22,10 @@ use crate::models::tracker::Tracker;
 /// managed app state (`App::manage`), which requires `Send + Sync + 'static`
 /// for anything it holds, without extra bounds at each call site.
 pub trait Detector: Send + Sync {
+    /// Stable, lowercase identity for this detector, e.g. `"git"`. Used to
+    /// tag detection outcomes and to target a single detector on re-detect.
+    fn kind(&self) -> &'static str;
+
     /// The [`Tracker`] for `path` if this detector recognizes it as one of
     /// its projects, or `None` if it doesn't.
     fn detect(&self, path: &Path) -> Result<Option<Tracker>, DetectorError>;
