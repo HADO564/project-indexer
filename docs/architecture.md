@@ -193,13 +193,12 @@ Curated and reordered from a broader architectural review. Prioritized by
       (clean, dirty, unborn, detached; minimal, plugins, source-control)
       instead of building every scenario by hand in each test. Pays for itself
       at Unity/Blender.
-- [ ] **Reconcile lockfiles.** Both `package-lock.json` and `pnpm-lock.yaml`
-      are committed; there's no `packageManager` field. Pick one, delete the
-      other, add `packageManager` to `package.json`. This actively bit GUI v1:
-      `tauri.conf.json`'s `beforeDevCommand` is `pnpm dev`, so `npm run tauri
-      dev` triggers a `pnpm install` that moves every npm-installed package to
-      `node_modules/.ignored` and dirties `pnpm-lock.yaml`. Was worked around
-      by hand each time. **Bumped from "cheap" to "do next".**
+- [x] **Reconcile lockfiles.** Done during the core refactor: committed to
+      **pnpm** — `package-lock.json` deleted, `packageManager: pnpm@11.21.0`
+      pinned in `package.json`, `beforeDevCommand`/`beforeBuildCommand` are
+      `pnpm dev`/`pnpm build`. With `node_modules` pnpm-managed and the lockfile
+      matching, `pnpm dev` no longer relocates packages into
+      `node_modules/.ignored` (the blank-screen bug that bit GUI v1).
 - [ ] **PI-004** — fix the NVIDIA-workaround comment wording in `lib.rs`.
 
 ### Next — before or alongside the Unity detector
