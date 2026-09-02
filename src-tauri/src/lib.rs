@@ -75,7 +75,8 @@ pub fn run() {
             commands::projects::open_project,
             commands::projects::open_project_in_explorer,
             commands::projects::refresh_project_trackers,
-            commands::projects::detect_project_trackers
+            commands::projects::detect_project_trackers,
+            commands::inspect::inspect_project
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
