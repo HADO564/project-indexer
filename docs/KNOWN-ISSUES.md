@@ -75,7 +75,8 @@ of bug is retired rather than just patched.
 
 `src/lib/api/filesystem.ts` was deleted in `7f8d8ae`. Nothing references it any
 more — a sweep of `.ts`, `.js`, `.svelte`, `.json` and sourcemaps returns only
-the unrelated Rust file `src-tauri/src/utils/filesystem.rs`.
+the unrelated Rust file `crates/core/src/platform/filesystem.rs` (moved there
+from `src-tauri/src/utils/` in the frontend-agnostic-core refactor).
 
 The request comes from the WebKit webview's cached module graph, left over from
 a dev session predating the deletion. It appears only in the Vite dev log, never
@@ -135,7 +136,7 @@ This silences the warning without changing behaviour. Purely cosmetic.
 
 ## PI-004 — NVIDIA workaround comment understates its own scope
 
-**Severity:** Trivial (comment accuracy) · **Status:** Open · **Location:** `src-tauri/src/lib.rs:29`
+**Severity:** Trivial (comment accuracy) · **Status:** Open · **Location:** `src-tauri/src/lib.rs:32`
 
 The comment reads:
 

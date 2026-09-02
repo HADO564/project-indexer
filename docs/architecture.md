@@ -10,38 +10,60 @@ about direction, not mechanics.
 
 ## The system today
 
+A Cargo workspace with three crates. `indexer-core` (`crates/core`) holds all
+domain logic, orchestration, and persistence and has **no `tauri` dependency**;
+`src-tauri` is a thin GUI adapter over it; `crates/cli` is a one-line stub for a
+future observer CLI (Spec 2).
+
 ```
-            ┌───────────────────────────────┐
-            │            Svelte UI          │
-            │  +page.svelte orchestrates:   │
-            │  list · modals · TrackerBadges │
-            │  · AppPicker · ErrorBanner     │
-            │  · /project/[id] view          │
-            │    (TrackerPanel)              │
-            └───────────────┬───────────────┘
-                            │  invoke()  (lib/api/* mirrors commands 1:1)
-            ┌───────────────▼───────────────┐
-            │        Tauri commands         │
-            │  commands/projects.rs · system.rs · inspect.rs
-            │  (CRUD + detection orchestration + launch;
-            │   inspect.rs = read-only live detection)
-            └──────┬─────────────────┬──────┘
-                   │                 │
-        ┌──────────▼──────┐   ┌──────▼───────────────┐
-        │   ProjectStore  │   │   DetectorRunner     │  ← in App::manage
-        │  (tauri-plugin- │   │   registry.rs picks  │
-        │   store JSON)   │   │   the detector set   │
-        └──────┬──────────┘   └──────┬───────────────┘
-               │                     │  detect_project → Detection{outcomes}
-        ┌──────▼──────┐     ┌────────┼────────┐
-        │ migrations/ │     ▼        ▼        ▼
-        │ (stamp v1)  │  Gitector  Unreal   (Unity…)
-        └─────────────┘
+  ┌──────────────────────┐        ┌──────────────────────┐
+  │   src-tauri  (GUI)   │        │   crates/cli  (stub) │
+  │  commands/*.rs — ~3- │        │  eprintln! only —    │
+  │  line #[tauri::command]│      │  Spec 2 will fill it │
+  │  pass-throughs       │        │  in                  │
+  │  adapters/opener_    │        └──────────┬───────────┘
+  │  launcher.rs         │                   │
+  │  lib.rs setup wiring │                   │
+  └──────────┬───────────┘                   │
+             │        ┌──────────────────────┘
+             ▼        ▼
+  ┌───────────────────────────────────────────────────────┐
+  │            crates/core  «indexer-core»                 │
+  │                    NO tauri, NO clap                   │
+  │                                                       │
+  │  application/  ProjectService — one method per command │
+  │                inspection (ProjectInspection DTOs)     │
+  │      │                                                 │
+  │      ├─► ports/    ProjectReader + ProjectRepository   │
+  │      │             AppLauncher                         │
+  │      ├─► domain/   Project · Tracker · UpdateProject   │
+  │      │             git · unreal · normalize · sorting  │
+  │      │             naming                              │
+  │      ├─► detectors/ Detector · DetectorRunner ·        │
+  │      │              registry · git/ · unreal/          │
+  │      ├─► platform/  filesystem · app_discovery         │
+  │      ├─► infra/     SqliteRepository                   │
+  │      └─► error/     ProjectError (+ the two port errs) │
+  └───────────────────────────────────────────────────────┘
+             │ impl ProjectRepository
+             ▼
+     app_config_dir()/projects.db   (SQLite, WAL, foreign_keys=ON)
 ```
 
-What's real: everything drawn. What's *not* here yet: a service layer between
-commands and the domain (the commands do orchestration directly), and any
-platform abstraction for `system.rs` (it's `#[cfg(target_os)]` branches).
+Dependency direction is compiler-enforced: `src-tauri → indexer-core` and
+(later) `crates/cli → indexer-core`, never the reverse, and a `use tauri::` in
+`core` fails to compile. `indexer-core` depends only on std, serde, serde_json,
+chrono, uuid, thiserror, git2, rusqlite (+ `winreg`/`parselnk` on Windows).
+
+The GUI's `#[tauri::command]` functions are ~3-line pass-throughs over
+`State<Arc<ProjectService>>`; `AppHandle` is gone from every signature. The one
+genuine adapter is `adapters/opener_launcher.rs` (`OpenerLauncher impl
+AppLauncher`) — the only place `tauri-plugin-opener` is still used.
+
+See `docs/superpowers/specs/2026-09-02-frontend-agnostic-core-design.md` for the
+full design, the **devmon** cross-app contract (§"Cross-app compatibility"), and
+the updater / release-notification / CLI-install / signing-CI fast-follows
+(§"App updates").
 
 ## Invariants worth protecting
 
@@ -69,13 +91,17 @@ if it regresses.
    detector that needs to walk history, parse a dependency graph, or scan
    assets does *not* belong in that path — see "Fast vs deep detection" below.
 3. **Project identity is a stable UUID, never the directory path.** Generated
-   once in `Project::new`, never regenerated (migrations included — there's a
-   test that a record with no `id` fails to load rather than getting a fresh
-   one). Anything built later (history, per-project settings, export/import)
-   keys off the UUID, and a project survives its directory moving.
+   once in `Project::new`, never regenerated — there's a test
+   (`rejects_a_record_missing_its_identity`) that a record with no `id` fails to
+   load rather than getting a fresh one. It's also the `projects` table PK and
+   the foreign key an external reader (devmon) stores. Anything built later
+   (history, per-project settings, export/import) keys off the UUID, and a
+   project survives its directory moving.
 4. **Directory normalization is deliberate and case-sensitive.** `C:\Foo\` and
    `C:/Foo` collide; `C:\Foo` and `C:\foo` do not. This is a choice, not an
-   oversight (`utils/normalize.rs`). See "Considered and declined".
+   oversight (`core::domain::normalize`). The normalized form is now also a
+   stored column (`projects.directory_normalized`, indexed) backing
+   `find_by_directory` and the dup check. See "Considered and declined".
 5. **Validation is advisory; the final filesystem operation is
    authoritative.** `check_directory_health` before an open/refresh is a
    courtesy for a better error message — the actual `open`/`read_dir`/`remove`
@@ -90,9 +116,27 @@ if it regresses.
    git + Unreal + Unity at once. No detector may depend on another's result or
    on running first.
 8. **Old stored records keep loading.** New `Project` fields are `Option<T>`
-   or `#[serde(default)]`; a shape change that can't be absorbed that way gets
-   a `migrations::migrate` step and a `CURRENT_VERSION` bump. Enforced by
-   `loads_a_record_missing_every_absorbable_field`.
+   or `#[serde(default)]` — enforced by
+   `loads_a_record_missing_every_absorbable_field`. A shape change serde can't
+   absorb is now a numbered `user_version` migration step in
+   `SqliteRepository` that rewrites the `data` blobs in a transaction. What's
+   gone: the old `serde_json::Value` `migrate()` layer and its `schema_version`
+   stamp (see Recorded decisions).
+9. **`core` never depends on `tauri`.** Compiler-enforced by the crate graph —
+   a `use tauri::` anywhere in `indexer-core` fails to build, and
+   `cargo tree -p indexer-core` shows no `tauri`. This is what guarantees "add
+   a frontend (CLI, …) without reworking the backend".
+10. **All persistence goes through `ProjectRepository`.** No frontend touches
+    SQLite — or any store — directly; `ProjectService` is the only caller of
+    the port. The read half is a separate `ProjectReader` trait so an external
+    consumer (devmon) can depend on read access without the write surface.
+11. **The binary owns forward migration; it never reads a newer DB.**
+    `SqliteRepository::open` runs the `user_version` steps up to
+    `CURRENT_SCHEMA_VERSION` and returns
+    `RepositoryError::Backend("database is from a newer version …")` for
+    anything higher, without touching the data. Guarded by
+    `refuses_a_newer_database`. This is what makes shipping auto-updates safe —
+    a downgraded binary fails loud instead of corrupting the store.
 
 ## Detection semantics
 
@@ -116,9 +160,9 @@ The load-bearing distinction: **"malformed `.uproject`" and "not an Unreal
 project" are not the same outcome** and must never collapse into one. A
 detector returns `Ok(None)` for "not mine" and `Err` for "mine but broken".
 
-The persist paths (`create_project`, `refresh_project_trackers`) still store
-only `trackers`. The `/project/[id]` view closed the visibility gap a
-different way: it calls `inspect_project` (read-only, live) and renders every
+The persist paths (`ProjectService::create`, `ProjectService::refresh_trackers`)
+still store only `trackers`. The `/project/[id]` view closed the visibility gap
+a different way: it calls `inspect_project` (read-only, live) and renders every
 outcome — `● git · ○ unreal — not detected · ▲ unity — <error>` — so a
 detector that fails is no longer indistinguishable from one that found
 nothing.
@@ -131,16 +175,17 @@ test whose name is the sign that changing it is a real decision.
 
 ### Refresh is all-or-nothing
 
-`refresh_project_trackers` — the explicit, user-triggered "re-scan this
-project" — persists the detection result verbatim or not at all. If any
-registered detector errors, the command fails and the stored trackers are
-left untouched; it does **not** save the detectors that happened to succeed.
+`ProjectService::refresh_trackers` — the explicit, user-triggered "re-scan this
+project" (the `refresh_project_trackers` command is a pass-through to it) —
+persists the detection result verbatim or not at all. If any registered
+detector errors, the call fails and the stored trackers are left untouched; it
+does **not** save the detectors that happened to succeed.
 
 *Why:* detection results are stored as-is and drive the detail view. A
 persisted tracker set silently missing whatever a failing detector would have
 produced is a worse outcome than a visible "refresh failed" the user can
-retry. `create_project` and the browse preview stay best-effort — there's no
-prior good state to protect there.
+retry. `ProjectService::create` and the browse preview stay best-effort —
+there's no prior good state to protect there.
 
 *Revisit when:* there are enough independent detectors that losing an
 unrelated tracker to one detector's transient failure is the common case. The
@@ -149,12 +194,70 @@ as per-detector status (the `/project/[id]` view already shows this live from
 `inspect_project`; this would carry it into the stored record too). That's a
 deliberate change, not a detector quietly learning to tolerate partial state.
 
-*Guarded by:* `into_result_discards_partial_trackers_on_any_error` (and the
+*Guarded by:* `refresh_all_or_nothing_leaves_stored_trackers_on_detector_failure`
+in `application/service.rs` (plus the runner-level
+`into_result_discards_partial_trackers_on_any_error` and the
 `Detection::into_result` doc comment).
+
+### SQLite as a document store
+
+`Project` is stored as its full serde JSON in a `data TEXT` blob (source of
+truth), with three columns *promoted* out of it for querying —
+`is_deleted` (list filtering), `directory_normalized` (dup check /
+`find_by_directory` / activity attribution), `updated_at` (sort, RFC3339 UTC).
+`tags` is additionally mirrored into a `project_tags(project_id, tag)` table,
+rewritten on every `save` inside the same transaction — a derived projection for
+future SQL-level tag queries (devmon, search); the blob stays authoritative and
+nothing reads `project_tags` back yet.
+
+*Why not fully relational:* `trackers` is a `Vec<Tracker>` where `Tracker` is a
+sum type with per-variant payloads (`GitInfo`, `UnrealInfo`, …). Normalizing it
+means a satellite table and a migration *per detector*, which breaks invariant 1
+("add a detector = zero persistence change"). SQL querying of tracker internals
+("all dirty git repos") is a known deferred `user_version` migration — promote
+fields or add a `project_trackers` table when a feature needs it. Until then the
+blob is scanned in Rust.
+
+*Guarded by:* the `SqliteRepository` round-trip / upsert / cascade / tag tests
+and `fresh_db_is_at_current_schema_version`.
+
+### Tauri-free `core` crate
+
+The GUI is one frontend. All domain logic, orchestration and persistence live in
+`indexer-core`, which cannot `use tauri` (invariant 9). A future CLI (Spec 2)
+and a separate activity tracker (devmon) attach via the same crate and the same
+`projects.db` — no IPC, no pairing. `src-tauri` keeps only the Tauri Builder
+wiring, the ~3-line command wrappers, and the one `OpenerLauncher` adapter.
+
+*Why:* a crate boundary the compiler enforces is the only way to *guarantee*
+"add a frontend without reworking the backend"; a convention wouldn't hold.
+
+### No `serde_json::Value` migration layer
+
+The old `migrations/` module (`migrate()`, `CURRENT_VERSION`, the
+`schema_version` field stamp) walked stored JSON to upgrade legacy records. It
+was **deleted, not moved**: the app has no production data, so there were no
+legacy records to upgrade. Schema evolution now has exactly one mechanism — the
+numbered `user_version` runner in `SqliteRepository` — and field additions still
+rely on `#[serde(default)]` / `Option<T>` (invariant 8).
+
+### `projects.db` is a cross-app contract — devmon
+
+`projects.db` is project-indexer's alone. A planned separate app, **devmon** (an
+activity/work tracker), will `ATTACH` it **read-only** to attribute observed
+activity to projects. The persistence design keeps that possible without rework:
+stable UUID PK, indexed `directory_normalized`, a `meta(app, schema_version)`
+table an external reader checks before joining, RFC3339 UTC timestamps
+throughout, WAL + `busy_timeout` for concurrent read-while-write, and a
+read-only `ProjectReader` trait devmon can depend on (ideally via the
+`indexer-core` crate, reusing `normalize` + `find_by_directory` rather than
+reimplementing them). devmon's own activity/metric tables live in `devmon.db` —
+never here. Full contract: the spec's §"Cross-app compatibility — devmon".
 
 ### Windows: launch `open_with` apps ourselves, not via the shell
 
-`open_in_app` on Windows spawns a chosen executable with
+`OpenerLauncher::open` on Windows (the body moved verbatim from the old
+`system.rs::open_in_app`) spawns a chosen executable with
 `std::process::Command` (env scrubbed of `ELECTRON_RUN_AS_NODE` /
 `ELECTRON_NO_ATTACH_CONSOLE`, detached, no console), rather than routing
 through the opener plugin's `ShellExecuteExW`.
@@ -209,14 +312,17 @@ Curated and reordered from a broader architectural review. Prioritized by
       failed · Unity: not detected" — not just successes. Read-only and live;
       the stored record is still successes-only (see "Refresh is
       all-or-nothing").
-- [ ] **Extract detection orchestration** out of `commands/projects.rs` into a
-      testable function/module seam. *Not* a full `services/` layer — the file
-      is 300 lines, that's premature. Just make the create/refresh/preview
-      logic callable without a live Tauri `State`.
-- [ ] **Command-layer integration tests.** Now feasible: build a
-      `DetectorRunner` + a temp `ProjectStore` and drive create → prefill →
-      edit → favorite → delete → restore → refresh. The managed-state wiring
-      made this slightly harder and more worth doing.
+- [x] **Extract detection orchestration** — done, and further than this item
+      scoped. The frontend-agnostic-core refactor lifted *all* orchestration
+      (not just detection) into `core::application::ProjectService`, one method
+      per command, callable with no Tauri `State`. The `#[tauri::command]`
+      functions are now ~3-line pass-throughs.
+- [x] **Command-layer integration tests.** Done as `ProjectService` tests
+      (`application/service.rs`): in-memory SQLite + a `FakeLauncher` drive
+      create / dup-reject / open (missing dir, missing app, success +
+      `mark_opened`) / all-or-nothing refresh / bin-only delete guard /
+      `delete_directory` both branches / restore / inspect-bad-dir /
+      `ensure_project` idempotency.
 
 ### Deferred — gated on a concrete trigger, not a date
 
@@ -224,11 +330,19 @@ Curated and reordered from a broader architectural review. Prioritized by
   expensive work (Git contributors via revwalk, dependency parsing), split
   "cheap marker/metadata detection" from opt-in "deep inspection" — probably a
   separate command and a cache keyed on directory + HEAD. Until then, one tier.
-- **Platform provider traits.** `InstalledAppProvider` / `AppLauncher` with
-  Windows/Linux/macOS impls — do this *as* the macOS work, not before. The
-  file that bites here is `commands/system.rs` (~760 lines), not `projects.rs`.
-- **Migration fixtures.** `fixtures/v1/`, `fixtures/v2/`, `v1→current` tests —
-  set up when `CURRENT_VERSION` first goes to 2. Nothing to test until then.
+- **Platform provider traits.** *Partially done.* `AppLauncher` is now a real
+  port (`core::ports::launcher`) with `OpenerLauncher` as the GUI impl; all
+  installed-app discovery and the filesystem checks moved into
+  `core::platform`. Still a plain function, not a trait behind a port:
+  `core::platform::list_installed_apps()` (`app_discovery.rs`). Give it a trait
+  *as* the macOS work — that's when a third impl makes the seam pay.
+- **Migration fixtures.** *Kept and promoted — now load-bearing.* Once the app
+  self-updates from GitHub Releases (see the spec's §"App updates"), a newer
+  binary opening an older `projects.db` is the *normal* case, so every
+  `user_version` step must ship with a test that seeds a `user_version = N` DB
+  with representative rows and asserts the `v(N)→v(N+1)` result. Set up the
+  `fixtures/` scaffold when `CURRENT_SCHEMA_VERSION` first goes to 2. The
+  version-skew guard (invariant 11) is already tested.
 - **Structured detection logging** (`detector · duration · result`). Low value
   at 2–6 detectors; revisit if detection gets slow enough to debug.
 - **Frontend page-state extraction** (`lib/stores/*`). `+page.svelte` is
@@ -248,3 +362,27 @@ Curated and reordered from a broader architectural review. Prioritized by
 - **Reworking the contributors deferral.** Already correctly deferred
   (`checklist.md`); the plan (revwalk → `Vec<Contributor>`, with caching)
   already accounts for the cost. No change needed now.
+
+## Cross-app & updates — next initiatives
+
+Named here so the seams aren't rediscovered. Full designs are in the spec
+(`docs/superpowers/specs/2026-09-02-frontend-agnostic-core-design.md`).
+
+- **Observer CLI (Spec 2).** `crates/cli` is a stub today. Spec 2 fills it in:
+  `indexer <cmd>` wraps a real command, then matches argv + cwd + exit code
+  against recognizers (`git init`, `git clone`, `cargo new`, …) and records
+  inferred project facts through the same `ProjectService`
+  (`ensure_project` / `find_by_directory` / `refresh_trackers`, already added).
+  Plain subcommands (`indexer list`, …) too. No IPC with the GUI — both open the
+  same `projects.db`.
+- **devmon.** A separate activity tracker that `ATTACH`es `projects.db`
+  read-only for activity attribution. The persistence contract that keeps this
+  possible is a Recorded decision above; do not regress it.
+- **Self-update fast-follows** (all deferred, not started): `tauri-plugin-updater`
+  wiring, a shared `core::updates::latest_stable(repo)` helper, a dismissible
+  GUI "▲ vX.Y.Z" release-notification chip, the CLI `self-update` command + a
+  throttled stderr hint, the GUI's on-demand "download & install the CLI"
+  action (minisign-verified), and the tag → signed-bundle → GitHub-Release CI.
+  This refactor's only obligation to them — a safe schema-migration path
+  (version-skew guard + tested `user_version` steps) — is met (invariant 11,
+  "Migration fixtures" above).

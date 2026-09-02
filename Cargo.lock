@@ -2861,10 +2861,7 @@ dependencies = [
 name = "project-indexer"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "indexer-core",
- "serde",
- "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -2873,8 +2870,6 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-single-instance",
  "tauri-plugin-window-state",
- "thiserror 2.0.20",
- "uuid",
 ]
 
 [[package]]
