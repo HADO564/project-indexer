@@ -151,6 +151,7 @@ mod tests {
             dirty: false,
             detached_head: false,
             repo_url: None,
+            web_url: None,
             contributors: Vec::new(),
             curr_branch: Some("main".to_string()),
             branches: None,
