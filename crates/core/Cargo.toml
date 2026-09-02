@@ -15,6 +15,9 @@ thiserror = "2"
 git2 = "0.21.0"
 rusqlite = { version = "0.32", features = ["bundled"] }
 
+[dev-dependencies]
+tempfile = "3"
+
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
 parselnk = "0.1"

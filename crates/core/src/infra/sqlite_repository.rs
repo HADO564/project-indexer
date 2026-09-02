@@ -76,6 +76,16 @@ fn run_migrations(conn: &Connection, from: i64) -> Result<(), RepositoryError> {
         .map_err(be)?;
         conn.pragma_update(None, "user_version", 1).map_err(be)?;
     }
+
+    // Keep the `meta` mirror of the schema version in lockstep with
+    // `user_version` regardless of which migration steps ran — a future v2
+    // step that doesn't touch this row would otherwise leave it stale at '1'.
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES ('schema_version', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [CURRENT_SCHEMA_VERSION.to_string()],
+    )
+    .map_err(be)?;
     Ok(())
 }
 
@@ -109,7 +119,8 @@ impl ProjectReader for SqliteRepository {
         let conn = self.conn.lock().unwrap();
         let data: Option<String> = conn
             .query_row(
-                "SELECT data FROM projects WHERE directory_normalized = ?1 LIMIT 1",
+                "SELECT data FROM projects WHERE directory_normalized = ?1 \
+                 ORDER BY is_deleted ASC, updated_at DESC LIMIT 1",
                 [normalized_directory],
                 |r| r.get(0),
             )
@@ -216,18 +227,103 @@ mod tests {
         assert_eq!(repo.get("id-1").unwrap().unwrap().name, "Renamed");
     }
 
+    fn tag_count(repo: &SqliteRepository) -> i64 {
+        repo.conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM project_tags", [], |r| r.get(0))
+            .unwrap()
+    }
+
     #[test]
     fn delete_is_idempotent_and_cascades_tags() {
         let repo = SqliteRepository::in_memory().unwrap();
         repo.save(&sample("id-1", &tmp())).unwrap();
+        // `sample` carries one tag — prove `save` actually wrote it, so the
+        // post-delete count of 0 means the cascade fired (not that nothing
+        // was ever mirrored).
+        assert_eq!(tag_count(&repo), 1);
         repo.delete("id-1").unwrap();
         repo.delete("id-1").unwrap(); // no error
         assert!(repo.get("id-1").unwrap().is_none());
+        assert_eq!(tag_count(&repo), 0);
+    }
+
+    #[test]
+    fn save_populates_and_replaces_tag_mirror() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        let mut p = sample("id-1", &tmp());
+        p.tags = vec!["Rust".into(), "Cli".into()];
+        repo.save(&p).unwrap();
+
+        let mirrored = |repo: &SqliteRepository| -> Vec<String> {
+            let conn = repo.conn.lock().unwrap();
+            let mut stmt = conn
+                .prepare("SELECT tag FROM project_tags WHERE project_id = ?1 ORDER BY tag")
+                .unwrap();
+            let rows = stmt
+                .query_map(["id-1"], |r| r.get::<_, String>(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect::<Vec<_>>();
+            rows
+        };
+        assert_eq!(mirrored(&repo), vec!["Cli".to_string(), "Rust".to_string()]);
+
+        p.tags = vec!["Web".into()];
+        repo.save(&p).unwrap();
+        assert_eq!(mirrored(&repo), vec!["Web".to_string()]);
+    }
+
+    #[test]
+    fn find_by_directory_prefers_the_live_most_recent_row() {
+        // Soft-deleting a project at dir D then creating a new one at the same
+        // D is supported (the dup-check ignores deleted rows), so two rows can
+        // share `directory_normalized`. `find_by_directory` must return the
+        // live one.
+        let repo = SqliteRepository::in_memory().unwrap();
+        let dir = tmp();
+        let normalized = crate::domain::normalize::normalize_directory(&dir);
+
+        let mut a = sample("id-a", &dir);
+        repo.save(&a).unwrap();
+        a.is_deleted = true;
+        a.updated_at = chrono::Utc::now();
+        repo.save(&a).unwrap();
+
+        let b = sample("id-b", &dir);
+        repo.save(&b).unwrap();
+
+        let found = repo.find_by_directory(&normalized).unwrap().unwrap();
+        assert_eq!(found.id, "id-b");
+        assert!(!found.is_deleted);
+    }
+
+    #[test]
+    fn open_creates_schema_on_a_file_db() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.db");
+        let repo = SqliteRepository::open(&path).unwrap();
         let conn = repo.conn.lock().unwrap();
-        let tag_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM project_tags", [], |r| r.get(0))
+
+        let journal: String = conn
+            .pragma_query_value(None, "journal_mode", |r| r.get(0))
             .unwrap();
-        assert_eq!(tag_count, 0);
+        assert_eq!(journal.to_lowercase(), "wal");
+
+        let user_version: i64 = conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(user_version, CURRENT_SCHEMA_VERSION);
+
+        let schema_version: String = conn
+            .query_row(
+                "SELECT value FROM meta WHERE key = 'schema_version'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(schema_version, CURRENT_SCHEMA_VERSION.to_string());
     }
 
     #[test]
