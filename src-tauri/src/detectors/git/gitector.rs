@@ -9,6 +9,10 @@ use crate::models::tracker::Tracker;
 pub struct Gitector;
 
 impl Detector for Gitector {
+    fn kind(&self) -> &'static str {
+        "git"
+    }
+
     fn detect(&self, path: &Path) -> Result<Option<Tracker>, DetectorError> {
         let repo = match open_repo(path) {
             Ok(repo) => repo,
@@ -410,5 +414,10 @@ mod tests {
         assert!(info.detached_head);
         assert_eq!(info.curr_branch, None);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn kind_is_git() {
+        assert_eq!(Gitector.kind(), "git");
     }
 }

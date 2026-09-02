@@ -165,6 +165,9 @@ mod tests {
     /// produced, and must not stop later detectors from running.
     struct Boom;
     impl Detector for Boom {
+        fn kind(&self) -> &'static str {
+            "boom"
+        }
         fn detect(&self, _path: &Path) -> Result<Option<Tracker>, DetectorError> {
             Err(DetectorError::Other("boom".into()))
         }
