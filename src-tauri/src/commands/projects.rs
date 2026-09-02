@@ -28,8 +28,8 @@ pub fn create_project(
     // succeeded still count — and `refresh_project_trackers` lets the frontend
     // retry the rest explicitly, where a failure is worth surfacing.
     let detection = detectors.detect_project(Path::new(&project.directory));
-    project.trackers = detection.trackers;
-    for error in &detection.errors {
+    project.trackers = detection.trackers();
+    for error in detection.errors() {
         eprintln!("Detector error for '{}': {}", project.directory, error);
     }
 
@@ -88,10 +88,10 @@ pub fn detect_project_trackers(
     directory: String,
 ) -> Vec<Tracker> {
     let detection = detectors.detect_project(Path::new(&directory));
-    for error in &detection.errors {
+    for error in detection.errors() {
         eprintln!("Detector error previewing '{}': {}", directory, error);
     }
-    detection.trackers
+    detection.trackers()
 }
 
 #[tauri::command]
