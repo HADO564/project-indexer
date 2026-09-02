@@ -72,7 +72,7 @@ requirement is the concrete trigger they were waiting for.
 | Structure | Cargo workspace. New `crates/core` (`indexer-core`) library, no `tauri` dependency. `src-tauri` becomes a thin adapter binary. `crates/cli/` is a stub. |
 | Frontends | GUI and (future) CLI are separate binaries/packages, each a thin adapter over `core`. Neither contains the other. `project-indexer` is the command name both install. |
 | Ports | Two: `ProjectRepository`, `AppLauncher`. `Detector` already exists. Filtering/sorting are service logic, not ports. |
-| Persistence | Drop `tauri-plugin-store`. One `SqliteRepository` in `core` (rusqlite, bundled, WAL), used by every frontend. `Project` stored as a JSON blob + promoted columns. |
+| Persistence | Drop `tauri-plugin-store`. One `SqliteRepository` in `core` (rusqlite, bundled, WAL), used by every frontend. `Project` stored as a JSON blob + promoted columns; `tags` also normalized into a `project_tags` table (derived, for SQL queries); `trackers` stays blob-only (normalizing it is a deferred `user_version` migration). |
 | Existing data | None (no real users). Fresh `projects.db` on first run; no importer. The `serde_json::Value` migration layer is deleted — schema evolution moves to SQLite `user_version`. |
 | Orchestration | One `ProjectService` in `core`, one method per current command, logic lifted verbatim. |
 | Errors | `ProjectError` stays the single public app error with its `Display`→string `Serialize`. Ports get small errors (`RepositoryError`, `LauncherError`) mapped in the service. |
@@ -311,31 +311,57 @@ CREATE TABLE meta (
 
 CREATE TABLE projects (
     id                   TEXT PRIMARY KEY,   -- stable UUID; external foreign key
-    data                 TEXT    NOT NULL,   -- full Project as serde JSON
+    data                 TEXT    NOT NULL,   -- full Project as serde JSON (source of truth)
     is_deleted           INTEGER NOT NULL,   -- promoted: list filtering
     directory_normalized TEXT    NOT NULL,   -- promoted: find_by_directory / dup check / activity attribution
     updated_at           TEXT    NOT NULL    -- promoted: sorting; RFC3339 UTC
 );
 CREATE INDEX idx_projects_is_deleted           ON projects(is_deleted);
 CREATE INDEX idx_projects_directory_normalized ON projects(directory_normalized);
+
+-- Tags are the one multi-valued field worth normalizing: a natural
+-- many-to-many, queried by value ("projects tagged X"), and not a sum type.
+-- Derived projection — the blob's `tags` stays the source of truth; this is
+-- rewritten on every save, for SQL-level tag queries (devmon, future search).
+CREATE TABLE project_tags (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    tag        TEXT NOT NULL,
+    PRIMARY KEY (project_id, tag)
+);
+CREATE INDEX idx_project_tags_tag ON project_tags(tag);
 ```
 
 `user_version` and the `meta.schema_version` row are kept in lockstep by the
 migration runner — the pragma is the source of truth, `meta` is the
-externally-readable mirror.
+externally-readable mirror. `PRAGMA foreign_keys = ON` per connection so the
+`project_tags` cascade fires.
 
-- `save`: `INSERT ... ON CONFLICT(id) DO UPDATE` with `data = to_string(project)`
-  and the three promoted columns recomputed.
-- `get` / `find_by_directory`: one `SELECT`, `from_str::<Project>(data)`.
+**Why `trackers` is *not* also normalized:** it's a `Vec<Tracker>` where
+`Tracker` is an enum with per-variant payloads (`GitInfo`, `UnrealInfo`, …).
+Normalizing it means a satellite table (and a migration) per detector, which
+breaks invariant 1 ("add a detector = zero persistence change"). SQL-level
+querying of tracker internals — "all dirty git repos", "all Unreal 5.3
+projects" — is a **known deferred migration**: promote specific fields to
+columns, or add a `project_trackers` table, via a `user_version` step when a
+feature actually needs it. Until then the blob is scanned in Rust.
+
+- `save`: one transaction — `INSERT ... ON CONFLICT(id) DO UPDATE` on
+  `projects` (blob + the three promoted columns recomputed), then
+  `DELETE FROM project_tags WHERE project_id = ?1` and re-insert each
+  normalized tag from `project.tags`.
+- `get` / `find_by_directory`: one `SELECT`, `from_str::<Project>(data)` —
+  tags come from the blob, no join.
 - `list`: `SELECT data` over all rows, deserialize each.
-- `delete`: `DELETE WHERE id = ?1`, missing row is `Ok`.
+- `delete`: `DELETE FROM projects WHERE id = ?1` (cascade clears
+  `project_tags`), missing row is `Ok`.
 - A row whose `data` fails to deserialize → `RepositoryError::Corrupt`
   (fail loud — matches today's `rejects_a_record_missing_its_identity`).
 - **Schema evolution:** a numbered runner keyed on `PRAGMA user_version`.
-  `v0→v1` creates the table. A future field change that serde
-  `#[serde(default)]` / `Option<T>` can't absorb becomes a numbered step that
-  rewrites the `data` blobs in a transaction. This is the *only* migration
-  mechanism — there is no separate `serde_json::Value` layer.
+  `v0→v1` creates the tables (`meta`, `projects`, `project_tags`) and seeds
+  `meta`. A future field change that serde `#[serde(default)]` / `Option<T>`
+  can't absorb becomes a numbered step that rewrites the `data` blobs in a
+  transaction. This is the *only* migration mechanism — there is no separate
+  `serde_json::Value` layer.
 
 ### `error/`
 
@@ -485,8 +511,8 @@ persistence design here must let devmon integrate later with no rework.
 | Requirement | How it's met |
 |---|---|
 | Separate database files | `projects.db` is project-indexer's alone. devmon owns `devmon.db` with its own `user_version`. Two apps never share one file or one migration lifecycle. devmon `ATTACH`es `projects.db` **read-only** for reporting joins. |
-| Stable foreign key | `projects.id` is a UUID, generated once, never reused (invariant 3). devmon stores `project_id` values referencing it. A purge in project-indexer can orphan devmon rows — devmon's problem to handle (soft-reference, not an FK constraint across files). |
-| Attribution lookup | `projects.directory_normalized`, indexed. devmon normalizes an observed path with the same rule and looks the project up — ideally by depending on the `indexer-core` crate (`ProjectReader::find_by_directory`) rather than reimplementing normalization. |
+| Stable foreign key | `projects.id` is a UUID, generated once, never reused (invariant 3). devmon stores `project_id` values referencing it. **No tombstones:** if project-indexer purges a project, devmon doesn't need it either — devmon's Mondrian forest trains on a rolling ~1-month window, so anything old enough to be orphaned is already out of scope. A purged `project_id` simply stops resolving. |
+| Attribution lookup | `projects.directory_normalized` (indexed) and `project_tags.tag` (indexed). devmon normalizes an observed path with the same rule and looks the project up — ideally by depending on the `indexer-core` crate (`ProjectReader::find_by_directory`) rather than reimplementing normalization. |
 | Compatibility check | `meta` table (`app`, `schema_version`) — an external reader confirms it's looking at a project-indexer DB of a version it understands before joining. |
 | Time correlation | all timestamps are RFC3339 UTC strings (`chrono::DateTime<Utc>`), already the case. |
 | Concurrent read while GUI writes | WAL mode + `busy_timeout`. |
@@ -536,7 +562,7 @@ Those live in `devmon.db`. `projects.db` stays about projects.
 |---|---|
 | Existing 72 tests | Move with their code into `core`; pass unchanged. `cargo test -p indexer-core`. |
 | `ProjectService` (new) | `SqliteRepository::in_memory()` + a `FakeLauncher` (records calls, returns configured results). One test per flow: dup-name reject, dup-dir reject, best-effort create with a real git temp dir, all-or-nothing refresh, open (missing dir → `DirectoryDeletedOrMoved`, missing app → `OpenWithAppMissing`, success → launcher args + `mark_opened` persisted), bin-only delete guard, `delete_directory` both branches, restore, list/deleted/favorites filtering + ordering, inspect (bad dir → `DirectoryState { ok: false }` not an `Err`), `ensure_project` idempotency. |
-| `SqliteRepository` (new) | round-trip a `Project`; upsert replaces; `delete` idempotent; `list` returns deleted + active; `find_by_directory` hits the index; corrupt `data` → `RepositoryError::Corrupt`; `PRAGMA journal_mode` = `wal`; `open` on a fresh path creates the schema at `user_version = 1` with `meta` seeded (`app`, `schema_version`). |
+| `SqliteRepository` (new) | round-trip a `Project`; upsert replaces; `delete` idempotent; `list` returns deleted + active; `find_by_directory` hits the index; save populates `project_tags`, a tag change replaces those rows, `delete` cascades them; corrupt `data` → `RepositoryError::Corrupt`; `PRAGMA journal_mode` = `wal`; `open` on a fresh path creates the schema at `user_version = 1` with `meta` seeded (`app`, `schema_version`). |
 | `src-tauri` | `cargo build` gate + one smoke test that the `setup` closure assembles a `ProjectService` (using a temp dir) without panicking. Command wrappers too thin to unit-test. |
 | Frontend | Unchanged behaviour. `CreateProjectForm` swaps its inline JS name logic (`repoNameFromUrl` / `folderNameFromDirectory` / `suggestProjectName` — currently untested) for the `suggest_project_name` command. The 14 `trackers.test.ts` vitest cases are untouched; `svelte-check` stays green. The name logic gains real coverage for the first time — as Rust unit tests in `core::domain::naming` (Task 2). |
 | CI | `cargo test --workspace`, `cargo clippy --workspace`, `cargo fmt --check`, `npm test`, `npm run check`, `npm run build`. |
@@ -577,10 +603,11 @@ rejecting its neighbour.
 4. **Ports + `SqliteRepository`.** `core::ports` — `ProjectReader` +
    `ProjectRepository: ProjectReader`, `AppLauncher`.
    `core::infra::sqlite_repository` — `rusqlite` (bundled), `open` / `in_memory`,
-   WAL + `busy_timeout`, the schema (`meta` + `projects` + indexes), the
-   `user_version` runner (`v0→v1` creates the tables and seeds `meta`), all
-   `ProjectReader` + `ProjectRepository` methods. Repository tests with
-   `in_memory()`.
+   WAL + `busy_timeout` + `foreign_keys = ON`, the schema (`meta` + `projects` +
+   `project_tags` + indexes), the `user_version` runner (`v0→v1` creates the
+   tables and seeds `meta`), all `ProjectReader` + `ProjectRepository` methods
+   (`save` maintains `project_tags` in the same transaction). Repository tests
+   with `in_memory()`.
 
 5. **`ProjectService`.** All methods from the table, logic lifted verbatim from
    `commands/projects.rs` + `commands/inspect.rs`. `find_by_directory` /
