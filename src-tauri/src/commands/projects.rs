@@ -3,6 +3,7 @@ use crate::detectors::DetectorRunner;
 use crate::errors::ProjectError;
 use crate::models::{Project, Tracker, UpdateProject};
 use crate::store::ProjectStore;
+use crate::utils::filesystem::{check_directory_status, DirectoryStatus};
 use crate::utils::{filter_deleted, filter_favorites, sort_projects, SortOptions};
 use std::path::Path;
 use tauri::{AppHandle, Runtime, State};
@@ -110,6 +111,27 @@ pub fn update_project(
     store.save_project(&project)?;
 
     Ok(project)
+}
+
+/// IDs of live (non-deleted) projects whose directory is no longer on disk —
+/// deleted or replaced by a file, i.e. moved out from under the store. Backs
+/// the "directory gone" marker in the list. An *inaccessible* directory (an
+/// offline network drive, a permissions hiccup) is deliberately not flagged:
+/// that's transient, and calling it "gone" would be wrong.
+#[tauri::command]
+pub fn list_missing_directories(app: AppHandle) -> Result<Vec<String>, ProjectError> {
+    let store = ProjectStore::new(&app)?;
+    Ok(store
+        .get_all_projects()?
+        .into_iter()
+        .filter(|p| {
+            matches!(
+                check_directory_status(&p.directory),
+                DirectoryStatus::DoesNotExist | DirectoryStatus::NotADirectory
+            )
+        })
+        .map(|p| p.id)
+        .collect())
 }
 
 #[tauri::command]
