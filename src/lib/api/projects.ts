@@ -31,6 +31,16 @@ export async function getAllProjects(options?: SortOptions): Promise<Project[]> 
   }
 }
 
+// IDs of live projects whose directory is gone from disk (deleted or moved).
+// Inaccessible directories (offline drive, permissions) are not included.
+export async function listMissingDirectories(): Promise<string[]> {
+  try {
+    return await invoke<string[]>("list_missing_directories");
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
 export async function getDeletedProjects(options?: SortOptions): Promise<Project[]> {
   try {
     return await invoke<Project[]>("get_deleted_projects", { options: options ?? null });
