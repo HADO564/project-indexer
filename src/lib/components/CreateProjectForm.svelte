@@ -92,7 +92,7 @@
 </script>
 
 <section class={`mb-6 ${cardClass}`}>
-  <h2 class="mb-3 text-lg font-semibold text-gray-900 dark:text-gray-100">New project</h2>
+  <h2 class="mb-3 font-display text-[14px] uppercase tracking-wide text-phos-dim"><span class="text-gold">//</span> new project</h2>
   <form onsubmit={handleSubmit} class="flex flex-col gap-3">
     <label class={labelClass}>
       Name

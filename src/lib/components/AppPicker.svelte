@@ -65,17 +65,17 @@
   />
   {#if pickerOpen && filteredApps.length > 0}
     <ul
-      class="absolute top-full right-0 left-0 z-10 mt-1 max-h-56 overflow-y-auto rounded-md border border-gray-300 bg-white p-1 shadow-lg dark:border-gray-600 dark:bg-gray-800"
+      class="absolute top-full right-0 left-0 z-10 mt-1 max-h-56 overflow-y-auto rounded-sm border border-line bg-panel p-1"
     >
       {#each filteredApps as app}
         <li>
           <button
             type="button"
             onclick={() => selectApp(app)}
-            class="flex w-full flex-col gap-0.5 rounded px-2 py-1.5 text-left hover:bg-blue-50 dark:hover:bg-gray-700"
+            class="flex w-full flex-col gap-0.5 rounded-sm px-2 py-1.5 text-left hover:bg-panel-2"
           >
-            <span class="text-sm text-gray-900 dark:text-gray-100">{app.name}</span>
-            <span class="text-xs text-gray-500 dark:text-gray-400">{app.path}</span>
+            <span class="text-sm text-phos">{app.name}</span>
+            <span class="text-xs text-phos-dim">{app.path}</span>
           </button>
         </li>
       {/each}

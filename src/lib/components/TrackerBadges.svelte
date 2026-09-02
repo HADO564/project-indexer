@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Tracker } from "$lib/api/types";
-  import { trackerKind } from "$lib/trackers";
+  import { trackerColor, trackerKind } from "$lib/trackers";
 
   let { trackers }: { trackers: Tracker[] } = $props();
 
@@ -21,15 +21,17 @@
 {#if trackers.length > 0}
   <div class="mt-2 flex flex-wrap gap-1.5">
     {#each trackers as tracker}
+      {@const c = trackerColor(trackerKind(tracker))}
       <span
-        class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+        class="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-display text-[13px]"
+        style="color: {c}; border-color: color-mix(in srgb, {c} 60%, transparent)"
       >
         {trackerKind(tracker)}
         {#if detail(tracker)}
-          <span class="text-gray-400 dark:text-gray-500">· {detail(tracker)}</span>
+          <span class="opacity-70">· {detail(tracker)}</span>
         {/if}
         {#if isDirty(tracker)}
-          <span class="text-amber-500" title="Uncommitted changes">●</span>
+          <span class="text-gold" title="Uncommitted changes">●</span>
         {/if}
       </span>
     {/each}

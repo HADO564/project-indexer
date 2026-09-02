@@ -34,19 +34,19 @@
   }
 
   const iconBtn =
-    "text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs";
+    "text-phos-faint hover:text-phos text-[13px] uppercase tracking-wide font-display";
 </script>
 
 {#if fields.length === 0}
-  <p class="text-sm text-gray-500 dark:text-gray-400">No details available.</p>
+  <p class="text-sm text-phos-dim">No details available.</p>
 {:else}
   <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
     {#each fields as field}
-      <dt class="text-gray-500 dark:text-gray-400">{field.label}</dt>
-      <dd class="min-w-0 break-all text-gray-900 dark:text-gray-100">
+      <dt class="font-display text-[13px] uppercase tracking-wide text-phos-dim">{field.label}</dt>
+      <dd class="min-w-0 break-all text-phos">
         {#if field.type === "flag"}
           <span
-            class="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+            class="rounded-sm border border-gold/50 px-1.5 py-0.5 font-display text-[13px] uppercase text-gold"
           >
             {field.label}
           </span>
@@ -54,7 +54,7 @@
           <span class="flex flex-wrap gap-1">
             {#each field.items as item}
               <span
-                class="rounded bg-gray-100 px-1.5 py-0.5 text-xs dark:bg-gray-700"
+                class="rounded-sm border border-line px-1.5 py-0.5 text-[11px] text-phos-dim"
               >{item}</span>
             {/each}
           </span>
@@ -63,7 +63,7 @@
             href={field.text}
             target="_blank"
             rel="noreferrer"
-            class="text-blue-600 hover:underline dark:text-blue-400"
+            class="text-accent hover:underline"
             onclick={(e) => {
               e.preventDefault();
               open(field.text);

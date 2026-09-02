@@ -1,16 +1,96 @@
 @import "tailwindcss";
 
-/* Declare which color schemes the UI supports so the engine paints *native*
-   widgets — <select> menulists, scrollbars, spinners — to match the active
-   scheme. Without this the engine assumes `light`: WebKitGTK then drew the
-   sort <select> with a light menulist background while the `dark:` variants
-   below set near-white text on it, leaving the label invisible. Chromium on a
-   light Windows desktop happened to agree with that light default, which is
-   why the bug only surfaced on Linux. */
+/* VT323 — a DEC VT320 terminal face by the VT323 Project, SIL OFL 1.1.
+   See static/fonts/vt323_OFL.txt. Display face: headings, buttons, labels,
+   chrome. Data text (paths, hashes) stays in a modern mono (below).
+   VT323 is bitmap-derived — set it at 14px+ so glyphs stay crisp. */
+@font-face {
+  font-family: "VT323";
+  src: url("/fonts/vt323.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@theme {
+  /* Soft dark terminal — a quiet cool-neutral slate for every surface, so
+     the colour lives entirely in the accents: cyan for anything interactive,
+     gold and rust for state, plus the per-tracker badge hues. Cards sit a
+     clear step above the ground so they read as raised, not muddy. */
+  --color-void: #15171b; /* app background */
+  --color-panel: #1e2228; /* cards, raised surfaces */
+  --color-panel-2: #272c33; /* inputs, hover, active tab */
+  --color-line: #363c44; /* hairline borders, dividers */
+
+  --color-phos: #e7e8e6; /* primary text — soft off-white */
+  --color-phos-dim: #9aa1a8; /* secondary text, metadata */
+  --color-phos-faint: #626a73; /* disabled, ghost markers */
+
+  --color-accent: #5ccdc9; /* cyan — interactive: buttons, links, active, sigils */
+  --color-glow: #9ff0ea; /* brighter cyan — hover emphasis */
+  --color-gold: #e7b64e; /* favourite star, section markers, "dirty" pip */
+  --color-amber: #e2903a; /* warnings, directory-unavailable */
+  --color-rust: #e2605a; /* errors, destructive actions */
+
+  --font-display: "VT323", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --font-mono: "Cascadia Code", ui-monospace, Consolas, "Courier New", monospace;
+
+  /* A single hairline radius everywhere, pills included. */
+  --radius-xs: 2px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --radius-2xl: 2px;
+  --radius-3xl: 2px;
+  --radius-full: 2px;
+}
+
 html {
-  color-scheme: light dark;
+  color-scheme: dark;
 }
 
 body {
-  @apply min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  min-height: 100vh;
+  background-color: var(--color-void);
+  color: var(--color-phos);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* VT323 chrome. It's a monospace terminal face, so it wants a touch of
+   positive tracking and reads best a size or two up from the body mono. */
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  line-height: 1.15;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-void);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-void);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border: 2px solid var(--color-void);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-phos-faint);
 }

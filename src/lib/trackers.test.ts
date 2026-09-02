@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { trackerFields, trackerKind } from "./trackers";
+import { trackerColor, trackerFields, trackerKind } from "./trackers";
 import type { Tracker } from "./api/types";
 
 const gitTracker = (over: Record<string, unknown> = {}): Tracker =>
@@ -24,6 +24,26 @@ describe("trackerKind", () => {
   });
   it("reads a bare string variant", () => {
     expect(trackerKind("Unity" as unknown as Tracker)).toBe("Unity");
+  });
+});
+
+describe("trackerColor", () => {
+  it("is case-insensitive and stable for a known kind", () => {
+    expect(trackerColor("git")).toBe(trackerColor("Git"));
+    expect(trackerColor("git")).toBe("hsl(2 65% 70%)");
+  });
+  it("gives known kinds distinct hues", () => {
+    const kinds = ["git", "unreal", "unity", "blender"];
+    expect(new Set(kinds.map(trackerColor)).size).toBe(kinds.length);
+  });
+  it("derives a stable hue for an unknown kind", () => {
+    expect(trackerColor("godot-mono")).toBe(trackerColor("godot-mono"));
+    expect(trackerColor("godot-mono")).toMatch(/^hsl\(\d{1,3} 65% 70%\)$/);
+  });
+  it("always fixes L/S so any kind reads on the dark ground", () => {
+    for (const k of ["git", "unreal", "xyz", "a-brand-new-tracker"]) {
+      expect(trackerColor(k)).toMatch(/ 65% 70%\)$/);
+    }
   });
 });
 

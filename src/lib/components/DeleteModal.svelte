@@ -48,13 +48,13 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div
-  class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+  class="fixed inset-0 z-[100] flex items-center justify-center bg-void/85"
   role="presentation"
   onclick={onCancel}
   onkeydown={handleKeydown}
 >
   <div
-    class="w-11/12 max-w-md rounded-lg bg-white p-6 shadow-2xl dark:bg-gray-800"
+    class="w-11/12 max-w-md rounded-sm border border-line bg-panel p-6"
     role="dialog"
     tabindex="-1"
     aria-modal="true"
@@ -64,13 +64,13 @@
   >
     <h2
       id="delete-modal-title"
-      class="mt-0 text-lg font-semibold text-gray-900 dark:text-gray-100"
+      class="mt-0 text-lg font-semibold text-phos"
     >
       Delete "{project.name}"?
     </h2>
 
     <div class="mt-3 flex flex-col gap-2">
-      <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+      <label class="flex items-start gap-2 text-sm text-phos-dim">
         <input
           type="radio"
           name="delete-mode"
@@ -82,7 +82,7 @@
           Delete <code class="break-all">{project.directory}</code> from disk (cannot be undone)
         </span>
       </label>
-      <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+      <label class="flex items-start gap-2 text-sm text-phos-dim">
         <input
           type="radio"
           name="delete-mode"
@@ -97,14 +97,14 @@
     </div>
 
     {#if mode === "disk"}
-      <label class="mt-3 mb-4 flex items-start gap-2 text-sm text-red-700 dark:text-red-400">
+      <label class="mt-3 mb-4 flex items-start gap-2 text-sm text-rust">
         <input type="checkbox" bind:checked={permanentlyDeleteMetadata} class="mt-0.5" />
         <span>
           Also permanently forget this project, instead of keeping it in the bin
         </span>
       </label>
     {:else}
-      <p class="mt-3 mb-4 text-sm text-gray-600 dark:text-gray-300">
+      <p class="mt-3 mb-4 text-sm text-phos-dim">
         The directory itself is left alone. You can re-add it later by creating a project
         pointed at the same folder.
       </p>
