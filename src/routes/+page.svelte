@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getAllProjects } from "$lib/api/projects";
+  import { getAllProjects, listMissingDirectories } from "$lib/api/projects";
   import type { Project, SortBy, SortDirection } from "$lib/api/types";
   import BinModal from "$lib/components/BinModal.svelte";
   import CreateProjectForm from "$lib/components/CreateProjectForm.svelte";
@@ -18,6 +18,7 @@
   let binOpen = $state(false);
   let favoritesOpen = $state(false);
   let openWithMissingTarget = $state<Project | null>(null);
+  let missingDirs = $state<Set<string>>(new Set());
   // Matches the order the main list has always shown by default (most
   // recently opened first) — SortControls lets the user override it.
   let sortBy = $state<SortBy>("last_opened");
@@ -32,6 +33,12 @@
       error = (err as Error).message;
     } finally {
       loading = false;
+    }
+    // Best-effort marker — a failure here shouldn't block the list.
+    try {
+      missingDirs = new Set(await listMissingDirectories());
+    } catch {
+      missingDirs = new Set();
     }
   }
 
@@ -132,12 +139,15 @@
 </script>
 
 <main class="mx-auto max-w-3xl px-4 py-8">
-  <div class="mb-6 flex items-center justify-center gap-2">
-    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Project Indexer</h1>
+  <div class="mb-6 flex items-center justify-between gap-2 border-b border-line pb-3">
+    <h1 class="text-2xl tracking-wide text-phos">
+      <span class="text-accent">&#9612;</span> PROJECT INDEXER
+    </h1>
+    <div class="flex items-center gap-1">
     <button
       type="button"
       onclick={handleOpenFavorites}
-      class="rounded-md p-1.5 text-gray-500 hover:bg-gray-200 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+      class="rounded-sm p-1.5 text-phos-dim hover:bg-panel-2 hover:text-phos"
       title="Favorites"
       aria-label="Open favorites"
     >
@@ -159,7 +169,7 @@
     <button
       type="button"
       onclick={handleOpenBin}
-      class="rounded-md p-1.5 text-gray-500 hover:bg-gray-200 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+      class="rounded-sm p-1.5 text-phos-dim hover:bg-panel-2 hover:text-phos"
       title="Bin"
       aria-label="Open bin"
     >
@@ -180,6 +190,7 @@
         <path d="M14 11v6" />
       </svg>
     </button>
+    </div>
   </div>
 
   <ErrorBanner message={error} />
@@ -194,6 +205,7 @@
     {projects}
     {loading}
     {editingId}
+    {missingDirs}
     onEdit={handleEdit}
     onCancelEdit={handleCancelEdit}
     onSaved={handleSaved}

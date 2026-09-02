@@ -61,13 +61,13 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div
-  class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+  class="fixed inset-0 z-[100] flex items-center justify-center bg-void/85"
   role="presentation"
   onclick={onClose}
   onkeydown={handleKeydown}
 >
   <div
-    class="w-11/12 max-w-md rounded-lg bg-white p-6 shadow-2xl dark:bg-gray-800"
+    class="w-11/12 max-w-md rounded-sm border border-line bg-panel p-6"
     role="dialog"
     tabindex="-1"
     aria-modal="true"
@@ -78,11 +78,11 @@
     {#if !choosingApp}
       <h2
         id="open-with-missing-title"
-        class="mt-0 text-lg font-semibold text-gray-900 dark:text-gray-100"
+        class="mt-0 text-lg font-semibold text-phos"
       >
         App not found
       </h2>
-      <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+      <p class="mt-2 text-sm text-phos-dim">
         The app associated with this project has been removed or cannot be found. Would you like
         to open it with another app?
       </p>
@@ -103,7 +103,7 @@
     {:else}
       <h2
         id="open-with-missing-title"
-        class="mt-0 text-lg font-semibold text-gray-900 dark:text-gray-100"
+        class="mt-0 text-lg font-semibold text-phos"
       >
         Choose an app
       </h2>

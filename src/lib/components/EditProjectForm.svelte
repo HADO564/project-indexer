@@ -59,7 +59,7 @@
 
 <form
   onsubmit={handleSubmit}
-  class="flex flex-col gap-3 rounded-md bg-gray-50 p-3 dark:bg-gray-900/40"
+  class="flex flex-col gap-3 rounded-md bg-panel-2 p-3"
 >
   <label class={labelClass}>
     Name
@@ -74,7 +74,7 @@
     Tags (comma separated)
     <input bind:value={tags} class={inputClass} />
   </label>
-  <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+  <label class="flex items-center gap-2 text-sm text-phos-dim">
     <input type="checkbox" bind:checked={favorite} />
     Favorite
   </label>

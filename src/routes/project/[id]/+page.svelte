@@ -8,7 +8,7 @@
   import ProjectIdentity from "$lib/components/ProjectIdentity.svelte";
   import TrackerPanel from "$lib/components/TrackerPanel.svelte";
   import { buttonClass } from "$lib/components/styles";
-  import { trackerKind } from "$lib/trackers";
+  import { trackerColor, trackerKind } from "$lib/trackers";
 
   // Route always supplies `id`; `?? ""` only satisfies the `string | undefined`
   // param type. `load()` bails on an empty id.
@@ -105,69 +105,67 @@
 />
 
 <main class="mx-auto max-w-3xl px-4 py-8">
-  <a href="/" class="text-sm text-blue-600 hover:underline dark:text-blue-400">← All projects</a>
+  <a href="/" class="font-display text-[14px] uppercase tracking-wide text-accent hover:underline">&larr; all projects</a>
 
   {#if loadError}
     <div class="mt-4">
       <ErrorBanner message={loadError} />
     </div>
   {:else if inspection}
-    <div class="mt-3 flex items-start justify-between gap-4">
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        {inspection.project.name}
+    <div class="mt-4 flex items-start justify-between gap-4">
+      <h1 class="text-xl text-phos">
+        <span class="text-accent">&gt;</span>&nbsp;{inspection.project.name}
       </h1>
       <div class="flex shrink-0 gap-2">
         <button type="button" class={buttonClass} onclick={handleOpen}>Open</button>
         <button type="button" class={buttonClass} onclick={() => (editing = true)}>Edit</button>
         <button type="button" class={buttonClass} onclick={handleRefresh} disabled={loading}>
-          {loading ? "…" : "Refresh"}
+          {loading ? "···" : "Refresh"}
         </button>
       </div>
     </div>
 
     <div class="mt-3"><ErrorBanner message={banner} /></div>
 
-    <div class="mt-2 rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
+    <div class="mt-2 rounded-sm border border-line bg-panel p-4">
       <ProjectIdentity project={inspection.project} />
     </div>
 
     {#if !inspection.directory_status.ok}
-      <p class="mt-4 rounded-md bg-amber-100 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+      <p class="mt-4 rounded-sm border border-amber/40 bg-panel p-3 text-sm text-amber">
         {inspection.directory_status.message ?? "This project's directory is unavailable."}
       </p>
     {:else}
-      <div class="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-        {#each inspection.results as r}
-          <span>
+      {@const shown = inspection.results.filter((r) => r.status !== "not_detected")}
+      {@const missing = inspection.results.filter((r) => r.status === "not_detected")}
+
+      {#if shown.length > 0}
+        <div class="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-display text-[14px]">
+          {#each shown as r}
             {#if r.status === "detected"}
-              <span class="text-green-600 dark:text-green-400">●</span> {r.kind}
-            {:else if r.status === "not_detected"}
-              <span class="text-gray-400">○</span>
-              <span class="text-gray-500 dark:text-gray-400">{r.kind} — not detected</span>
+              <span style="color: {trackerColor(r.kind)}">● {r.kind}</span>
             {:else}
-              <span class="text-red-600 dark:text-red-400">▲</span>
-              <span class="text-red-600 dark:text-red-400">{r.kind} — {r.error}</span>
+              <span class="text-rust">▲ {r.kind} — {r.error}</span>
             {/if}
-          </span>
-        {/each}
-      </div>
+          {/each}
+        </div>
+      {/if}
 
       {#if detected.length > 0}
-        <div
-          role="tablist"
-          class="mt-3 flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-700"
-        >
+        <div role="tablist" class="mt-3 flex flex-wrap gap-1 border-b border-line">
           {#each detected as r}
+            {@const active = activeKind === r.kind}
             <button
               type="button"
               role="tab"
-              aria-selected={activeKind === r.kind}
+              aria-selected={active}
               onclick={() => (activeKind = r.kind)}
-              class={`rounded-t-md px-3 py-1.5 text-sm font-medium ${
-                activeKind === r.kind
-                  ? "bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
-                  : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-              }`}
+              class="-mb-px border-b-2 px-3 py-1.5 font-display text-[14px] transition-colors"
+              style={active
+                ? `color: ${trackerColor(r.kind)}; border-color: ${trackerColor(r.kind)}`
+                : "border-color: transparent"}
+              class:text-phos-dim={!active}
+              class:hover:text-phos={!active}
             >
               {trackerKind(r.tracker!)}
             </button>
@@ -180,7 +178,7 @@
               <div class="mb-2 flex justify-end">
                 <button
                   type="button"
-                  class="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                  class="font-display text-[13px] uppercase tracking-wide text-phos-faint hover:text-phos"
                   onclick={() => load(r.kind)}
                 >
                   re-detect
@@ -190,6 +188,23 @@
             </div>
           {/if}
         {/each}
+      {:else if shown.length === 0}
+        <p class="mt-4 text-sm text-phos-dim">
+          No project type detected. Try Refresh, or check the directory still exists.
+        </p>
+      {/if}
+
+      {#if missing.length > 0}
+        <details class="mt-6 text-[11px]">
+          <summary
+            class="cursor-pointer font-display text-[13px] uppercase tracking-wide text-phos-faint hover:text-phos-dim"
+          >
+            Not detected ({missing.length})
+          </summary>
+          <div class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 pl-3 text-phos-faint">
+            {#each missing as r}<span>{r.kind}</span>{/each}
+          </div>
+        </details>
       {/if}
     {/if}
   {/if}
@@ -197,7 +212,7 @@
 
 {#if editing && inspection}
   <div
-    class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+    class="fixed inset-0 z-[100] flex items-center justify-center bg-void/85 p-4"
     role="presentation"
     onclick={() => (editing = false)}
   >
@@ -205,12 +220,15 @@
     <!-- click only stops the backdrop's close-on-click-outside; Escape is
          handled globally by <svelte:window>, so there's no keyboard pair -->
     <div
-      class="w-11/12 max-w-lg"
+      class="w-11/12 max-w-lg rounded-sm border border-line bg-panel p-4"
       role="dialog"
       aria-modal="true"
       tabindex="-1"
       onclick={(e) => e.stopPropagation()}
     >
+      <h2 class="mb-3 text-sm text-phos">
+        <span class="text-accent">&gt;</span>&nbsp;edit {inspection.project.name}
+      </h2>
       <EditProjectForm
         project={inspection.project}
         onSaved={handleSaved}

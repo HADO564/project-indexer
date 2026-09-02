@@ -18,6 +18,30 @@ function trackerPayload(tracker: Tracker): Record<string, unknown> | null {
   return (tracker as Record<string, unknown>)[kind] as Record<string, unknown>;
 }
 
+// Known trackers get a hand-picked hue; anything new gets a stable hue hashed
+// from its name. Every result is fixed at a light L / moderate S, so the
+// colour always reads on the dark terminal ground — no per-tracker tuning
+// needed when a detector is added.
+const TRACKER_HUE: Record<string, number> = {
+  git: 2, // red
+  unreal: 255, // indigo
+  unity: 190, // cyan
+  blender: 28, // orange
+  godot: 210, // blue
+  cargo: 18, // rust
+};
+
+export function trackerColor(kind: string): string {
+  const k = kind.toLowerCase();
+  let hue = TRACKER_HUE[k];
+  if (hue === undefined) {
+    let h = 0;
+    for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+    hue = h % 360;
+  }
+  return `hsl(${hue} 65% 70%)`;
+}
+
 export type FieldType = "text" | "code" | "link" | "path" | "chips" | "flag";
 
 export interface TrackerField {

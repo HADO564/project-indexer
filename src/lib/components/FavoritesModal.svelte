@@ -75,13 +75,13 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div
-  class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+  class="fixed inset-0 z-[100] flex items-center justify-center bg-void/85"
   role="presentation"
   onclick={onClose}
   onkeydown={handleKeydown}
 >
   <div
-    class="w-11/12 max-w-lg rounded-lg bg-white p-6 shadow-2xl dark:bg-gray-800"
+    class="w-11/12 max-w-lg rounded-sm border border-line bg-panel p-6"
     role="dialog"
     tabindex="-1"
     aria-modal="true"
@@ -92,7 +92,7 @@
     <div class="flex items-center justify-between">
       <h2
         id="favorites-modal-title"
-        class="mt-0 text-lg font-semibold text-gray-900 dark:text-gray-100"
+        class="mt-0 text-lg font-semibold text-phos"
       >
         Favorites
       </h2>
@@ -104,17 +104,17 @@
     </div>
 
     {#if loading}
-      <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+      <p class="mt-4 text-sm text-phos-dim">Loading…</p>
     {:else if projects.length === 0}
-      <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">No favorites yet.</p>
+      <p class="mt-4 text-sm text-phos-dim">No favorites yet.</p>
     {:else}
       <ul class="mt-4 flex max-h-80 flex-col gap-2 overflow-y-auto">
         {#each projects as project (project.id)}
-          <li class="rounded-md border border-gray-200 p-3 dark:border-gray-700">
+          <li class="rounded-sm border border-line p-3">
             <div class="flex items-start justify-between gap-4">
               <div>
-                <strong class="text-gray-900 dark:text-gray-100">{project.name}</strong>
-                <div class="text-sm break-all text-gray-500 dark:text-gray-400">
+                <strong class="text-phos">{project.name}</strong>
+                <div class="text-sm break-all text-phos-dim">
                   {project.directory}
                 </div>
               </div>
