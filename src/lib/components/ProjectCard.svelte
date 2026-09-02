@@ -12,7 +12,6 @@
     onOpened,
     onTrackersRefreshed,
     onOpenWithAppMissing,
-    onShowDetails,
     onerror,
   }: {
     project: Project;
@@ -21,7 +20,6 @@
     onOpened: () => void | Promise<void>;
     onTrackersRefreshed: () => void | Promise<void>;
     onOpenWithAppMissing: (project: Project) => void;
-    onShowDetails: (project: Project) => void;
     onerror?: (message: string) => void;
   } = $props();
 
@@ -78,9 +76,7 @@
   </div>
   <div class="flex shrink-0 gap-2">
     <button type="button" onclick={handleOpen} class={buttonClass}>Open</button>
-    <button type="button" onclick={() => onShowDetails(project)} class={buttonClass}>
-      Details
-    </button>
+    <a href={`/project/${project.id}`} class={buttonClass}>Details</a>
     <button
       type="button"
       onclick={handleRefreshTrackers}

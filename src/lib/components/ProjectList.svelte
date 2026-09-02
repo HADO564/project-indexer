@@ -15,7 +15,6 @@
     onOpened,
     onTrackersRefreshed,
     onOpenWithAppMissing,
-    onShowDetails,
     onerror,
   }: {
     projects: Project[];
@@ -28,7 +27,6 @@
     onOpened: () => void | Promise<void>;
     onTrackersRefreshed: () => void | Promise<void>;
     onOpenWithAppMissing: (project: Project) => void;
-    onShowDetails: (project: Project) => void;
     onerror: (message: string) => void;
   } = $props();
 </script>
@@ -53,7 +51,6 @@
               {onOpened}
               {onTrackersRefreshed}
               {onOpenWithAppMissing}
-              {onShowDetails}
               {onerror}
             />
           {/if}
