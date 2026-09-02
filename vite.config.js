@@ -31,8 +31,10 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. tell Vite to ignore watching the Rust side. `target/` sits at the
+      //    workspace root (not under `src-tauri/`), and watching it races the
+      //    linker writing the exe — an EBUSY crash of the dev watcher.
+      ignored: ["**/src-tauri/**", "**/target/**"],
     },
   },
 }));
