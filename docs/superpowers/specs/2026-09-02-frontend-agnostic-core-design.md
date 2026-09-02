@@ -61,6 +61,9 @@ requirement is the concrete trigger they were waiting for.
   payloads, same behaviour. This is a pure refactor plus a storage swap.
 - **`GitInfo.contributors`**, migration-fixture infrastructure, structured
   detection logging — still tracked in `architecture.md`, untouched here.
+- **devmon itself, or any of its tables.** This spec only ensures `projects.db`
+  is *shaped* so devmon can integrate later (see "Cross-app compatibility") —
+  it builds none of it.
 
 ## Decisions locked during brainstorming
 
@@ -75,6 +78,7 @@ requirement is the concrete trigger they were waiting for.
 | Errors | `ProjectError` stays the single public app error with its `Display`→string `Serialize`. Ports get small errors (`RepositoryError`, `LauncherError`) mapped in the service. |
 | Name inference | `repo_name_from_url` / folder-name fallback move from `CreateProjectForm.svelte` into `core::domain::naming`, exposed as a `suggest_project_name` command. |
 | `core` shaping for Spec 2 | `ProjectService` gains `find_by_directory` and `ensure_project(dir)` now; `SqliteRepository` indexes normalized directory. |
+| Cross-app compat (devmon) | `projects.db` stays project-indexer's alone; a future activity-tracker (devmon) gets its own DB and `ATTACH`es this one read-only. Enabled by: stable UUID PK, indexed `directory_normalized`, a `meta` table, RFC3339 UTC timestamps, a read-only `ProjectReader` trait. See "Cross-app compatibility". |
 
 ## Architecture
 
@@ -180,10 +184,17 @@ no-remote fallback, empty).
 
 ```rust
 // ports/repository.rs
-pub trait ProjectRepository: Send + Sync {
+
+/// The read half. A separate trait so an external consumer (devmon — see
+/// "Cross-app compatibility") can depend on read access without the write
+/// surface.
+pub trait ProjectReader: Send + Sync {
     fn get(&self, id: &str) -> Result<Option<Project>, RepositoryError>;
     fn list(&self) -> Result<Vec<Project>, RepositoryError>;      // ALL projects, deleted included, no ordering guarantee
     fn find_by_directory(&self, normalized_directory: &str) -> Result<Option<Project>, RepositoryError>;
+}
+
+pub trait ProjectRepository: ProjectReader {
     fn save(&self, project: &Project) -> Result<(), RepositoryError>;   // upsert by id
     fn delete(&self, id: &str) -> Result<(), RepositoryError>;          // idempotent — missing id is Ok
 }
@@ -197,8 +208,8 @@ pub trait AppLauncher: Send + Sync {
 
 `find_by_directory` takes an already-normalized string (the caller uses
 `domain::normalize::normalize_directory`). It exists now because Spec 2's
-recognizers need it; the GUI's duplicate check can also use it instead of
-scanning `list()`.
+recognizers need it, devmon needs it for activity attribution, and the GUI's
+duplicate check can use it instead of scanning `list()`.
 
 ### `application/`
 
@@ -284,22 +295,34 @@ impl SqliteRepository {
     pub fn in_memory() -> Result<Self, RepositoryError>;
 }
 
-impl ProjectRepository for SqliteRepository { /* ... */ }
+impl ProjectReader for SqliteRepository { /* get / list / find_by_directory */ }
+impl ProjectRepository for SqliteRepository { /* save / delete */ }
 ```
 
 **Schema (`user_version = 1`):**
 
 ```sql
+CREATE TABLE meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+-- seeded: ('app', 'project-indexer'), ('schema_version', '1')
+-- lets an external reader (devmon) check compatibility without parsing PRAGMAs.
+
 CREATE TABLE projects (
-    id                   TEXT PRIMARY KEY,
+    id                   TEXT PRIMARY KEY,   -- stable UUID; external foreign key
     data                 TEXT    NOT NULL,   -- full Project as serde JSON
     is_deleted           INTEGER NOT NULL,   -- promoted: list filtering
-    directory_normalized TEXT    NOT NULL,   -- promoted: find_by_directory / dup check
-    updated_at           TEXT    NOT NULL    -- promoted: sorting
+    directory_normalized TEXT    NOT NULL,   -- promoted: find_by_directory / dup check / activity attribution
+    updated_at           TEXT    NOT NULL    -- promoted: sorting; RFC3339 UTC
 );
 CREATE INDEX idx_projects_is_deleted           ON projects(is_deleted);
 CREATE INDEX idx_projects_directory_normalized ON projects(directory_normalized);
 ```
+
+`user_version` and the `meta.schema_version` row are kept in lockstep by the
+migration runner — the pragma is the source of truth, `meta` is the
+externally-readable mirror.
 
 - `save`: `INSERT ... ON CONFLICT(id) DO UPDATE` with `data = to_string(project)`
   and the three promoted columns recomputed.
@@ -449,6 +472,29 @@ Both processes open the same `projects.db`. SQLite WAL + `busy_timeout`
 serialize writes across processes; readers never block. This is the concrete
 reason SQLite beats a shared JSON file here.
 
+## Cross-app compatibility — devmon
+
+**devmon** is a planned separate app: a work/activity tracker (Mondrian-forest
+models, click/keypress counts, focused window, focus duration, per-process
+metrics — high-frequency time-series). It will attribute activity to
+project-indexer's projects (focused window / process CWD → which project). The
+persistence design here must let devmon integrate later with no rework.
+
+**Contract (satisfied by this spec, do not regress):**
+
+| Requirement | How it's met |
+|---|---|
+| Separate database files | `projects.db` is project-indexer's alone. devmon owns `devmon.db` with its own `user_version`. Two apps never share one file or one migration lifecycle. devmon `ATTACH`es `projects.db` **read-only** for reporting joins. |
+| Stable foreign key | `projects.id` is a UUID, generated once, never reused (invariant 3). devmon stores `project_id` values referencing it. A purge in project-indexer can orphan devmon rows — devmon's problem to handle (soft-reference, not an FK constraint across files). |
+| Attribution lookup | `projects.directory_normalized`, indexed. devmon normalizes an observed path with the same rule and looks the project up — ideally by depending on the `indexer-core` crate (`ProjectReader::find_by_directory`) rather than reimplementing normalization. |
+| Compatibility check | `meta` table (`app`, `schema_version`) — an external reader confirms it's looking at a project-indexer DB of a version it understands before joining. |
+| Time correlation | all timestamps are RFC3339 UTC strings (`chrono::DateTime<Utc>`), already the case. |
+| Concurrent read while GUI writes | WAL mode + `busy_timeout`. |
+| Read-only API surface | `ProjectReader` trait (get / list / find_by_directory) is separate from `ProjectRepository`; devmon consumes the read half. |
+
+**Explicitly not in this DB:** none of devmon's activity/metric/model tables.
+Those live in `devmon.db`. `projects.db` stays about projects.
+
 ## Invariants
 
 ### Preserved (all existing `architecture.md` invariants hold)
@@ -490,7 +536,7 @@ reason SQLite beats a shared JSON file here.
 |---|---|
 | Existing 72 tests | Move with their code into `core`; pass unchanged. `cargo test -p indexer-core`. |
 | `ProjectService` (new) | `SqliteRepository::in_memory()` + a `FakeLauncher` (records calls, returns configured results). One test per flow: dup-name reject, dup-dir reject, best-effort create with a real git temp dir, all-or-nothing refresh, open (missing dir → `DirectoryDeletedOrMoved`, missing app → `OpenWithAppMissing`, success → launcher args + `mark_opened` persisted), bin-only delete guard, `delete_directory` both branches, restore, list/deleted/favorites filtering + ordering, inspect (bad dir → `DirectoryState { ok: false }` not an `Err`), `ensure_project` idempotency. |
-| `SqliteRepository` (new) | round-trip a `Project`; upsert replaces; `delete` idempotent; `list` returns deleted + active; `find_by_directory` hits the index; corrupt `data` → `RepositoryError::Corrupt`; `PRAGMA journal_mode` = `wal`; `open` on a fresh path creates the schema at `user_version = 1`. |
+| `SqliteRepository` (new) | round-trip a `Project`; upsert replaces; `delete` idempotent; `list` returns deleted + active; `find_by_directory` hits the index; corrupt `data` → `RepositoryError::Corrupt`; `PRAGMA journal_mode` = `wal`; `open` on a fresh path creates the schema at `user_version = 1` with `meta` seeded (`app`, `schema_version`). |
 | `src-tauri` | `cargo build` gate + one smoke test that the `setup` closure assembles a `ProjectService` (using a temp dir) without panicking. Command wrappers too thin to unit-test. |
 | Frontend | Unchanged behaviour. `CreateProjectForm` swaps its inline JS name logic (`repoNameFromUrl` / `folderNameFromDirectory` / `suggestProjectName` — currently untested) for the `suggest_project_name` command. The 14 `trackers.test.ts` vitest cases are untouched; `svelte-check` stays green. The name logic gains real coverage for the first time — as Rust unit tests in `core::domain::naming` (Task 2). |
 | CI | `cargo test --workspace`, `cargo clippy --workspace`, `cargo fmt --check`, `npm test`, `npm run check`, `npm run build`. |
@@ -528,10 +574,12 @@ rejecting its neighbour.
    `list_installed_apps` (delegating) and `open_in_app` (temporarily). Tests
    pass.
 
-4. **Ports + `SqliteRepository`.** `core::ports::{repository, launcher}`.
+4. **Ports + `SqliteRepository`.** `core::ports` — `ProjectReader` +
+   `ProjectRepository: ProjectReader`, `AppLauncher`.
    `core::infra::sqlite_repository` — `rusqlite` (bundled), `open` / `in_memory`,
-   WAL + `busy_timeout`, the schema, the `user_version` runner (`v0→v1` creates
-   the table), all five `ProjectRepository` methods. Repository tests with
+   WAL + `busy_timeout`, the schema (`meta` + `projects` + indexes), the
+   `user_version` runner (`v0→v1` creates the tables and seeds `meta`), all
+   `ProjectReader` + `ProjectRepository` methods. Repository tests with
    `in_memory()`.
 
 5. **`ProjectService`.** All methods from the table, logic lifted verbatim from
@@ -566,12 +614,13 @@ rejecting its neighbour.
 9. **Docs.** Rewrite `architecture.md`: new diagram (workspace / crate
    boundary), invariants 9–11, recorded decisions ("SQLite as a document
    store", "Tauri-free `core` crate", "one `ProjectRepository`, all
-   persistence through it"), retire the "extract detection orchestration" and
-   "platform provider traits" backlog items as done, note the
-   `serde_json::Value` migration layer's removal. Update `knowledgebase.md`
-   (module inventory, persistence section), `checklist.md` (new section),
-   `KNOWN-ISSUES.md` if PI-003's line refs move. Add `accomplishments.md`
-   entry. Register Spec 2 (observer CLI) as the next initiative.
+   persistence through it", "`projects.db` is a cross-app contract — devmon"),
+   retire the "extract detection orchestration" and "platform provider traits"
+   backlog items as done, note the `serde_json::Value` migration layer's
+   removal. Update `knowledgebase.md` (module inventory, persistence section),
+   `checklist.md` (new section), `KNOWN-ISSUES.md` if PI-003's line refs move.
+   Add `accomplishments.md` entry. Register Spec 2 (observer CLI) as the next
+   initiative.
 
 Task 6 may fold into 7 during planning.
 
