@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { toError } from "./errors";
 import type { Project } from "./types";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 
 // Distinctive prefix of ProjectError::OpenWithAppMissing's message on the
 // Rust side. Errors are plain strings across the Tauri boundary, so this is
@@ -26,6 +27,24 @@ export async function openProjectDirectory(id: string): Promise<Project> {
 export async function openProjectInExplorer(id: string): Promise<Project> {
   try {
     return await invoke<Project>("open_project_in_explorer", { id });
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+// Opens a URL in the system browser.
+export async function openExternalUrl(url: string): Promise<void> {
+  try {
+    await openUrl(url);
+  } catch (err) {
+    throw toError(err);
+  }
+}
+
+// Reveals a file or directory in the system file explorer.
+export async function revealPath(path: string): Promise<void> {
+  try {
+    await revealItemInDir(path);
   } catch (err) {
     throw toError(err);
   }
