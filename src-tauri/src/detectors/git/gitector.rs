@@ -201,6 +201,8 @@ fn web_url(remote: &str) -> Option<String> {
         return None;
     }
 
+    let is_ssh = remote.starts_with("git@") || remote.starts_with("ssh://");
+
     let (host, path) = remote
         .strip_prefix("git@")
         .and_then(|rest| rest.split_once(':'))
@@ -216,6 +218,17 @@ fn web_url(remote: &str) -> Option<String> {
                 .or_else(|| remote.strip_prefix("http://"))
                 .and_then(|rest| rest.split_once('/'))
         })?;
+
+    // Drop any `user[:token]@` userinfo prefix (e.g. an `x-access-token` in an
+    // https remote), then, for an ssh URL, a `:port` suffix on the host.
+    let host = host.rsplit_once('@').map_or(host, |(_, h)| h);
+    let host = if is_ssh {
+        host.rsplit_once(':')
+            .filter(|(_, port)| !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()))
+            .map_or(host, |(h, _)| h)
+    } else {
+        host
+    };
 
     let path = path.strip_suffix('/').unwrap_or(path);
     let path = path.strip_suffix(".git").unwrap_or(path);
@@ -476,6 +489,14 @@ mod tests {
         );
         assert_eq!(
             web_url("https://github.com/acme/repo").as_deref(),
+            Some("https://github.com/acme/repo")
+        );
+        assert_eq!(
+            web_url("https://x-access-token:ghp_SECRET@github.com/acme/repo.git").as_deref(),
+            Some("https://github.com/acme/repo")
+        );
+        assert_eq!(
+            web_url("ssh://git@github.com:2222/acme/repo.git").as_deref(),
             Some("https://github.com/acme/repo")
         );
         assert_eq!(web_url("/srv/git/repo.git"), None);

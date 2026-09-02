@@ -159,6 +159,11 @@ mod tests {
         })
     }
 
+    /// `DetectorRunner` must stay usable in Tauri's managed app state
+    /// (`App::manage`, which requires `Send + Sync + 'static`). The check is
+    /// the type bound here — if a future detector implementation makes
+    /// `DetectorRunner` stop being `Send + Sync`, this fails to compile
+    /// rather than the app finding out at `.manage()`.
     fn assert_send_sync<T: Send + Sync>() {}
 
     #[test]
@@ -207,6 +212,9 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// A detector that always errors. Used to prove one detector blowing up
+    /// doesn't discard the trackers other detectors produced, and doesn't
+    /// stop the detectors registered after it from running.
     struct Boom;
     impl Detector for Boom {
         fn kind(&self) -> &'static str {

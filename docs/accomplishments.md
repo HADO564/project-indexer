@@ -71,8 +71,7 @@ A dated record of what's been completed, in the order it landed. Append new entr
 ## 2026-08-31 — Project view
 
 The `/project/[id]` detail view (branch `feat/project-view`), plus the backend
-work it needed. Nine commits: `c6245ea` `e0024c2` `d5d33e4` `1842582`
-`4c941ae` `6868943` `c37647e` `56edf33`, then this docs pass.
+work it needed. Nine commits on the branch, then this docs pass.
 
 - **`Detector::kind() -> &'static str`** (`"git"`, `"unreal"`) — a stable,
   lowercase detector identity. The frontend no longer infers *detection*

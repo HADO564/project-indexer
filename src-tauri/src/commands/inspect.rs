@@ -13,14 +13,14 @@ use crate::store::ProjectStore;
 #[derive(Serialize)]
 pub struct ProjectInspection {
     pub project: Project,
-    pub directory_status: DirectoryStatus,
+    pub directory_status: DirectoryStatusDto,
     pub results: Vec<DetectorResult>,
 }
 
 /// Whether the project's directory is currently usable. When `ok` is false
 /// `results` is empty and `message` carries the reason.
 #[derive(Serialize)]
-pub struct DirectoryStatus {
+pub struct DirectoryStatusDto {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
@@ -93,7 +93,7 @@ pub fn inspect_project(
         Ok(()) => {
             let detection = detectors.inspect(Path::new(&project.directory), only.as_deref());
             (
-                DirectoryStatus {
+                DirectoryStatusDto {
                     ok: true,
                     message: None,
                 },
@@ -101,7 +101,7 @@ pub fn inspect_project(
             )
         }
         Err(error) => (
-            DirectoryStatus {
+            DirectoryStatusDto {
                 ok: false,
                 message: Some(error.to_string()),
             },

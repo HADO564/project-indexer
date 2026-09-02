@@ -19,6 +19,7 @@
     try {
       await openExternalUrl(url);
     } catch (err) {
+      console.warn("open external url failed", err);
       onerror?.((err as Error).message);
     }
   }
@@ -27,6 +28,7 @@
     try {
       await revealPath(path);
     } catch (err) {
+      console.warn("reveal path failed", err);
       onerror?.((err as Error).message);
     }
   }
@@ -62,8 +64,11 @@
             target="_blank"
             rel="noreferrer"
             class="text-blue-600 hover:underline dark:text-blue-400"
+            onclick={(e) => {
+              e.preventDefault();
+              open(field.text);
+            }}
           >{field.text}</a>
-          <button type="button" class={iconBtn} onclick={() => open(field.text)}>↗ open</button>
           <button type="button" class={iconBtn} onclick={() => copy(field.text)}>⧉ copy</button>
         {:else if field.type === "path"}
           <span class="font-mono text-xs">{field.text}</span>

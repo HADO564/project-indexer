@@ -16,6 +16,8 @@ about direction, not mechanics.
             │  +page.svelte orchestrates:   │
             │  list · modals · TrackerBadges │
             │  · AppPicker · ErrorBanner     │
+            │  · /project/[id] view          │
+            │    (TrackerPanel)              │
             └───────────────┬───────────────┘
                             │  invoke()  (lib/api/* mirrors commands 1:1)
             ┌───────────────▼───────────────┐
@@ -50,12 +52,15 @@ if it regresses.
    its own module, one line in `detectors/registry.rs`, a `Tracker`
    variant, its `*Info` model, and `Detector::kind()`. **Zero frontend
    code:** the generic `TrackerPanel` renders any tracker, inferring each
-   field's affordance from its name/shape — `*_url` / `https://…` → link,
-   `*_root` / `*_path` / `*_dir` → path, `*hash*` / `*commit*` → code,
-   arrays → chips, booleans → flags. A field named off-convention just
-   renders as plain text. No runner, command-layer, or `DetectorError`
-   change either — the `Other` variant is the escape hatch for a detector's
-   own error type.
+   field's affordance from its name/shape (`src/lib/trackers.ts`
+   `inferType`) — a `https://…` value → link (the key name isn't
+   consulted); a `*_root` / `*_path` / `*_dir` key (or one containing
+   `directory`) → path; a `*hash*` / `*commit*` key → code; an ssh /
+   `git@` value → code; a non-empty array → chips; a bool → flag (shown
+   only when true); everything else → text. A `null` / `undefined` /
+   empty value (or an empty array) is dropped. No runner, command-layer,
+   or `DetectorError` change either — the `Other` variant is the escape
+   hatch for a detector's own error type.
 2. **Basic detection stays cheap and bounded.** `detect_project` runs on
    every `create_project` and every browse-prefill keystroke-ish action. A
    detector that needs to walk history, parse a dependency graph, or scan
