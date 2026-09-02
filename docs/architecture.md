@@ -60,7 +60,10 @@ if it regresses.
    only when true); everything else → text. A `null` / `undefined` /
    empty value (or an empty array) is dropped. No runner, command-layer,
    or `DetectorError` change either — the `Other` variant is the escape
-   hatch for a detector's own error type.
+   hatch for a detector's own error type. The new tracker's badge/tab
+   colour also comes for free: `trackers.ts` `trackerColor(kind)` gives a
+   known kind a hand-picked hue and anything else a stable name-hashed one,
+   all at a fixed lightness/saturation so the text always contrasts.
 2. **Basic detection stays cheap and bounded.** `detect_project` runs on
    every `create_project` and every browse-prefill keystroke-ish action. A
    detector that needs to walk history, parse a dependency graph, or scan
@@ -149,6 +152,26 @@ deliberate change, not a detector quietly learning to tolerate partial state.
 *Guarded by:* `into_result_discards_partial_trackers_on_any_error` (and the
 `Detection::into_result` doc comment).
 
+### Windows: launch `open_with` apps ourselves, not via the shell
+
+`open_in_app` on Windows spawns a chosen executable with
+`std::process::Command` (env scrubbed of `ELECTRON_RUN_AS_NODE` /
+`ELECTRON_NO_ATTACH_CONSOLE`, detached, no console), rather than routing
+through the opener plugin's `ShellExecuteExW`.
+
+*Why:* `ShellExecuteExW` gives the child the caller's environment with no way
+to change it. When Project Indexer is started from a VS Code terminal it
+inherits `ELECTRON_RUN_AS_NODE=1`, and every Electron `open_with` target
+(VS Code, Cursor, Slack, …) then runs as plain Node — `Code.exe <folder>`
+tries to `require()` the folder and exits, while `ShellExecuteExW` still
+reports success. The packaged app launched normally never has the variable;
+this only bites when running from a dev shell, but it's a whole class of
+"editor won't open" with a one-line cause.
+
+*Scope:* only concrete executable paths (`open_with` contains a separator).
+Bare command names and the system-default open keep the opener plugin, which
+resolves them via the registry's App Paths / PATHEXT.
+
 ## Quality backlog
 
 Curated and reordered from a broader architectural review. Prioritized by
@@ -172,8 +195,11 @@ Curated and reordered from a broader architectural review. Prioritized by
       at Unity/Blender.
 - [ ] **Reconcile lockfiles.** Both `package-lock.json` and `pnpm-lock.yaml`
       are committed; there's no `packageManager` field. Pick one, delete the
-      other, add `packageManager` to `package.json`. (Recent work used `npm`;
-      the Linux pass used `pnpm` — that ambiguity is the whole problem.)
+      other, add `packageManager` to `package.json`. This actively bit GUI v1:
+      `tauri.conf.json`'s `beforeDevCommand` is `pnpm dev`, so `npm run tauri
+      dev` triggers a `pnpm install` that moves every npm-installed package to
+      `node_modules/.ignored` and dirties `pnpm-lock.yaml`. Was worked around
+      by hand each time. **Bumped from "cheap" to "do next".**
 - [ ] **PI-004** — fix the NVIDIA-workaround comment wording in `lib.rs`.
 
 ### Next — before or alongside the Unity detector
@@ -201,13 +227,13 @@ Curated and reordered from a broader architectural review. Prioritized by
   separate command and a cache keyed on directory + HEAD. Until then, one tier.
 - **Platform provider traits.** `InstalledAppProvider` / `AppLauncher` with
   Windows/Linux/macOS impls — do this *as* the macOS work, not before. The
-  file that bites here is `commands/system.rs` (730 lines), not `projects.rs`.
+  file that bites here is `commands/system.rs` (~760 lines), not `projects.rs`.
 - **Migration fixtures.** `fixtures/v1/`, `fixtures/v2/`, `v1→current` tests —
   set up when `CURRENT_VERSION` first goes to 2. Nothing to test until then.
 - **Structured detection logging** (`detector · duration · result`). Low value
   at 2–6 detectors; revisit if detection gets slow enough to debug.
-- **Frontend page-state extraction** (`lib/stores/*`). `+page.svelte` is 257
-  lines — watch it, don't pre-split.
+- **Frontend page-state extraction** (`lib/stores/*`). `+page.svelte` is
+  ~250 lines — watch it, don't pre-split.
 
 ### Considered and declined
 

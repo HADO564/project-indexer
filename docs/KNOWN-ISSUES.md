@@ -58,6 +58,11 @@ than patching one control and leaving the next to be rediscovered.
 **Verified** by rebuilding the release binary and screenshotting the running
 app: the control now reads "Last opened" on a dark ground.
 
+**Update (GUI v1, `25eda04`):** the app is now a single committed dark theme
+(`color-scheme: dark`, semantic `@theme` tokens, all `<select>`s styled
+explicitly). There's no light-mode path left to regress into, so this class
+of bug is retired rather than just patched.
+
 ---
 
 ## PI-002 — Stale `filesystem.ts` 404 in the dev log
