@@ -24,6 +24,7 @@ export interface GitInfo {
   dirty: boolean;
   detached_head: boolean;
   repo_url: string | null;
+  web_url: string | null;
   contributors: string[];
   curr_branch: string | null;
   branches: string[] | null;

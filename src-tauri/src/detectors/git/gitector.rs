@@ -38,11 +38,15 @@ impl Detector for Gitector {
         let branches = list_branches(&repo)?;
         let branches = (!branches.is_empty()).then_some(branches);
 
+        let repo_url = remote_url(&repo, "origin")?;
+        let web_url = repo_url.as_deref().and_then(web_url);
+
         Ok(Some(Tracker::Git(GitInfo {
             repo_root: root,
             dirty,
             detached_head: is_detached(&repo)?,
-            repo_url: remote_url(&repo, "origin")?,
+            repo_url,
+            web_url,
             // Walking full commit history for authors is a separate feature;
             // left empty until that's built.
             contributors: Vec::new(),
@@ -184,6 +188,41 @@ pub fn remote_url(repo: &Repository, name: &str) -> Result<Option<String>, GitEr
         Err(e) if e.code() == ErrorCode::NotFound => Ok(None),
         Err(e) => Err(GitError::Remote(e)),
     }
+}
+
+/// Browser-openable form of a git remote URL, or `None` if it isn't a
+/// recognizable http(s)/ssh git remote (a bare local path, say).
+///
+/// `git@host:owner/repo.git` and `ssh://git@host/owner/repo.git` and
+/// `https://host/owner/repo.git` all normalize to `https://host/owner/repo`.
+fn web_url(remote: &str) -> Option<String> {
+    let remote = remote.trim();
+    if remote.is_empty() {
+        return None;
+    }
+
+    let (host, path) = remote
+        .strip_prefix("git@")
+        .and_then(|rest| rest.split_once(':'))
+        .or_else(|| {
+            remote
+                .strip_prefix("ssh://git@")
+                .or_else(|| remote.strip_prefix("ssh://"))
+                .and_then(|rest| rest.split_once('/'))
+        })
+        .or_else(|| {
+            remote
+                .strip_prefix("https://")
+                .or_else(|| remote.strip_prefix("http://"))
+                .and_then(|rest| rest.split_once('/'))
+        })?;
+
+    let path = path.strip_suffix('/').unwrap_or(path);
+    let path = path.strip_suffix(".git").unwrap_or(path);
+    if host.is_empty() || path.is_empty() {
+        return None;
+    }
+    Some(format!("https://{host}/{path}"))
 }
 
 #[cfg(test)]
@@ -419,5 +458,49 @@ mod tests {
     #[test]
     fn kind_is_git() {
         assert_eq!(Gitector.kind(), "git");
+    }
+
+    #[test]
+    fn web_url_normalizes_common_remote_forms() {
+        assert_eq!(
+            web_url("git@github.com:acme/repo.git").as_deref(),
+            Some("https://github.com/acme/repo")
+        );
+        assert_eq!(
+            web_url("ssh://git@gitlab.com/acme/repo.git").as_deref(),
+            Some("https://gitlab.com/acme/repo")
+        );
+        assert_eq!(
+            web_url("https://github.com/acme/repo.git").as_deref(),
+            Some("https://github.com/acme/repo")
+        );
+        assert_eq!(
+            web_url("https://github.com/acme/repo").as_deref(),
+            Some("https://github.com/acme/repo")
+        );
+        assert_eq!(web_url("/srv/git/repo.git"), None);
+        assert_eq!(web_url(""), None);
+    }
+
+    #[test]
+    fn get_info_derives_web_url_from_an_ssh_remote() {
+        let dir = temp_dir("web-url");
+        let repo = init_repo(&dir);
+        repo.remote("origin", "git@github.com:acme/friction-engine.git")
+            .expect("should add remote");
+
+        let tracker = Gitector
+            .detect(&dir)
+            .expect("should detect")
+            .expect("should recognize the repo");
+        let Tracker::Git(info) = tracker else {
+            panic!("expected Tracker::Git");
+        };
+
+        assert_eq!(
+            info.web_url.as_deref(),
+            Some("https://github.com/acme/friction-engine")
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
