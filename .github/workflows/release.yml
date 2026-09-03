@@ -58,10 +58,14 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: Project Indexer ${{ github.ref_name }}
           releaseBody: |
-            Desktop builds for Windows, macOS, and Linux are attached below.
+            Desktop builds for Windows, macOS (Intel + Apple Silicon), and Linux
+            are attached below.
 
-            First real release: the backend is a Tauri-free `indexer-core`
-            library crate with a SQLite project store.
+            See [CHANGELOG.md](https://github.com/HADO564/project-indexer/blob/main/CHANGELOG.md)
+            for what changed in this release.
+
+            Builds are unsigned, so Windows SmartScreen and macOS Gatekeeper will
+            warn on first launch.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
