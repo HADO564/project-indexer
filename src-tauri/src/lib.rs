@@ -6,7 +6,6 @@ use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
-use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use indexer_core::application::ProjectService;
 use indexer_core::detectors::DetectorRunner;
@@ -85,6 +84,28 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Reports a fatal startup problem and exits.
+///
+/// Deliberately *not* `tauri_plugin_dialog`: that plugin queues the dialog onto
+/// the main-thread event loop (`run_on_main_thread`) and then blocks the caller
+/// waiting for the result. `setup` runs on the main thread before the loop has
+/// started, so the queued work would never run — the app would hang with no
+/// window and no message, which is worse than the crash this replaced. `rfd`
+/// renders the modal synchronously on the calling thread instead.
+///
+/// The message also goes to stderr, so a terminal launch or a captured log
+/// still records it when no GUI is available at all.
+fn fatal_startup_error(message: &str) -> ! {
+    eprintln!("{message}");
+    let _ = rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("Project Indexer")
+        .set_description(message)
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
+    std::process::exit(1);
+}
+
 /// Resolve the config dir and open the SQLite-backed project store. Every
 /// failure here is one the user must be told about rather than crash on.
 fn open_repository(app: &tauri::App) -> Result<SqliteRepository, String> {
@@ -128,11 +149,7 @@ pub fn run() {
             let repo = match open_repository(app) {
                 Ok(repo) => repo,
                 Err(e) => {
-                    app.dialog()
-                        .message(format!("Project Indexer can't start:\n\n{e}"))
-                        .kind(MessageDialogKind::Error)
-                        .blocking_show();
-                    std::process::exit(1);
+                    fatal_startup_error(&format!("Project Indexer can't start:\n\n{e}"));
                 }
             };
             let service = ProjectService::new(
