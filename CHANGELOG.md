@@ -41,7 +41,9 @@ All notable changes to Project Indexer are documented here. The format follows
 
 ## [0.1.0] — 2026-09-02
 
-First release.
+Built but never published: the startup hang fixed in 0.1.1 was found before
+these installers were released, so 0.1.1 is the first version users can install.
+The feature set below is what 0.1.1 ships.
 
 ### Added
 
@@ -70,4 +72,4 @@ First release.
   directory, with synchronous transactional writes.
 
 [0.1.1]: https://github.com/HADO564/project-indexer/releases/tag/v0.1.1
-[0.1.0]: https://github.com/HADO564/project-indexer/releases/tag/v0.1.0
+[0.1.0]: https://github.com/HADO564/project-indexer/tree/v0.1.0
