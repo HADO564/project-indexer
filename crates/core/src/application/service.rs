@@ -20,6 +20,15 @@ pub struct ProjectService {
     detectors: Arc<DetectorRunner>,
 }
 
+/// Opaque by necessity — every field is a `dyn` port with no `Debug` bound, and
+/// requiring one would constrain every future adapter for no gain. Exists so
+/// types that hold a `ProjectService` can still `#[derive(Debug)]`.
+impl std::fmt::Debug for ProjectService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProjectService").finish_non_exhaustive()
+    }
+}
+
 impl ProjectService {
     pub fn new(
         repo: Arc<dyn ProjectRepository>,
@@ -268,13 +277,23 @@ impl ProjectService {
         Ok(self.repo.find_by_directory(&normalized)?)
     }
 
-    /// Returns the project registered for `directory`, creating one (with a
-    /// name suggested from the directory) if there isn't one yet.
+    /// Returns the project registered for `directory`, creating one if there
+    /// isn't one yet. The name is inferred exactly the way the GUI's
+    /// `suggest_project_name` command infers it — the git remote's repo name
+    /// when the directory is a repo with a remote, otherwise the folder name.
+    ///
+    /// Note for callers: creation still goes through [`Self::create`], so its
+    /// duplicate-name rule applies. Registering `~/code/api` fails with
+    /// [`ProjectError::DuplicateName`] if some other project is already called
+    /// `api`. An auto-registering caller (the observer CLI) needs to decide
+    /// what to do about that — disambiguate the name, or surface the conflict.
     pub fn ensure_project(&self, directory: &str) -> Result<Project, ProjectError> {
         if let Some(existing) = self.find_by_directory(directory)? {
             return Ok(existing);
         }
-        let name = suggest_project_name(&[], directory).unwrap_or_else(|| "project".to_string());
+        let trackers = self.preview_detection(directory);
+        let name =
+            suggest_project_name(&trackers, directory).unwrap_or_else(|| "project".to_string());
         self.create(name, directory.to_string(), None, None)
     }
 }

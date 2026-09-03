@@ -47,6 +47,20 @@ impl SqliteRepository {
             conn: Mutex::new(conn),
         })
     }
+
+    /// Takes the connection lock, recovering from poisoning.
+    ///
+    /// A panic while another thread held this lock leaves SQLite itself
+    /// consistent — an in-flight transaction rolls back when its guard drops —
+    /// so the connection is still usable. Propagating the poison instead would
+    /// turn one unrelated panic into permanently broken persistence for the
+    /// rest of the process, which is a far worse failure than the one that
+    /// caused it.
+    fn lock_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.conn
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 }
 
 fn run_migrations(conn: &Connection, from: i64) -> Result<(), RepositoryError> {
@@ -91,7 +105,7 @@ fn run_migrations(conn: &Connection, from: i64) -> Result<(), RepositoryError> {
 
 impl ProjectReader for SqliteRepository {
     fn get(&self, id: &str) -> Result<Option<Project>, RepositoryError> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn();
         let data: Option<String> = conn
             .query_row("SELECT data FROM projects WHERE id = ?1", [id], |r| {
                 r.get(0)
@@ -102,7 +116,7 @@ impl ProjectReader for SqliteRepository {
     }
 
     fn list(&self) -> Result<Vec<Project>, RepositoryError> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn();
         let mut stmt = conn.prepare("SELECT data FROM projects").map_err(be)?;
         let rows = stmt.query_map([], |r| r.get::<_, String>(0)).map_err(be)?;
         let mut out = Vec::new();
@@ -116,7 +130,7 @@ impl ProjectReader for SqliteRepository {
         &self,
         normalized_directory: &str,
     ) -> Result<Option<Project>, RepositoryError> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn();
         let data: Option<String> = conn
             .query_row(
                 "SELECT data FROM projects WHERE directory_normalized = ?1 \
@@ -136,7 +150,7 @@ impl ProjectRepository for SqliteRepository {
             .map_err(|e| RepositoryError::Backend(format!("serialize: {e}")))?;
         let dir_norm = normalize_directory(&project.directory);
 
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self.lock_conn();
         let tx = conn.transaction().map_err(be)?;
         tx.execute(
             "INSERT INTO projects (id, data, is_deleted, directory_normalized, updated_at)
@@ -174,7 +188,7 @@ impl ProjectRepository for SqliteRepository {
     }
 
     fn delete(&self, id: &str) -> Result<(), RepositoryError> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.lock_conn();
         conn.execute("DELETE FROM projects WHERE id = ?1", [id])
             .map_err(be)?;
         Ok(())
