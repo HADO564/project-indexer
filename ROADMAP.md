@@ -62,7 +62,7 @@ rather than by accident.
 vertical slice for the whole initiative. It proves the premise — same database,
 no backend changes — in about twenty lines.
 
-## More detectors
+## More project types
 
 Detection is designed so a new tracker costs no frontend code: implement the
 `Detector` trait, register it in one place, add the type, and the UI renders it
@@ -70,57 +70,98 @@ generically. See [`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-detector).
 
 - **Unity** — the next detector, and the one the generic path was built for.
 - **Blender** — same shape.
-- **Git contributors.** `GitInfo.contributors` exists but is deliberately always
-  empty. Populating it needs a full history walk (`revwalk`) on every detection
-  pass, so it is gated on the fast/deep detection split below rather than being
-  bolted on.
+
+Version-control systems beyond git are their own section
+([below](#other-version-control-systems)); this one is about what *kind of
+project* a directory holds.
 
 Placeholder tracker variants without a detector behind them were removed once and
 will not come back — a type is added together with the code that produces it.
 
-## Backend plugins — detectors without a fork
+## Deeper git support
 
-Today, adding a detector means editing `default_detectors()` and shipping a new
-binary. That is the right trade for the first few, and the wrong one once people
-want trackers for tools nobody here uses. The goal is a detector that lives
-outside this repository and is discovered at runtime.
+`GitInfo` currently reports the branch, dirty state, detached HEAD, the branch
+list, the current commit, and the remote in both raw and browser-openable form.
+That answers "where is this project" but not the question you actually have when
+you come back to something after a month: **what did I leave unfinished here?**
 
-**The seam already exists.** `Detector` is a two-method trait — `kind()` and
-`detect(&Path) -> Result<Option<Tracker>, DetectorError>` — and detectors are
-independent and unordered by design, so there is no registration order or
-priority to negotiate. What is missing is a way to express a detector that was
-not compiled in.
+Candidates, roughly in order of value per unit of cost:
 
-Two concrete blockers, both in `core::domain`:
+- **Ahead / behind upstream** — "3 ahead, 1 behind `origin/main`". Probably the
+  single most useful thing missing. Cheap: it is a ref comparison, not a history
+  walk.
+- **The last commit itself** — author, date, subject. The commit object is
+  already being read for `commit_hash`; only the fields are missing.
+- **Stashes** — a count, at least. Work parked and forgotten is exactly what this
+  app should surface.
+- **Uncommitted work as a number**, not just the `dirty` boolean — "7 modified,
+  2 untracked" tells you whether it is a stray file or a half-finished feature.
+- **Submodules, worktrees, tags, LFS** — lower value individually, but all cheap
+  reads against refs and config.
+- **Contributors** — already deferred, and correctly: it needs a full `revwalk`.
 
-- **`Tracker` is a closed enum** (`Git(GitInfo)`, `Unreal(UnrealInfo)`). A plugin
-  cannot add a variant. It needs an open representation — something like
-  `Tracker::External { kind, fields }` carrying named values rather than a Rust
-  type. The frontend is *already* ready for this: `trackerFields()` infers field
-  types from key names and value shapes, so a tracker it has never seen renders
-  correctly with no new UI code.
-- **`kind()` returns `&'static str`**, which a runtime-loaded detector cannot
-  satisfy without leaking. It becomes an owned string, or the plugin's identity
-  is carried separately from the trait.
+Everything above the last item is a refs-and-config read, which is why it can
+land without waiting for anything. Contributors is the one that forces the
+fast-versus-deep detection split described under [Deferred](#deferred--gated-on-a-trigger-not-a-date),
+and it should stay behind it.
 
-On *how* plugins load, three options, in increasing cost:
+## Other version-control systems
 
-1. **Subprocess protocol.** A plugin is an executable that takes a path and
-   returns JSON on stdout. This maps onto `detect()` almost exactly, needs no ABI
-   agreement, works with plugins written in any language, and is trivially
-   sandboxable later. Cheapest, and the recommended starting point.
-2. **WASM components.** Sandboxed and version-tolerant, with filesystem access
-   granted explicitly through WASI preopens. The right answer *if* untrusted
-   plugins become a real scenario.
-3. **Dynamic libraries.** Rust has no stable ABI, so this means a C ABI and a
-   version-lock between plugin and host. The most fragile option; listed to be
-   ruled out rather than rediscovered.
+Git is not the only thing worth recognising: **Mercurial**, **Subversion**,
+**Jujutsu**, **Perforce**, **Fossil**.
 
-**Trust is the hard part, not the mechanism.** A detector runs against arbitrary
-directories the user points the app at, so a third-party detector is arbitrary
-code execution by another name. Whatever ships needs an explicit answer on where
-plugins may come from and what they may touch — see
-[`SECURITY.md`](SECURITY.md).
+Two things make this less work than it looks. Detectors are independent and
+unordered by design, so a Jujutsu repository colocated with a git one correctly
+reports *both* — no precedence rule to invent. And the UI needs no changes at
+all: an unrecognised tracker already renders from its field names and shapes.
+
+**Perforce is the interesting one**, because a hook already exists. The Unreal
+detector reads the configured source-control provider out of
+`SourceControlSettings.ini`, so Unreal projects frequently already tell us they
+are on Perforce — the tracker would complete a picture that is half-drawn today.
+
+The real design decision is *how* to read them. Git support uses `git2`
+(libgit2), so nothing is shelled out. The others have no comparable Rust library,
+which leaves two options with different failure modes: read the on-disk metadata
+directly (`.svn/wc.db` is SQLite, `.hg/dirstate` is parseable) and get basic
+facts with no external dependency, or invoke the tool and get everything but
+inherit "is it installed", PATH resolution, and output parsing. Worth deciding
+once, deliberately, rather than per detector.
+
+## Scanning a folder for projects
+
+Point the app at `~/code` and let it find everything inside, instead of adding
+projects one directory at a time. This is the single biggest usability gap for
+anyone adopting the app with an existing disk full of work — and adoption is
+exactly when the manual path is most painful.
+
+The mechanics that need deciding:
+
+- **Where to stop.** A depth limit, and pruning of directories that are never
+  projects but are always enormous — `node_modules`, `target`, `.venv`, `build`.
+  Also: stop descending once a directory *is* a project. A repository inside a
+  repository is usually vendored or a submodule, not a separate thing to track.
+- **Review before committing.** A scan that silently registers two hundred
+  entries is hostile. Find, present, let the user deselect, then add. Registering
+  a project is a durable act; a bulk one should be a deliberate one.
+- **Name collisions.** Projects must have unique names, so scanning `~/code` and
+  `~/work` when both contain an `api` folder hits this on the first run. This is
+  the *same* unresolved question the CLI's `ensure_project` has — disambiguate,
+  prompt, or qualify by parent — and solving it once serves both. Neither should
+  invent its own answer.
+- **Rescanning.** A remembered root that can be re-scanned to pick up what is new
+  since last time, rather than a one-shot import. Watching it live is a further
+  step and probably not the first one.
+
+Two seams already exist for this. `find_by_directory` plus the indexed
+`directory_normalized` column make "do we already track this?" cheap enough to
+ask once per candidate, and detection is already resilient — one detector failing
+on one directory does not abort a sweep.
+
+The performance shape is worth getting right early: walking is I/O bound and
+cheap, running full detection on every directory is not. Detection should be
+gated behind a cheap marker test — does a `.git` or `.uproject` even exist here —
+which is the fast-versus-deep split again, arriving from a second direction.
 
 ## Frontend plugins — custom tracker panels and views
 
@@ -140,8 +181,8 @@ is not enough:
 - Views that are not per-tracker at all: a dashboard, a different grouping of the
   project list.
 
-This is gated on backend plugins. Until a tracker can come from outside the
-binary, a frontend plugin has nothing of its own to render.
+This is the lowest-priority item on this page, and deliberately so: every
+tracker the backend can produce already renders acceptably without it.
 
 The constraint to design against is that this is a Tauri webview, and third-party
 JavaScript inside it can reach `invoke`. `tauri.conf.json` currently sets
