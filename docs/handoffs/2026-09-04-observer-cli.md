@@ -199,6 +199,46 @@ Nothing below was decided. Do not treat the examples in §1 as settled scope.
   `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
 - **`crates/cli` is at version 0.1.1** with the workspace but has no deps yet.
 
+## 7a. If you're picking this up on Linux
+
+Worth knowing before you start, because it changes what "green" means.
+
+**Nobody has run this build on Linux.** The last actual Linux build-and-run pass
+was 2026-08-28 against `main` at `9761e80` — before the core refactor, before the
+SQLite swap, and before the tray. Since then CI proves the Linux target
+*compiles* and that the tests pass, which is real but is not the same as anyone
+having launched the window. The first Linux run of the current `main` is
+effectively an untested path.
+
+Specifically worth sanity-checking on first launch, before starting CLI work:
+
+- **The "open with" picker lists your apps.** `platform::app_discovery`'s
+  `.desktop` scanning is ~450 lines that only CI has compiled. It should show
+  what your launcher shows, Flatpak and Snap included.
+- **Opening a project actually launches the app.** `open_with_command` splits the
+  stored `Exec` line and substitutes the directory into the `%f`/`%u`
+  placeholder — the wrapper-entry handling (Flatpak's file-forwarding markers)
+  is the fiddly part.
+- **The tray icon appears and its menu works.** The tray shipped in v0.1.1 and
+  has only been exercised on Windows. On Linux it needs an appindicator
+  implementation present; the README's Arch package list predates the tray, so
+  it may be short one package (Tauri's Linux prerequisites cover this — install
+  whatever your distro provides for appindicator if the tray doesn't show).
+- **The NVIDIA workaround**, if you're on the proprietary driver. It's automatic;
+  see the README section.
+
+**Your projects will not be there.** The database is per-machine, at
+`~/.config/com.shaer.project-indexer/projects.db`. The Windows install's
+projects live in `%APPDATA%` on the other partition. A fresh empty list on Arch
+is expected, not a bug — and it's a convenient clean slate for testing
+`ensure_project`.
+
+Setup is the Arch block in the [README](../../README.md#linux-notes), plus
+`rustup` and `pnpm` (`corepack enable` provides pnpm).
+
+If any of the above is broken, fix it before building the CLI on top — a
+launcher bug found later will look like a CLI bug.
+
 ## 8. Suggested route
 
 The refactor used brainstorming → spec → writing-plans → subagent-driven
