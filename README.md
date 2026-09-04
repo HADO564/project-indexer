@@ -22,11 +22,13 @@ frontend. Windows, macOS, and Linux.
 - [What it detects](#what-it-detects)
 - [Install](#install)
 - [Where your data lives](#where-your-data-lives)
+- [Using it](#using-it)
 - [Architecture](#architecture)
 - [Building from source](#building-from-source)
 - [Linux notes](#linux-notes)
 - [Project layout](#project-layout)
 - [Roadmap](#roadmap)
+- [Contributing](#contributing)
 - [License](#license)
 
 ---
@@ -113,6 +115,13 @@ directory:
 Writes are synchronous and transactional — nothing is buffered and lost if the
 app is killed. Your project directories themselves are never modified except by
 the explicit "delete directory" action.
+
+## Using it
+
+[**docs/USAGE.md**](docs/USAGE.md) is the walkthrough — adding a project, what
+each detector reports, the project view, opening projects in your installed
+applications, favourites and tags, the difference between deleting a directory
+and untracking a project, and how the tray behaves.
 
 ## Architecture
 
@@ -266,13 +275,24 @@ changed between releases.
 
 ## Roadmap
 
-- A command-line frontend that observes shell activity and registers projects
-  automatically, sharing the same database as the GUI.
-- More detectors — Unity, Blender, and others.
-- In-app update notifications with releases pulled from GitHub.
-- Git contributor listing (currently deliberately deferred; it needs a full
-  history walk and a cache).
+The next initiative is a command-line frontend that wraps a real command, notices
+what it did, and registers the project automatically — sharing the GUI's database
+with no pairing. After that: more detectors (Unity, Blender), macOS completeness,
+and in-app update notifications.
+
+[**ROADMAP.md**](ROADMAP.md) has the detail, including what is deferred behind a
+specific trigger and what has been considered and **declined**, with reasons.
+
+## Contributing
+
+Development setup, the checks CI runs, and the structural rules the codebase
+enforces on purpose are in [**CONTRIBUTING.md**](CONTRIBUTING.md). Two worth
+knowing up front: `indexer-core` must never depend on Tauri (the compiler
+enforces it), and a new detector should need no frontend code at all.
+
+Also here: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and
+[`SECURITY.md`](SECURITY.md) for reporting a vulnerability privately.
 
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE).

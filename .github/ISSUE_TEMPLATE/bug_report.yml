@@ -1,0 +1,81 @@
+name: Bug report
+description: Something behaves differently than it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. If this is a **security** issue, please don't file
+        it here — use the Security tab's "Report a vulnerability" instead.
+
+        Worth checking [docs/KNOWN-ISSUES.md](https://github.com/HADO564/project-indexer/blob/main/docs/KNOWN-ISSUES.md)
+        first; a few known behaviours are triaged there already.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Add a project pointing at …
+        2. Open the … menu
+        3. …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: From the release you installed, or the commit you built from.
+      placeholder: "0.1.1, or 567934f"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+    validations:
+      required: true
+
+  - type: input
+    id: os-detail
+    attributes:
+      label: OS details
+      description: >
+        Distribution and desktop environment on Linux, since the tray, the app
+        picker and the webview all vary by desktop. Version on Windows/macOS.
+      placeholder: "Arch, Hyprland/Wayland, NVIDIA proprietary"
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - A release build
+        - Built from source with `pnpm run tauri build`
+        - Ran from source with `pnpm run tauri dev`
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Terminal output
+      description: >
+        If the app failed to start or a window never appeared, run it from a
+        terminal and paste what it printed — startup failures often report only
+        to stderr.
+      render: shell

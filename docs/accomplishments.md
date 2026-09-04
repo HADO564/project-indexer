@@ -221,3 +221,72 @@ ending green and committable.
   `cargo test -p project-indexer` is now 0. Frontend: 14
   `trackers.test.ts` vitest cases untouched, `pnpm run check` 0 errors / 8
   known `EditProjectForm` warnings, `pnpm run build` clean.
+
+## 2026-09-03 — v0.1.1: tray, CI, and the first release
+
+The refactor's follow-ups closed out, the app made to run in the background, and
+the project given the scaffolding a published release needs.
+
+- `f4ee6cc` Post-refactor follow-ups cleared.
+- `6b36bd7` Hardened repository lookups, surfaced database-open failures to the
+  user instead of failing silently, and restored the project-name guard.
+- `1d2b032` **System tray.** Closing the window now hides the app instead of
+  quitting it: left-click the tray icon to restore, right-click for Show / Quit.
+  A second launch (from a Start Menu shortcut while hidden) brings the running
+  window forward rather than starting a second copy, via
+  `tauri-plugin-single-instance`.
+- `363a5d3` **CI and release workflows.** CI runs `cargo fmt --check`, `clippy`,
+  `cargo test --workspace` on Linux and Windows, plus `pnpm check` / `test` /
+  `build`, for every push and pull request. The release workflow builds bundles
+  for Windows, Linux, and both macOS architectures on a `v*` tag.
+- `272648d` **Released v0.1.1.** Fixed a startup hang where a failing database
+  open produced no window and no message — `tauri-plugin-dialog`'s
+  `blocking_show()` queues onto an event loop that has not started yet when
+  called from `setup`, so it deadlocked. Replaced with a synchronous `rfd`
+  dialog that also writes to stderr. Also fixed SQLite mutex poisoning
+  permanently breaking saves after any unrelated panic, and `ensure_project`
+  failing to infer a name from the git remote. Added a real README and a
+  `CHANGELOG.md`.
+- `64c52f3` Recorded 0.1.0 as built but never published.
+
+## 2026-09-04 — Observer CLI handoff, and the first Linux run of the new core
+
+- `f372e6d` / `5cf2275` **Handoff written** for the next initiative, the
+  observer CLI (`docs/handoffs/2026-09-04-observer-cli.md`): what exists, what
+  was already decided, and the nine questions deliberately left open for
+  brainstorming. A "picking this up on Linux" section flags that CI proves the
+  Linux target *compiles* but nobody had launched the window since before the
+  core refactor.
+
+- `567934f` **PI-005 — a missing appindicator library killed the app at
+  startup.** That first Linux run found it immediately. Everything compiled, 102
+  tests passed, and the app then exited with only a panic on stderr — invisible
+  when launched from a `.desktop` entry.
+
+  `libappindicator-sys` calls a bare `panic!` when it cannot load a library
+  rather than returning an error, so `setup_tray(app.handle())?` never observed
+  the failure: the `?` was dead code for it. The trigger is Linux-only, but the
+  mishandling was not — on Windows a `Shell_NotifyIcon` failure returns an `Err`
+  that took the same `?` → `.expect()` route out of `setup`, with the same
+  no-window-no-message result. CI could never have caught either: it installs
+  `libayatana-appindicator3-dev` and never launches the app.
+
+  `setup_tray_or_warn()` now catches the unwind and names the package to
+  install, and a `TRAY_AVAILABLE` flag gates the close handler — the load-bearing
+  half, since closing hides to the tray, so degrading to "no tray" without it
+  would strand the app with the window hidden and nothing to restore it.
+  Verified on both paths by masking all four candidate libraries with bind mounts
+  in an unprivileged user namespace. The README's Arch package list, which
+  predated the tray, gained `libayatana-appindicator`.
+
+- **Verified on Arch** beyond the tray, since this was the first real run of
+  post-refactor `main` on Linux: `.desktop` app discovery returns 79 entries with
+  Flatpak file-forwarding markers intact (~450 lines only CI had ever compiled),
+  git detection reports the right branch/commit/remote, the NVIDIA DMABUF
+  workaround engages on the proprietary driver, single-instance restore works,
+  and the tray registers on the StatusNotifier watcher.
+
+- **Community documentation added.** `LICENSE` (MIT — declared in the README and
+  `package.json` since the start, but the file was missing), `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md`, `SECURITY.md`, `ROADMAP.md`, `docs/USAGE.md`, and GitHub
+  issue / pull-request templates.

@@ -79,15 +79,33 @@ library crate. Spec:
 - [x] `tauri-plugin-store` + `store/` + `migrations/` deleted; `serde_json` / `chrono` / `uuid` / `thiserror` dropped from `src-tauri`; dead `@tauri-apps/plugin-store` npm dep removed
 - [x] Zero user-visible change — same windows, command names, payloads, behaviour
 
-## Test counts (Rust, `cargo test -p indexer-core`, Windows)
+## Test counts (Rust, `cargo test --workspace`)
 
-94 executed (+11 `#[cfg(unix/linux)]` not run on Windows); `cargo test -p project-indexer` is 0.
+105 `#[test]` attributes in total. **102 execute on Linux**, 94 on Windows — the
+difference either way is platform-gated tests (11 `#[cfg(unix/linux)]`, the rest
+`#[cfg(windows)]`). `cargo test -p project-indexer` is 0; everything lives in
+`indexer-core`.
 
 - [x] `Gitector` (11), `UnrealDetector` (10), detector-runner + `results_from`
 - [x] `normalize`, `sorting`, `Project` invariants / soft-delete / health checks
 - [x] `naming` (8) — SSH/HTTPS remotes, `.git` suffix, trailing separators, no-remote fallback, empty
 - [x] `SqliteRepository` (11) — round-trip, upsert, idempotent+cascading delete (tag mirror asserted non-empty first), tag-mirror populate+replace, `list` incl. deleted, `find_by_directory` (normalized index + prefers live most-recent row), corrupt blob, fresh-DB schema, file-backed `open` creates schema (wal / `user_version` / `meta.schema_version`), refuses-newer-DB
 - [x] `ProjectService` (15) — dup rejects, best-effort create, open (missing dir / missing app / success), all-or-nothing refresh, bin-only delete, `delete_directory` both branches, restore, inspect-bad-dir, `ensure_project` idempotency
+
+## Background operation
+
+- [x] System tray — closing the window hides the app instead of quitting; left-click restores, right-click gives Show / Quit
+- [x] `tauri-plugin-single-instance` — a second launch brings the running window forward rather than starting a copy
+- [x] Tray failure degrades instead of killing startup (`setup_tray_or_warn` + `TRAY_AVAILABLE`); no tray means closing genuinely quits, so the window can't hide beyond reach (`KNOWN-ISSUES.md` PI-005)
+
+## Release engineering
+
+- [x] CI — `cargo fmt --check` / `clippy` / `test --workspace` on Linux + Windows, plus `pnpm check` / `test` / `build`, on every push and PR
+- [x] Release workflow — `v*` tag builds bundles for Windows, Linux, and both macOS architectures
+- [x] `CHANGELOG.md` (Keep a Changelog) and a published v0.1.1
+- [x] `LICENSE` (MIT), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `ROADMAP.md`, `docs/USAGE.md`, issue + PR templates
+- [ ] Signed bundles and the tag → signed-bundle → GitHub-Release path (see `architecture.md` "Cross-app & updates")
+- [ ] CI never *launches* the app — it compiles and tests the Linux target only. A green run says nothing about whether the window appears; PI-005 is what that gap looks like in practice. A smoke launch under a virtual display would close it.
 
 ## Open (features)
 
