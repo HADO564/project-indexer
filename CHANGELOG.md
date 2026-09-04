@@ -57,6 +57,9 @@ All notable changes to Project Indexer are documented here. The format follows
   the existing backend, or a UI plugin paired with a Rust detector), records the
   trust boundary each shape has, declines a runtime loader for native plugins,
   and settles the CLI's `--json` compatibility contract.
+- A handoff for the plugin initiative, `docs/handoffs/2026-09-04-plugins.md`,
+  covering both plugin shapes, the containment asymmetry between a UI plugin and a
+  Rust one, seven open design decisions, and the state of the tree as of 2026-09-04.
 - `PI-006` records that `tauri build` cannot produce an AppImage on Arch — two
   unrelated incompatibilities in linuxdeploy and its GTK plugin, neither caused by
   this project. The binary, `.deb` and `.rpm` all build; published AppImages come
