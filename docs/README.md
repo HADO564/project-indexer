@@ -11,6 +11,7 @@ Start with [`USAGE.md`](USAGE.md) if you want to *use* the app, or
 - [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) — issue triage from the Linux build-and-run pass.
 - [`handoffs/`](handoffs/) — briefings for work that hasn't started yet: what exists, what was decided, and what is still open.
   - [`handoffs/2026-09-04-observer-cli.md`](handoffs/2026-09-04-observer-cli.md) — the next initiative, a command-wrapping CLI that shares the GUI's database.
+  - [`handoffs/2026-09-04-plugins.md`](handoffs/2026-09-04-plugins.md) — the initiative after that, and the trust boundary that gates it. Also carries the state of the tree as of 2026-09-04.
 
 Outside this directory:
 
