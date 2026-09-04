@@ -4,6 +4,31 @@ All notable changes to Project Indexer are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **A tray-icon failure stopped the app from starting at all, with no window and
+  no message.** The tray is built during startup, and any failure there was
+  propagated out of Tauri's `setup` hook into `run()`'s `.expect(..)`, killing
+  the process before a window existed. On Linux this was reached simply by not
+  having an appindicator library installed — `libappindicator-sys` panics rather
+  than returning an error when it cannot load one, so the failure bypassed error
+  handling entirely — and the app's Arch install instructions were missing that
+  package. On Windows the same path was reachable, less often, when
+  `Shell_NotifyIcon` fails. A tray failure is now caught and reported with the
+  package to install, and the app keeps running without a tray. Because closing
+  the window normally hides it to the tray, closing now genuinely quits when
+  there is no tray to restore from, rather than hiding the window beyond reach.
+
+### Documentation
+
+- The Arch package list in the README gained `libayatana-appindicator`, which the
+  system tray loads at runtime; the Debian and Fedora lists already covered it.
+- Noted that the app must be run via `tauri dev` or `tauri build` — a plain
+  `cargo build` produces a binary that expects the Vite dev server and reports
+  "Connection refused" when launched on its own.
+
 ## [0.1.1] — 2026-09-03
 
 ### Fixed
@@ -71,5 +96,6 @@ The feature set below is what 0.1.1 ships.
 - Projects are stored in SQLite at `projects.db` in the platform config
   directory, with synchronous transactional writes.
 
+[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/HADO564/project-indexer/releases/tag/v0.1.1
 [0.1.0]: https://github.com/HADO564/project-indexer/tree/v0.1.0

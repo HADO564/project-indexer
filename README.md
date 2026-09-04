@@ -160,6 +160,13 @@ pnpm run tauri dev     # run in development
 pnpm run tauri build   # produce installers under target/release/bundle
 ```
 
+Run it through one of those two commands, not by launching the built binary
+directly. A plain `cargo build` bakes in the dev server's URL, so
+`target/debug/project-indexer` started on its own shows "Could not connect to
+localhost: Connection refused" — it is waiting for the Vite server that
+`tauri dev` would have started. `tauri build` is what produces a binary that
+serves the bundled frontend.
+
 Tests and checks:
 
 ```sh
@@ -190,7 +197,7 @@ Arch:
 
 ```sh
 sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl \
-  appmenu-gtk-module librsvg patchelf
+  appmenu-gtk-module librsvg patchelf libayatana-appindicator
 ```
 
 Fedora:
@@ -200,6 +207,10 @@ sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file \
   libappindicator-gtk3-devel librsvg2-devel patchelf
 sudo dnf group install "C Development Tools and Libraries"
 ```
+
+`libayatana-appindicator` is what the system tray loads at runtime (the Debian
+and Fedora lines above already cover it). Without it the app still runs, but it
+has no tray icon, and closing the window quits instead of hiding to it.
 
 Nothing is distro-specific at runtime: app discovery and the NVIDIA workaround
 below both key off standard paths rather than package names.
