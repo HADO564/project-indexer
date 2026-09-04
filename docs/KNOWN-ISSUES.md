@@ -1,20 +1,19 @@
 # Project Indexer — Known Issues
 
-_Written 2026-08-28 from a Linux build-and-run pass (`PI-001`–`PI-004`, `main`
-at `9761e80` plus `761d848`). Extended 2026-09-04 with `PI-005` from the first
-Linux run of the post-refactor `main` (`5cf2275`)._
+_Written 2026-08-28 from a Linux build-and-run pass (`main` at `9761e80` plus
+`761d848`). Extended 2026-09-04 with `PI-005` from the first Linux run of the
+post-refactor `main` (`5cf2275`). `PI-004`, an inaccurate comment on the NVIDIA
+workaround, was fixed and retired the same day._
 
-Five issues have been found while getting the Windows-developed app compiling
+Four issues are tracked here from getting the Windows-developed app compiling
 and running on Linux. They carry deliberately different dispositions: two were
-real defects, one is cosmetic log noise, one is a linter false positive, and one
-is an inaccurate comment.
+real defects, one is cosmetic log noise, and one is a linter false positive.
 
 | ID | Issue | Severity | Status |
 |----|-------|----------|--------|
 | PI-001 | Sort dropdown unreadable on Linux | Medium — user-visible | **Fixed** |
 | PI-002 | Stale `filesystem.ts` 404 in dev log | Trivial — cosmetic | No action needed |
 | PI-003 | `state_referenced_locally` warnings ×8 | None — false positive | Not a defect |
-| PI-004 | NVIDIA comment understates its own scope | Trivial — comment accuracy | Open |
 | PI-005 | Missing appindicator library kills startup | High — blocks launch | **Fixed** |
 
 Nothing here blocks the Linux *build* — `cargo check`, `cargo test`, `pnpm build`
@@ -136,28 +135,6 @@ let name = $state(untrack(() => project.name));
 ```
 
 This silences the warning without changing behaviour. Purely cosmetic.
-
----
-
-## PI-004 — NVIDIA workaround comment understates its own scope
-
-**Severity:** Trivial (comment accuracy) · **Status:** Open · **Location:** `src-tauri/src/lib.rs:32`
-
-The comment reads:
-
-> Both paths are created by the proprietary kernel module only, so this is
-> distro-independent — no package or driver-version probing needed.
-
-The **open** kernel module creates `/proc/driver/nvidia/version` and
-`/sys/module/nvidia/version` too. The test machine runs
-`NVIDIA UNIX Open Kernel Module 610.57.04` and both paths exist, so
-`disable_dmabuf_renderer_on_nvidia()` engages there.
-
-That is the right outcome — the open module still uses the proprietary
-userspace GL stack that has the GBM allocation failure — but the comment
-describes a narrower trigger than the code actually has, which could mislead
-someone later into "fixing" the detection. The code needs no change; the
-wording does.
 
 ---
 
