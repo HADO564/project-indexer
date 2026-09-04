@@ -57,6 +57,19 @@ pnpm test                          # vitest
 pnpm run build
 ```
 
+Or install the pre-commit hook once and let it run them for you:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+It runs the same commands, in the same order, but only the ones your staged
+files can affect — a docs-only commit costs nothing, so there is no reason to
+reach for `--no-verify` out of habit. `git commit --no-verify` skips it when you
+need to, and `git config --unset core.hooksPath` removes it entirely. If you
+change the gates in `.github/workflows/ci.yml`, change `.githooks/pre-commit`
+too, or "it passed locally" stops meaning anything.
+
 Two known-noise baselines, so you can tell your output from the existing state:
 
 - **clippy** has one standing warning, `module has the same name as its
@@ -65,9 +78,10 @@ Two known-noise baselines, so you can tell your output from the existing state:
   `state_referenced_locally` in `EditProjectForm.svelte`. They are a documented
   false positive — see `PI-003` in [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md).
 
-CI compiles and tests the Linux target but never launches the app, so a green run
-says nothing about whether the window actually appears. If your change touches
-startup, the tray, or anything platform-specific, run it.
+**Neither CI nor the hook launches the app.** They compile it and test it, which
+says nothing about whether the window actually appears — `PI-005` compiled,
+passed every test, and still exited before showing a window. If your change
+touches startup, the tray, or anything platform-specific, run the real thing.
 
 ## Project layout
 
