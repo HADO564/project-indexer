@@ -22,9 +22,10 @@ use crate::adapters::OpenerLauncher;
 /// display". Disabling the DMABUF renderer falls back to a software path that
 /// works on both X11 and Wayland.
 ///
-/// Gated on the proprietary driver so that Mesa, nouveau and everything else
-/// keep the accelerated path, and skipped when the variable is already set so
-/// a user can still force either behaviour. Must run before GTK/WebKit start.
+/// Gated on an NVIDIA kernel module being loaded so that Mesa, nouveau and
+/// everything else keep the accelerated path, and skipped when the variable is
+/// already set so a user can still force either behaviour. Must run before
+/// GTK/WebKit start.
 #[cfg(target_os = "linux")]
 fn disable_dmabuf_renderer_on_nvidia() {
     const VAR: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
@@ -33,8 +34,10 @@ fn disable_dmabuf_renderer_on_nvidia() {
         return;
     }
 
-    // Both paths are created by the proprietary kernel module only, so this
-    // is distro-independent — no package or driver-version probing needed.
+    // Both paths are created by either NVIDIA kernel module, proprietary or
+    // open, and catching both is deliberate: the open module still pairs with
+    // the proprietary userspace GL stack that has the GBM allocation failure.
+    // Distro-independent — no package or driver-version probing needed.
     let nvidia_loaded = std::path::Path::new("/proc/driver/nvidia/version").exists()
         || std::path::Path::new("/sys/module/nvidia/version").exists();
 
