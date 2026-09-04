@@ -1,11 +1,13 @@
 # Project Indexer — Known Issues
 
-_Written 2026-08-28 from a Linux build-and-run pass. Reflects `main` at `9761e80` plus the fix on `fix/select-color-scheme` (`761d848`)._
+_Written 2026-08-28 from a Linux build-and-run pass (`PI-001`–`PI-004`, `main`
+at `9761e80` plus `761d848`). Extended 2026-09-04 with `PI-005` from the first
+Linux run of the post-refactor `main` (`5cf2275`)._
 
-Four issues were found while getting the Windows-developed app compiling and
-running on Linux. They are labelled `PI-001`–`PI-004` and carry deliberately
-different dispositions: one was a real user-visible defect, one is cosmetic
-log noise, one is a linter false positive, and one is an inaccurate comment.
+Five issues have been found while getting the Windows-developed app compiling
+and running on Linux. They carry deliberately different dispositions: two were
+real defects, one is cosmetic log noise, one is a linter false positive, and one
+is an inaccurate comment.
 
 | ID | Issue | Severity | Status |
 |----|-------|----------|--------|
@@ -13,9 +15,12 @@ log noise, one is a linter false positive, and one is an inaccurate comment.
 | PI-002 | Stale `filesystem.ts` 404 in dev log | Trivial — cosmetic | No action needed |
 | PI-003 | `state_referenced_locally` warnings ×8 | None — false positive | Not a defect |
 | PI-004 | NVIDIA comment understates its own scope | Trivial — comment accuracy | Open |
+| PI-005 | Missing appindicator library kills startup | High — blocks launch | **Fixed** |
 
-Nothing here blocks the Linux build. `cargo check`, `cargo test` (61 passed),
-`pnpm build` and `pnpm tauri build` all complete cleanly, and the app runs.
+Nothing here blocks the Linux *build* — `cargo check`, `cargo test`, `pnpm build`
+and `pnpm tauri build` all complete cleanly. PI-005 blocked the Linux *run* until
+its fix: everything compiled and every test passed, and the app still exited
+before showing a window.
 
 ---
 
@@ -156,6 +161,66 @@ wording does.
 
 ---
 
+## PI-005 — A missing appindicator library kills the app at startup
+
+**Severity:** High (blocks launch) · **Status:** Fixed · **Platform:** trigger is Linux/BSD; the mishandling was cross-platform
+
+Every check passed — `cargo build` clean, 102 tests green, `pnpm build` fine —
+and the app then exited immediately on launch with no window:
+
+```
+thread 'main' panicked at libappindicator-sys-0.9.0/src/lib.rs:41:5:
+Failed to load ayatana-appindicator3 or appindicator3 dynamic library
+```
+
+**Cause.** The tray is built during `setup`, and `libappindicator-sys` calls a
+bare `panic!` when it cannot load a library rather than returning an error. So
+`setup_tray(app.handle())?` never observed the failure — the `?` was dead code
+for it — and the process unwound out of `setup` before a window existed. The
+library was absent because the README's Arch package list predates the tray
+(v0.1.1) and never gained an appindicator entry; the Debian and Fedora lists
+already had theirs.
+
+**Why it was invisible.** The panic reaches stderr and nothing else. Launched
+from a `.desktop` entry — the normal way — there is no output anywhere, so the
+app simply fails to start with no explanation. This is the same failure shape
+`fatal_startup_error` was introduced to prevent for the database in v0.1.1; the
+tray call two lines below it kept the bare `?`.
+
+**Not just the panic, and not just Linux.** `libappindicator` is a dependency
+only on Linux and the BSDs, so that panic cannot happen on Windows or macOS.
+But on Windows `TrayIcon::new` returns `Err(Error::OsError(..))` when
+`Shell_NotifyIcon` fails (`tray-icon-0.24.2/src/platform_impl/windows/mod.rs:145`),
+and that `Err` took the same `?` → `.expect()` route out of `setup`. Uncommon
+there — it is the explorer.exe-restarting case — but the symptom is identical:
+no window, no message.
+
+**Fix** — `src-tauri/src/lib.rs`, plus `libayatana-appindicator` added to the
+README's Arch list:
+
+- `setup_tray_or_warn()` wraps the builder in `catch_unwind`, handling all three
+  outcomes (built, returned `Err`, panicked in the loader) and printing a message
+  that names the package to install. The panic's own text still reaches stderr
+  via the default hook.
+- A `TRAY_AVAILABLE` flag gates the `CloseRequested` handler.
+
+**Why the flag is the load-bearing half.** Closing the window hides it, because
+the tray is how you get back. Degrading to "no tray" without also changing that
+would be worse than the crash — the window would hide with nothing left to
+restore it. With the flag, no tray means closing genuinely quits.
+
+**Verified** on both paths by masking all four candidate libraries with bind
+mounts in an unprivileged user namespace, and driving the real close path with
+`hyprctl dispatch closewindow` (which delivers the same `xdg_toplevel` close as
+clicking the titlebar X):
+
+| | Close behaviour | Process | Tray |
+|---|---|---|---|
+| Library present | window hides | survives | registered on the SNI watcher |
+| Library masked | window closes | exits | none; warning printed |
+
+---
+
 ## Verification environment
 
 | | |
@@ -171,3 +236,7 @@ wording does.
 The GTK theme matters: `prefer-dark` is what puts the page into dark mode and
 exposes PI-001. On a light-themed desktop the app looks correct and the defect
 stays hidden.
+
+PI-005 was found on the same machine on 2026-09-04, by which point it ran kernel
+7.2.2, Node 26.8.1 / pnpm 11.21.0, and `libayatana-appindicator` 0.6.0-2 (absent
+until that pass — which is what exposed the defect).
