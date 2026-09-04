@@ -187,6 +187,12 @@ app simply fails to start with no explanation. This is the same failure shape
 `fatal_startup_error` was introduced to prevent for the database in v0.1.1; the
 tray call two lines below it kept the bare `?`.
 
+**Why CI did not catch it.** The Linux job installs
+`libayatana-appindicator3-dev`, so the library was always present there — and CI
+compiles and runs the tests but never launches the app. Neither half of the run
+could have reached this. A green CI on Linux says the target builds, not that the
+window appears.
+
 **Not just the panic, and not just Linux.** `libappindicator` is a dependency
 only on Linux and the BSDs, so that panic cannot happen on Windows or macOS.
 But on Windows `TrayIcon::new` returns `Err(Error::OsError(..))` when
