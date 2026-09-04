@@ -1,0 +1,85 @@
+#!/bin/sh
+#
+# Runs the same gates CI runs, before the commit exists — so a red build is
+# found on this machine instead of on a push.
+#
+#   Install:     git config core.hooksPath .githooks
+#   Skip once:   git commit --no-verify
+#   Skip always: git config --unset core.hooksPath
+#
+# The gates mirror .github/workflows/ci.yml exactly. If you change one, change
+# the other, or "it passed locally" stops meaning anything.
+#
+# Only the gates the staged files can affect are run, so a docs-only commit
+# costs nothing and there is no reason to reach for --no-verify out of habit.
+#
+# What this does NOT catch: whether the app actually starts. PI-005 compiled,
+# passed every test, and still exited before showing a window. Launching it is
+# still a manual step — see docs/KNOWN-ISSUES.md.
+
+set -e
+
+cd "$(git rev-parse --show-toplevel)"
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -n "$staged" ] || exit 0
+
+check_rust=0
+check_web=0
+
+while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  case "$file" in
+    *.rs | Cargo.toml | Cargo.lock | */Cargo.toml | rust-toolchain.toml | \
+    src-tauri/tauri.conf.json | src-tauri/capabilities/*)
+      check_rust=1
+      ;;
+    *.ts | *.js | *.svelte | *.css | *.html | package.json | pnpm-lock.yaml | \
+    svelte.config.js | vite.config.ts | tsconfig.json | vitest.config.ts)
+      check_web=1
+      ;;
+  esac
+done <<EOF
+$staged
+EOF
+
+if [ "$check_rust" -eq 0 ] && [ "$check_web" -eq 0 ]; then
+  exit 0
+fi
+
+failed=""
+
+run() {
+  label="$1"
+  shift
+  printf '  %-28s' "$label"
+  if output=$("$@" 2>&1); then
+    printf 'ok\n'
+  else
+    printf 'FAILED\n'
+    printf '%s\n' "$output" | sed 's/^/    /'
+    failed="$failed $label"
+  fi
+}
+
+printf 'pre-commit\n'
+
+if [ "$check_rust" -eq 1 ]; then
+  run "cargo fmt --check" cargo fmt --all --check
+  run "cargo clippy" cargo clippy --workspace --all-targets
+  run "cargo test" cargo test --workspace
+fi
+
+if [ "$check_web" -eq 1 ]; then
+  run "pnpm run check" pnpm run check
+  run "pnpm test" pnpm test
+  run "pnpm run build" pnpm run build
+fi
+
+if [ -n "$failed" ]; then
+  printf '\npre-commit: failed —%s\n' "$failed"
+  printf 'Fix it, or commit with --no-verify if you know why it is failing.\n'
+  exit 1
+fi
+
+exit 0
