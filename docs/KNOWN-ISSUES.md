@@ -5,9 +5,10 @@ _Written 2026-08-28 from a Linux build-and-run pass (`main` at `9761e80` plus
 post-refactor `main` (`5cf2275`). `PI-004`, an inaccurate comment on the NVIDIA
 workaround, was fixed and retired the same day._
 
-Four issues are tracked here from getting the Windows-developed app compiling
+Five issues are tracked here from getting the Windows-developed app compiling
 and running on Linux. They carry deliberately different dispositions: two were
-real defects, one is cosmetic log noise, and one is a linter false positive.
+real defects, one is cosmetic log noise, one is a linter false positive, and one
+is the host distribution's problem rather than the app's.
 
 | ID | Issue | Severity | Status |
 |----|-------|----------|--------|
@@ -15,6 +16,7 @@ real defects, one is cosmetic log noise, and one is a linter false positive.
 | PI-002 | Stale `filesystem.ts` 404 in dev log | Trivial — cosmetic | No action needed |
 | PI-003 | `state_referenced_locally` warnings ×8 | None — false positive | Not a defect |
 | PI-005 | Missing appindicator library kills startup | High — blocks launch | **Fixed** |
+| PI-006 | AppImage bundling fails on Arch | Low — local packaging only | Environmental |
 
 Nothing here blocks the Linux *build* — `cargo check`, `cargo test`, `pnpm build`
 and `pnpm tauri build` all complete cleanly. PI-005 blocked the Linux *run* until
@@ -201,6 +203,41 @@ clicking the titlebar X):
 |---|---|---|---|
 | Library present | window hides | survives | registered on the SNI watcher |
 | Library masked | window closes | exits | none; warning printed |
+
+---
+
+## PI-006 — `tauri build` cannot produce an AppImage on Arch
+
+**Severity:** Low (local packaging only) · **Status:** Environmental, no fix planned · **Platform:** Arch and other rolling distributions
+
+`pnpm run tauri build` exits 1 with `failed to run linuxdeploy` after having
+already produced a working binary, `.deb` and `.rpm`. The AppImage target is the
+only thing that fails, and nothing in this project causes it.
+
+Two separate incompatibilities, in order:
+
+1. **`strip` is too old for the host's libraries.** linuxdeploy ships its own
+   binutils, which does not understand `SHT_RELR` (`unknown type [0x13] section
+   '.relr.dyn'`) — a section modern Arch libraries are built with. It fails on
+   nearly every system library it copies in. `NO_STRIP=1` skips stripping and
+   clears this one.
+2. **The GTK plugin assumes gdk-pixbuf loader modules exist on disk.** It runs
+   `cp` on the `gdk_pixbuf_binarydir` that `pkg-config` reports —
+   `/usr/lib/gdk-pixbuf-2.0/2.10.0` — which **does not exist** on Arch's
+   `gdk-pixbuf2 2.44.7`, because the loaders are built into the library now.
+   `cp: cannot stat …: No such file or directory`, and the plugin aborts.
+
+**Why this is not worth fixing here.** An AppImage built on Arch links against a
+glibc newer than its intended audience, so it would not run on the older
+distributions AppImages exist to serve. The release workflow builds it on
+`ubuntu-22.04`, where both problems are absent — **published AppImages are
+unaffected**, and this only ever bites someone running the full bundle locally.
+
+**If you need one locally anyway:** build `--bundles deb,rpm` and let CI produce
+the AppImage, or run the bundle in an `ubuntu-22.04` container. Creating the
+missing directory (`sudo mkdir -p /usr/lib/gdk-pixbuf-2.0/2.10.0`) alongside
+`NO_STRIP=1` would likely satisfy both, but it puts an unowned directory in
+`/usr/lib` and has not been tested here.
 
 ---
 
