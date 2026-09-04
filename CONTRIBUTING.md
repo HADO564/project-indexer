@@ -70,6 +70,11 @@ need to, and `git config --unset core.hooksPath` removes it entirely. If you
 change the gates in `.github/workflows/ci.yml`, change `.githooks/pre-commit`
 too, or "it passed locally" stops meaning anything.
 
+When you change the build, CI, the gates or packaging, record it in
+[`docs/CHANGELOG-infra.md`](docs/CHANGELOG-infra.md) — the contributor-facing
+companion to the root changelog. The rule is which reader is affected: someone
+running the app, or someone working on the repository.
+
 Two known-noise baselines, so you can tell your output from the existing state:
 
 - **clippy** has one standing warning, `module has the same name as its

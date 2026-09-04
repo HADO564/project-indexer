@@ -4,6 +4,10 @@ All notable changes to Project Indexer are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+This file records what changed for people **using** the app. Changes to how the
+project is built, tested and worked on live in
+[`docs/CHANGELOG-infra.md`](docs/CHANGELOG-infra.md).
+
 ## [Unreleased]
 
 ### Added
@@ -15,9 +19,6 @@ All notable changes to Project Indexer are documented here. The format follows
   with the browser enforcing the intersection. Nothing may be fetched from the
   network, `object-src` and `form-action` are off, and only the IPC bridge is
   reachable over `connect-src`.
-- **A pre-commit hook** at `.githooks/pre-commit`, installed with
-  `git config core.hooksPath .githooks`. It mirrors the CI gates exactly and runs
-  only the ones the staged files can affect.
 
 ### Changed
 
@@ -63,10 +64,6 @@ All notable changes to Project Indexer are documented here. The format follows
 - A handoff for the plugin initiative, `docs/handoffs/2026-09-04-plugins.md`,
   covering both kinds of plugin, how the trust story sorts by kind, ten open design
   decisions, and the state of the tree as of 2026-09-04.
-- `PI-006` records that `tauri build` cannot produce an AppImage on Arch — two
-  unrelated incompatibilities in linuxdeploy and its GTK plugin, neither caused by
-  this project. The binary, `.deb` and `.rpm` all build; published AppImages come
-  from CI's `ubuntu-22.04` runner and are unaffected.
 - The observer-CLI handoff has been brought current: the Linux target has now
   been run rather than merely compiled, the clippy baseline is one warning rather
   than two, test counts are given per platform, and the commit trailer is
