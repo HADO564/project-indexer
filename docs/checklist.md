@@ -116,6 +116,9 @@ difference either way is platform-gated tests (11 `#[cfg(unix/linux)]`, the rest
 - [ ] Global shortcut — plugin is registered but no shortcut is bound to any action
 - [ ] **Spec 2 — observer CLI.** Fill in `crates/cli`: `indexer <cmd>` wraps a real command, matches argv+cwd+exit against recognizers, records project facts through `ProjectService`. Plain subcommands too.
 - [ ] **Updater fast-follows** (see `architecture.md` "Cross-app & updates"): `tauri-plugin-updater` wiring + `core::updates::latest_stable`, a dismissible GUI release-notification chip, CLI `self-update` + stderr hint, GUI on-demand minisign-verified CLI download, tag→signed-bundle→GitHub-Release CI.
+- [ ] **Plain CLI subcommands** — `indexer list` / `show` / `add` / `open` / `untrack` over the existing `ProjectService` methods. Separable from the observer; the open question is the output contract (`--json` is a compatibility promise).
+- [ ] **Backend plugins** — a detector discovered at runtime instead of compiled into `default_detectors()`. Blocked on two `core::domain` changes: `Tracker` is a closed enum a plugin can't add a variant to, and `Detector::kind()` returns `&'static str`. See `ROADMAP.md`.
+- [ ] **Frontend plugins** — purpose-built panels, per-kind actions, and non-tracker views. Gated on backend plugins (nothing external to render until then), and on a real CSP — `tauri.conf.json` currently has `"csp": null`.
 - [ ] `detect_project_trackers` command / `detectProjectTrackers` in `src/lib/api/projects.ts` — no frontend callers since Task 8 (name pre-fill moved to `suggest_project_name`). Kept deliberately: the command is still registered for a future CLI preview / Spec 2. Remove the JS wrapper if it's still unused when the API surface is next revised.
 
 Non-feature work (testing, platform seams, tech debt, PI-004, lockfiles) lives in `architecture.md`.
