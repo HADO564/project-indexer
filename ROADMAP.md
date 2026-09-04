@@ -20,9 +20,12 @@ without touching the backend.
 Windows and Linux are both built and tested in CI. macOS builds in the release
 workflow but is not yet functionally complete (see below).
 
-## Next — the observer CLI
+## Next — the `indexer` command-line tool
 
-The single largest planned piece, and the one the last refactor was for.
+The single largest planned piece, and the one the last refactor was for. It has
+two halves, and only the first is designed in detail.
+
+### Observing
 
 `indexer git init` runs the real `git init`, untouched, propagates its exit code,
 and *notices* what happened — then records the project through the same
@@ -43,6 +46,22 @@ ship alongside the observer or after it.
 The full briefing, including the open questions, is in
 [`docs/handoffs/2026-09-04-observer-cli.md`](docs/handoffs/2026-09-04-observer-cli.md).
 
+### Plain subcommands
+
+The unglamorous half: `indexer list`, `show`, `add`, `open`, `untrack`. Each maps
+almost one-to-one onto a `ProjectService` method that already exists, so these
+are cheap — the work is argument parsing and output formatting, not behaviour.
+
+Two things are genuinely undecided. Whether they ship with the observer or after
+it, since they are separable; and what the output contract is — human-readable
+tables are the obvious default, but anything meant to be piped needs a stable
+`--json` form, and that is a compatibility promise worth making deliberately
+rather than by accident.
+
+`indexer list` printing real rows from the shared database is the suggested first
+vertical slice for the whole initiative. It proves the premise — same database,
+no backend changes — in about twenty lines.
+
 ## More detectors
 
 Detection is designed so a new tracker costs no frontend code: implement the
@@ -58,6 +77,77 @@ generically. See [`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-detector).
 
 Placeholder tracker variants without a detector behind them were removed once and
 will not come back — a type is added together with the code that produces it.
+
+## Backend plugins — detectors without a fork
+
+Today, adding a detector means editing `default_detectors()` and shipping a new
+binary. That is the right trade for the first few, and the wrong one once people
+want trackers for tools nobody here uses. The goal is a detector that lives
+outside this repository and is discovered at runtime.
+
+**The seam already exists.** `Detector` is a two-method trait — `kind()` and
+`detect(&Path) -> Result<Option<Tracker>, DetectorError>` — and detectors are
+independent and unordered by design, so there is no registration order or
+priority to negotiate. What is missing is a way to express a detector that was
+not compiled in.
+
+Two concrete blockers, both in `core::domain`:
+
+- **`Tracker` is a closed enum** (`Git(GitInfo)`, `Unreal(UnrealInfo)`). A plugin
+  cannot add a variant. It needs an open representation — something like
+  `Tracker::External { kind, fields }` carrying named values rather than a Rust
+  type. The frontend is *already* ready for this: `trackerFields()` infers field
+  types from key names and value shapes, so a tracker it has never seen renders
+  correctly with no new UI code.
+- **`kind()` returns `&'static str`**, which a runtime-loaded detector cannot
+  satisfy without leaking. It becomes an owned string, or the plugin's identity
+  is carried separately from the trait.
+
+On *how* plugins load, three options, in increasing cost:
+
+1. **Subprocess protocol.** A plugin is an executable that takes a path and
+   returns JSON on stdout. This maps onto `detect()` almost exactly, needs no ABI
+   agreement, works with plugins written in any language, and is trivially
+   sandboxable later. Cheapest, and the recommended starting point.
+2. **WASM components.** Sandboxed and version-tolerant, with filesystem access
+   granted explicitly through WASI preopens. The right answer *if* untrusted
+   plugins become a real scenario.
+3. **Dynamic libraries.** Rust has no stable ABI, so this means a C ABI and a
+   version-lock between plugin and host. The most fragile option; listed to be
+   ruled out rather than rediscovered.
+
+**Trust is the hard part, not the mechanism.** A detector runs against arbitrary
+directories the user points the app at, so a third-party detector is arbitrary
+code execution by another name. Whatever ships needs an explicit answer on where
+plugins may come from and what they may touch — see
+[`SECURITY.md`](SECURITY.md).
+
+## Frontend plugins — custom tracker panels and views
+
+The lower-priority of the two plugin stories, precisely because the generic
+renderer already does most of the job.
+
+A tracker the UI has never heard of already renders: fields are typed by
+inference (`https://` becomes a link, `git@` becomes copyable text rather than a
+broken link, `*_root` and `*_path` get open and reveal buttons, arrays become
+chips), and `trackerColor(kind)` assigns a contrast-safe hue from a hash of the
+name. So the *fallback* is good. Frontend plugins are about the cases where good
+is not enough:
+
+- A tracker whose data deserves a purpose-built panel rather than a field list —
+  a commit graph, a dependency tree, a scene hierarchy.
+- Actions specific to one tracker kind, beyond open/reveal/copy.
+- Views that are not per-tracker at all: a dashboard, a different grouping of the
+  project list.
+
+This is gated on backend plugins. Until a tracker can come from outside the
+binary, a frontend plugin has nothing of its own to render.
+
+The constraint to design against is that this is a Tauri webview, and third-party
+JavaScript inside it can reach `invoke`. `tauri.conf.json` currently sets
+`"csp": null`, which is fine for a frontend shipped entirely in the bundle and
+not fine the moment any of it comes from elsewhere. A real content-security
+policy is a prerequisite, not a polish item.
 
 ## Platform completeness
 
