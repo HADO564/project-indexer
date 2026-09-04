@@ -57,6 +57,10 @@ All notable changes to Project Indexer are documented here. The format follows
   the existing backend, or a UI plugin paired with a Rust detector), records the
   trust boundary each shape has, declines a runtime loader for native plugins,
   and settles the CLI's `--json` compatibility contract.
+- `PI-006` records that `tauri build` cannot produce an AppImage on Arch — two
+  unrelated incompatibilities in linuxdeploy and its GTK plugin, neither caused by
+  this project. The binary, `.deb` and `.rpm` all build; published AppImages come
+  from CI's `ubuntu-22.04` runner and are unaffected.
 - The observer-CLI handoff has been brought current: the Linux target has now
   been run rather than merely compiled, the clippy baseline is one warning rather
   than two, test counts are given per platform, and the commit trailer is
