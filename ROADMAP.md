@@ -52,15 +52,36 @@ The unglamorous half: `indexer list`, `show`, `add`, `open`, `untrack`. Each map
 almost one-to-one onto a `ProjectService` method that already exists, so these
 are cheap — the work is argument parsing and output formatting, not behaviour.
 
-Two things are genuinely undecided. Whether they ship with the observer or after
-it, since they are separable; and what the output contract is — human-readable
-tables are the obvious default, but anything meant to be piped needs a stable
-`--json` form, and that is a compatibility promise worth making deliberately
-rather than by accident.
+One thing is genuinely undecided: whether they ship with the observer or after
+it, since they are separable.
 
 `indexer list` printing real rows from the shared database is the suggested first
 vertical slice for the whole initiative. It proves the premise — same database,
 no backend changes — in about twenty lines.
+
+#### The `--json` contract
+
+Human-readable tables are the default. `--json` is a different thing: the moment
+it exists, other people's scripts depend on its shape, so it is settled here
+rather than by accident at the keyboard.
+
+- **A versioned envelope.** Every response is `{"schema": 1, "data": …}`. One
+  integer, bumped only for a change that breaks a reader.
+- **Additive-only within a version.** New fields may appear at any time and
+  consumers must ignore ones they do not recognise. Nothing is removed or
+  retyped without bumping `schema`.
+- **An unknown tracker serialises; it does not fail.** `Tracker` is a closed enum
+  today (`Git`, `Unreal`) and every new project type widens it. A reader written
+  against `schema: 1` has to keep working when a kind it has never heard of turns
+  up — so `kind` is a string and the payload is a map, which is exactly the shape
+  the UI's generic renderer already consumes. This matters more once trackers can
+  come from [plugins](#plugins).
+- **stdout is data, stderr is prose.** Under `--json`, stdout carries the
+  document and nothing else, so `indexer list --json | jq` needs no filtering.
+  Errors go to stderr and the exit code — never into stdout as an error object.
+
+The cost is one wrapper struct and a documented rule. The cost of skipping it is
+a breaking change the first time somebody adds a project type.
 
 ## More project types
 
@@ -71,9 +92,9 @@ generically. See [`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-detector).
 - **Unity** — the next detector, and the one the generic path was built for.
 - **Blender** — same shape.
 
-Version-control systems beyond git are their own section
-([below](#other-version-control-systems)); this one is about what *kind of
-project* a directory holds.
+Version-control systems beyond git are deliberately not first-party work — they
+belong to [Plugins](#plugins). This section is about what *kind of project* a
+directory holds.
 
 Placeholder tracker variants without a detector behind them were removed once and
 will not come back — a type is added together with the code that produces it.
@@ -104,29 +125,6 @@ Everything above the last item is a refs-and-config read, which is why it can
 land without waiting for anything. Contributors is the one that forces the
 fast-versus-deep detection split described under [Deferred](#deferred--gated-on-a-trigger-not-a-date),
 and it should stay behind it.
-
-## Other version-control systems
-
-Git is not the only thing worth recognising: **Mercurial**, **Subversion**,
-**Jujutsu**, **Perforce**, **Fossil**.
-
-Two things make this less work than it looks. Detectors are independent and
-unordered by design, so a Jujutsu repository colocated with a git one correctly
-reports *both* — no precedence rule to invent. And the UI needs no changes at
-all: an unrecognised tracker already renders from its field names and shapes.
-
-**Perforce is the interesting one**, because a hook already exists. The Unreal
-detector reads the configured source-control provider out of
-`SourceControlSettings.ini`, so Unreal projects frequently already tell us they
-are on Perforce — the tracker would complete a picture that is half-drawn today.
-
-The real design decision is *how* to read them. Git support uses `git2`
-(libgit2), so nothing is shelled out. The others have no comparable Rust library,
-which leaves two options with different failure modes: read the on-disk metadata
-directly (`.svn/wc.db` is SQLite, `.hg/dirstate` is parseable) and get basic
-facts with no external dependency, or invoke the tool and get everything but
-inherit "is it installed", PATH resolution, and output parsing. Worth deciding
-once, deliberately, rather than per detector.
 
 ## Scanning a folder for projects
 
@@ -163,32 +161,89 @@ cheap, running full detection on every directory is not. Detection should be
 gated behind a cheap marker test — does a `.git` or `.uproject` even exist here —
 which is the fast-versus-deep split again, arriving from a second direction.
 
-## Frontend plugins — custom tracker panels and views
+## Plugins
 
-The lower-priority of the two plugin stories, precisely because the generic
-renderer already does most of the job.
+The extension mechanism, and the answer to "who adds the next twenty project
+types?" — which should not be us. Two shapes, and the second is much harder than
+the first.
 
-A tracker the UI has never heard of already renders: fields are typed by
-inference (`https://` becomes a link, `git@` becomes copyable text rather than a
-broken link, `*_root` and `*_path` get open and reveal buttons, arrays become
-chips), and `trackerColor(kind)` assigns a contrast-safe hue from a hash of the
-name. So the *fallback* is good. Frontend plugins are about the cases where good
-is not enough:
+### Shape one — a UI plugin over the existing backend
 
-- A tracker whose data deserves a purpose-built panel rather than a field list —
-  a commit graph, a dependency tree, a scene hierarchy.
-- Actions specific to one tracker kind, beyond open/reveal/copy.
-- Views that are not per-tracker at all: a dashboard, a different grouping of the
-  project list.
+A panel or a view written against data the backend already produces. Nothing new
+is detected; something already detected is shown *better*.
 
-This is the lowest-priority item on this page, and deliberately so: every
-tracker the backend can produce already renders acceptably without it.
+The generic renderer sets a decent floor here already. A tracker the UI has never
+heard of renders today: fields are typed by inference (`https://` becomes a link,
+`git@` becomes copyable text rather than a broken link, `*_root` and `*_path` get
+open and reveal buttons, arrays become chips), and `trackerColor(kind)` assigns a
+contrast-safe hue from a hash of the name. A UI plugin is for where that floor is
+not enough — a commit graph instead of a field list, a scene hierarchy, a
+dependency tree — or for views that are not per-tracker at all: a dashboard, a
+different grouping of the project list.
 
-The constraint to design against is that this is a Tauri webview, and third-party
-JavaScript inside it can reach `invoke`. `tauri.conf.json` currently sets
-`"csp": null`, which is fine for a frontend shipped entirely in the bundle and
-not fine the moment any of it comes from elsewhere. A real content-security
-policy is a prerequisite, not a polish item.
+### Shape two — a UI plugin and a Rust plugin shipped in tandem
+
+For anything the backend cannot already see. A Jujutsu plugin is the clean
+example: a `Detector` that reads `.jj`, plus a panel that renders what it found.
+The halves ship together because neither is much use alone.
+
+The backend half has a natural seam already — `Detector` is a two-method trait
+and `default_detectors()` is the registry it plugs into — but a seam is not a
+plugin API. The open question is what *installing* a Rust plugin means, and the
+honest answer is that it is a distribution problem before it is a technical one.
+See [Trust](#trust--settle-this-before-the-api).
+
+### Version control beyond git is a plugin, not a roadmap item
+
+Git is first-party and stays that way. **Mercurial, Subversion, Jujutsu,
+Perforce, Fossil** are deliberately *not* first-party work. Shipping and
+maintaining detectors for version-control systems most users do not have is a
+poor use of the project's time, and the people who need them are far better
+placed to write them.
+
+Two facts make that a reasonable thing to ask of a contributor rather than a
+brush-off. Detectors are independent and unordered by design, so a Jujutsu
+repository colocated with a git one correctly reports *both* — there is no
+precedence rule to invent. And the UI needs no changes at all, because an
+unrecognised tracker already renders from its field names and shapes. A
+backend-only plugin is a complete, useful contribution on its own.
+
+**Perforce is the likely first one**, because a hook already exists: the Unreal
+detector reads the configured source-control provider out of
+`SourceControlSettings.ini`, so Unreal projects frequently already tell us they
+are on Perforce.
+
+### Trust — settle this before the API
+
+Both shapes run somebody else's code, and they have completely different
+containment stories. This is the part to get right before any of it ships.
+
+**A UI plugin can be contained, if the work is done.** The frontend is a webview,
+and Tauri exposes `invoke` to everything running inside it. `invoke` reaches
+`delete_project_directory` and the application launcher. There is no per-script
+permission within a webview — a plugin has exactly the powers the app has. Three
+layers, in increasing order of effort:
+
+1. **A content security policy** stops a plugin fetching more code or phoning
+   home. It does not stop it calling `invoke`. Necessary but not sufficient —
+   and now in place, in `svelte.config.js` and `tauri.conf.json`.
+2. **Capability scoping.** Tauri 2 can restrict which commands a given window may
+   call. Running plugins in their own webview with a reduced capability set is
+   the first real boundary.
+3. **No `invoke` for plugins at all.** Plugins get a narrow host API —
+   `host.tracker()`, `host.reveal(path)` — and never touch the command bridge.
+   The most work, and the only version that is actually safe rather than merely
+   inconvenient to abuse.
+
+**A Rust plugin cannot be contained.** Native code loaded into the process has
+the user's full privileges: no CSP, no capability list, no sandbox, and nothing
+in Tauri changes that. That has one concrete consequence, recorded under
+[Considered and declined](#considered-and-declined): a runtime loader that picks
+up `.so`/`.dll` files from a folder should not be built. The realistic model is
+source distribution — a plugin is a crate, the user adds it and rebuilds, and
+trust is established the way it is for every other dependency. Slower to install,
+and the only version that does not hand every plugin author arbitrary code
+execution on every user's machine.
 
 ## Platform completeness
 
@@ -248,6 +303,12 @@ for each is in [`docs/architecture.md`](docs/architecture.md).
   detectors genuinely need to coordinate.
 - **Encrypting `projects.db`.** It holds paths and labels, not credentials, and
   being readable by other local tools is a deliberate contract, not an oversight.
+- **A runtime loader for native plugins.** Dropping a `.so` or `.dll` into a
+  plugins folder and having the app load it at startup. Native code in-process
+  has the user's full privileges and cannot be sandboxed, so this would hand
+  every plugin author arbitrary code execution on every user's machine in
+  exchange for a nicer install step. Rust plugins are distributed as source and
+  compiled in; see [Plugins → Trust](#trust--settle-this-before-the-api).
 
 ## Related work
 

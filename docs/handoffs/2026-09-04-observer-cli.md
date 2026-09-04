@@ -1,6 +1,7 @@
 # Handoff — the observer CLI (Spec 2)
 
 **Date:** 2026-09-04
+**Updated:** 2026-09-04, after the first Linux run of the post-refactor `main`.
 **Status:** ready to start. Nothing is blocked; the backend seams exist.
 **Prerequisite:** the frontend-agnostic-core refactor, shipped in v0.1.1.
 
@@ -45,8 +46,14 @@ backend to add this CLI.** If you find yourself modifying `ProjectService` for
 reasons other than genuinely new behaviour, stop and question it — that would
 mean the boundary was drawn wrong, which is worth knowing.
 
-**Health at handoff:** `main` green on Windows + Linux in CI, 94 Rust tests, 14
-frontend tests, clippy at a known 2-warning baseline, `cargo fmt` clean.
+**Health at handoff:** `main` green on Windows + Linux in CI, 14 frontend tests,
+`cargo fmt` clean. 105 Rust tests are written; **102 run on Linux and 94 on
+Windows**, the difference being platform-gated tests — quote the number for the
+platform you are on. Clippy sits at a **one-warning** baseline
+(`module-inception`).
+
+The app has now been built *and run* on Linux — see §7a, which has changed
+meaning since this was first written.
 
 ## 3. The backend you're building on
 
@@ -160,7 +167,10 @@ Nothing below was decided. Do not treat the examples in §1 as settled scope.
    any project is called `api`. Does the CLI disambiguate (`api-2`, a
    parent-qualified name), surface the conflict, or register with a fallback
    name? This is documented as the CLI's decision in `ensure_project`'s doc
-   comment.
+   comment. **Not only the CLI's problem any more:** scanning a folder for
+   projects (`ROADMAP.md`) hits the identical case — point it at a directory of
+   forty repos and `client/app` and `internal/app` both want to be "app". Solve
+   it once, for both.
 
 5. **Are plain subcommands in v1?** `indexer list` / `show` / `add` / `open` are
    straightforward over the service, but they are separate work from the
@@ -175,7 +185,11 @@ Nothing below was decided. Do not treat the examples in §1 as settled scope.
    not a requirement. Would need DB-file watching.
 
 8. **Output conventions.** Exit-code passthrough is settled (the wrapped
-   command's code wins). Still open: what the observer prints (nothing? a
+   command's code wins). **The `--json` contract is now settled too** — versioned
+   envelope, additive-only within a version, unknown tracker kinds serialise
+   rather than fail, stdout is data and stderr is prose. It is written up in
+   `ROADMAP.md` under "The `--json` contract"; follow it rather than reinventing
+   it. Still open: what the observer prints on the human path (nothing? a
    one-line note to stderr?), `--quiet`, and whether recording failures are
    surfaced or silent.
 
@@ -190,42 +204,52 @@ Nothing below was decided. Do not treat the examples in §1 as settled scope.
   `package-lock.json`; `packageManager` is pinned in `package.json`.
 - **Windows:** the linker cannot overwrite `project-indexer.exe` while it runs.
   Kill the app before `cargo build`.
-- **Linux is a supported target** and CI compiles it on every push. The
-  `#[cfg(target_os = "linux")]` app-discovery code is ~450 lines and only CI
-  proves it builds — don't assume a Windows-only green run means anything for it.
-- **Clippy baseline is 2 warnings** (`module-inception`, one `sort_by_key`).
-  Anything beyond that is new and yours.
-- **Commit trailer:** every commit ends with
-  `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+- **Linux is a supported target**, and as of 2026-09-04 it has been built and
+  run, not just compiled in CI. See §7a.
+- **Clippy baseline is 1 warning** (`module-inception`). Anything beyond that is
+  new and yours.
+- **A pre-commit hook runs the CI gates**, and is worth installing before you
+  start: `git config core.hooksPath .githooks`. It runs only the gates your
+  staged files can affect, and mirrors `.github/workflows/ci.yml` exactly.
+- **Commit trailer:** every commit ends with a `Co-Authored-By:` line naming the
+  model that did the work — this document says Sonnet 5 because Sonnet 5 wrote
+  it; commits from 2026-09-04 onward say Opus 5. Name whichever model you are,
+  rather than copying the line above.
 - **`crates/cli` is at version 0.1.1** with the workspace but has no deps yet.
 
 ## 7a. If you're picking this up on Linux
 
-Worth knowing before you start, because it changes what "green" means.
+**This section used to say "nobody has run this build on Linux." That is no
+longer true**, and what it turned up is the reason to read on.
 
-**Nobody has run this build on Linux.** The last actual Linux build-and-run pass
-was 2026-08-28 against `main` at `9761e80` — before the core refactor, before the
-SQLite swap, and before the tray. Since then CI proves the Linux target
-*compiles* and that the tests pass, which is real but is not the same as anyone
-having launched the window. The first Linux run of the current `main` is
-effectively an untested path.
+On 2026-09-04 the post-refactor `main` was built and run on Arch for the first
+time. Everything compiled, every test passed, and **the app exited before showing
+a window** — `libappindicator-sys` calls a bare `panic!` when no appindicator
+library is present, so the tray failure never became a `Result` the setup code
+could handle. That is `PI-005`, fixed in `567934f`.
 
-Specifically worth sanity-checking on first launch, before starting CLI work:
+The lesson is more useful than the bug: for this app, **"CI is green" and "it
+starts" are separate claims**. CI installs `libayatana-appindicator3-dev` and
+never launches the binary, so it cannot catch this class at all. The pre-commit
+hook in §7 does not catch it either. Launching the thing is still a manual step.
+
+Already checked on Linux, so you can skip re-verifying them:
 
 - **The "open with" picker lists your apps.** `platform::app_discovery`'s
-  `.desktop` scanning is ~450 lines that only CI has compiled. It should show
-  what your launcher shows, Flatpak and Snap included.
-- **Opening a project actually launches the app.** `open_with_command` splits the
-  stored `Exec` line and substitutes the directory into the `%f`/`%u`
-  placeholder — the wrapper-entry handling (Flatpak's file-forwarding markers)
-  is the fiddly part.
-- **The tray icon appears and its menu works.** The tray shipped in v0.1.1 and
-  has only been exercised on Windows. On Linux it needs an appindicator
-  implementation present; the README's Arch package list predates the tray, so
-  it may be short one package (Tauri's Linux prerequisites cover this — install
-  whatever your distro provides for appindicator if the tray doesn't show).
-- **The NVIDIA workaround**, if you're on the proprietary driver. It's automatic;
-  see the README section.
+  `.desktop` scanning found 79 installed applications, Flatpak file-forwarding
+  markers intact.
+- **Opening a project actually launches the app.** `open_with_command`'s `Exec`
+  splitting and `%f`/`%u` substitution work, wrapper entries included.
+- **The tray icon appears and its menu works** — with an appindicator library
+  installed. Without one the app now starts anyway, prints what to install, and
+  closing the window quits rather than hiding to a tray that isn't there.
+- **The NVIDIA workaround** engages correctly, including on the *open* kernel
+  module, which is deliberate: the open module still uses the proprietary
+  userspace GL stack with the GBM failure.
+
+Still unverified on Linux, and worth a look if you touch them: the sort dropdown
+(`PI-001` was a Linux-only rendering bug once already) and anything involving
+long-running background behaviour.
 
 **Your projects will not be there.** The database is per-machine, at
 `~/.config/com.shaer.project-indexer/projects.db`. The Windows install's
