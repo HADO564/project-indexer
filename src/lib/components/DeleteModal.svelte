@@ -1,7 +1,7 @@
 <script lang="ts">
   import { deleteProjectDirectory, untrackProject } from "$lib/api/projects";
   import type { Project } from "$lib/api/types";
-  import { buttonClass, dangerButtonClass } from "./styles";
+  import { buttonClass, dangerButtonClass, primaryButtonClass } from "./styles";
 
   let {
     project,
@@ -16,7 +16,10 @@
   } = $props();
 
   type Mode = "disk" | "untrack";
-  let mode = $state<Mode>("disk");
+  // Defaults to the non-destructive mode: opening this dialog and hitting
+  // Delete removes the entry and leaves the folder on disk. Deleting the
+  // directory is a deliberate second choice, never the one already selected.
+  let mode = $state<Mode>("untrack");
 
   // Unchecked by default: deleting always removes the directory, but keeps
   // the tracked metadata around (soft-deleted, recoverable from the bin)
@@ -74,24 +77,24 @@
         <input
           type="radio"
           name="delete-mode"
-          value="disk"
-          bind:group={mode}
-          class="mt-0.5"
-        />
-        <span>
-          Delete <code class="break-all">{project.directory}</code> from disk (cannot be undone)
-        </span>
-      </label>
-      <label class="flex items-start gap-2 text-sm text-phos-dim">
-        <input
-          type="radio"
-          name="delete-mode"
           value="untrack"
           bind:group={mode}
           class="mt-0.5"
         />
         <span>
           Just remove it from this app — keep the folder on disk untouched
+        </span>
+      </label>
+      <label class="flex items-start gap-2 text-sm text-phos-dim">
+        <input
+          type="radio"
+          name="delete-mode"
+          value="disk"
+          bind:group={mode}
+          class="mt-0.5"
+        />
+        <span>
+          Delete <code class="break-all">{project.directory}</code> from disk (cannot be undone)
         </span>
       </label>
     </div>
@@ -111,8 +114,19 @@
     {/if}
 
     <div class="flex gap-2">
-      <button type="button" onclick={handleConfirm} disabled={deleting} class={dangerButtonClass}>
-        {deleting ? "Deleting…" : "Delete"}
+      <!-- The button says what it will actually do, and only wears the
+           destructive styling when the destructive mode is selected. -->
+      <button
+        type="button"
+        onclick={handleConfirm}
+        disabled={deleting}
+        class={mode === "disk" ? dangerButtonClass : primaryButtonClass}
+      >
+        {#if deleting}
+          {mode === "disk" ? "Deleting…" : "Removing…"}
+        {:else}
+          {mode === "disk" ? "Delete from disk" : "Remove"}
+        {/if}
       </button>
       <button type="button" onclick={onCancel} disabled={deleting} class={buttonClass}>
         Cancel
