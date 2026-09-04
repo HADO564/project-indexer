@@ -290,3 +290,39 @@ the project given the scaffolding a published release needs.
   `package.json` since the start, but the file was missing), `CONTRIBUTING.md`,
   `CODE_OF_CONDUCT.md`, `SECURITY.md`, `ROADMAP.md`, `docs/USAGE.md`, and GitHub
   issue / pull-request templates.
+
+- **Hardened and decided, in the same pass.** The `"csp": null` that had been
+  sitting in `tauri.conf.json` since the first commit is now a real policy.
+  SvelteKit owns the strict half because the inline boot script's hash changes
+  every build and `mode: "hash"` recomputes it; Tauri carries a complementary
+  policy and the browser enforces the intersection. Verified by running the
+  release binary, not by reading the config: the window rendered, VT323 loaded
+  under `font-src 'self'`, and the project list populated — which only happens if
+  an `invoke` round-trip completed, so the IPC bridge survives `connect-src`.
+
+  The delete dialog stopped defaulting to the destructive choice. It now opens on
+  "just remove it from this app", that option is listed first, and the confirm
+  button names the action it will take rather than always saying "Delete".
+
+  `PI-004` was fixed and retired: the NVIDIA workaround's comment described a
+  narrower trigger than the code has, since the *open* kernel module creates the
+  same probe paths — deliberately caught, because it still pairs with the
+  proprietary userspace GL stack.
+
+- **A pre-commit hook** (`.githooks/pre-commit`, opt in with
+  `git config core.hooksPath .githooks`) mirroring the CI gates, running only the
+  ones the staged files can affect. It closes the "forgot to run the checks" gap
+  but explicitly not the PI-005 gap — neither it nor CI launches the app, and
+  that distinction is now written into `CONTRIBUTING.md` and the handoff rather
+  than being something you had to discover.
+
+- **The roadmap took its real shape.** Version control beyond git is plugin
+  territory, not first-party work. Plugins are two shapes — a UI plugin over data
+  the backend already produces, or a UI plugin paired with a Rust `Detector` for
+  anything it cannot yet see — and each has its own containment story: a UI
+  plugin can be sandboxed with capability scoping and a host API that replaces
+  raw `invoke`, while native code in-process cannot be sandboxed at all, so a
+  runtime `.so`/`.dll` loader is declined outright in favour of source
+  distribution. The CLI's `--json` contract is settled ahead of the code:
+  versioned envelope, additive-only within a version, unknown tracker kinds
+  serialise instead of failing, stdout is data and stderr is prose.

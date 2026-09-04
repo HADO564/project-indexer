@@ -6,6 +6,26 @@ All notable changes to Project Indexer are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A content security policy.** The app shipped with `"csp": null`, which was
+  survivable only because every script, font and icon is bundled. There is now a
+  real policy: SvelteKit emits the strict half (its inline boot script is hashed
+  automatically on each build) and `tauri.conf.json` carries a complementary one,
+  with the browser enforcing the intersection. Nothing may be fetched from the
+  network, `object-src` and `form-action` are off, and only the IPC bridge is
+  reachable over `connect-src`.
+- **A pre-commit hook** at `.githooks/pre-commit`, installed with
+  `git config core.hooksPath .githooks`. It mirrors the CI gates exactly and runs
+  only the ones the staged files can affect.
+
+### Changed
+
+- **The delete dialog no longer pre-selects deleting the folder from disk.** It
+  now opens on "just remove it from this app", the destructive option is second
+  rather than first, and the confirm button says which of the two it will do
+  instead of always reading "Delete".
+
 ### Fixed
 
 - **A tray-icon failure stopped the app from starting at all, with no window and
@@ -28,6 +48,19 @@ All notable changes to Project Indexer are documented here. The format follows
 - Noted that the app must be run via `tauri dev` or `tauri build` — a plain
   `cargo build` produces a binary that expects the Vite dev server and reports
   "Connection refused" when launched on its own.
+- `PI-004` is fixed and retired from the known-issues log: the NVIDIA workaround's
+  comment claimed both probe paths came from the proprietary kernel module, when
+  the open module creates them too — which is the intended behaviour, since the
+  open module still uses the userspace GL stack with the GBM failure.
+- The roadmap now treats version-control systems beyond git as plugin territory
+  rather than first-party work, describes plugins as two shapes (a UI plugin over
+  the existing backend, or a UI plugin paired with a Rust detector), records the
+  trust boundary each shape has, declines a runtime loader for native plugins,
+  and settles the CLI's `--json` compatibility contract.
+- The observer-CLI handoff has been brought current: the Linux target has now
+  been run rather than merely compiled, the clippy baseline is one warning rather
+  than two, test counts are given per platform, and the commit trailer is
+  described by rule instead of naming one model.
 
 ## [0.1.1] — 2026-09-03
 
