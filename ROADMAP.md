@@ -164,36 +164,72 @@ which is the fast-versus-deep split again, arriving from a second direction.
 ## Plugins
 
 The extension mechanism, and the answer to "who adds the next twenty project
-types?" — which should not be us. Two shapes, and the second is much harder than
-the first.
+types?" — which should not be us. Two kinds, split by what a plugin is *for*.
 
-### Shape one — a UI plugin over the existing backend
+### UI plugins — how the app looks
 
-A panel or a view written against data the backend already produces. Nothing new
-is detected; something already detected is shown *better*.
+Theme and layout. Frontend only, by definition: nothing new is detected and
+nothing new is computed, the same data is just presented differently.
 
-The generic renderer sets a decent floor here already. A tracker the UI has never
-heard of renders today: fields are typed by inference (`https://` becomes a link,
-`git@` becomes copyable text rather than a broken link, `*_root` and `*_path` get
-open and reveal buttons, arrays become chips), and `trackerColor(kind)` assigns a
-contrast-safe hue from a hash of the name. A UI plugin is for where that floor is
-not enough — a commit graph instead of a field list, a scene hierarchy, a
-dependency tree — or for views that are not per-tracker at all: a dashboard, a
-different grouping of the project list.
+**A UI plugin is data, not code** — a config file, the way a dotfile is. This is
+the whole design, and it is worth stating as a rule rather than a default,
+because everything good about this category follows from it. A file of values
+cannot call `invoke`, cannot reach the filesystem, and cannot be made to; there
+is no sandbox to build because there is nothing to sandbox. That is what makes
+themes shippable long before the containment work in [Trust](#trust--it-sorts-by-kind-not-evenly)
+is done.
 
-### Shape two — a UI plugin and a Rust plugin shipped in tandem
+The machinery mostly exists. `src/app.css` already declares the whole visual
+system as tokens in a `@theme` block — `--color-void`, `--color-panel`,
+`--color-phos`, `--color-accent`, the state hues, `--font-display` and
+`--font-mono`, and the single 2px `--radius-*`. **A theme is an override set for
+those tokens**, read from the app's config directory next to `projects.db` and
+applied as custom properties.
 
-For anything the backend cannot already see. A Jujutsu plugin is the clean
-example: a `Detector` that reads `.jj`, plus a panel that renders what it found.
-The halves ship together because neither is much use alone.
+Layout is the harder half and the place the rule will come under pressure.
+Declarative rearrangement — named regions plus an ordering, a section toggled off
+— fits in a config file. Anything that wants to *compute* what to render does not,
+and the moment a UI plugin can execute it has stopped being a UI plugin and
+become a frontend utility plugin wearing a theme's clothes, inheriting the entire
+trust problem it had avoided. Hold the line at declarative.
 
-The backend half has a natural seam already — `Detector` is a two-method trait
-and `default_detectors()` is the registry it plugs into — but a seam is not a
-plugin API. The open question is what *installing* a Rust plugin means, and the
-honest answer is that it is a distribution problem before it is a technical one.
-See [Trust](#trust--settle-this-before-the-api).
+Two things to get right when this is built:
 
-### Version control beyond git is a plugin, not a roadmap item
+- **A malformed theme must not be able to stop the app starting.** Fall back to
+  the built-in values and surface the error in the UI. `PI-005` is the standing
+  reminder that a failure during startup is the one kind users cannot work around.
+- **Validate values, do not interpolate strings.** "No code" removes code
+  execution, not injection: a token value passed unchecked into CSS could carry
+  `;` and further declarations. Parse each token to its expected type — colour,
+  length, font stack — and reject the rest. Cheap, and it keeps the "no trust
+  problem" claim true.
+
+### Utility plugins — what the app can do
+
+Capability rather than presentation: a richer git experience, a new project type,
+a new integration. Three deployment shapes, with quite different trust profiles.
+
+- **Backend only.** A `Detector` that reads something the app cannot see today.
+  Already a complete, useful contribution on its own, because the generic
+  renderer displays an unfamiliar tracker without any UI work — fields are typed
+  by inference (`https://` becomes a link, `git@` becomes copyable text rather
+  than a broken link, `*_root` and `*_path` get open and reveal buttons, arrays
+  become chips) and `trackerColor(kind)` assigns a contrast-safe hue from a hash
+  of the name.
+- **Frontend only.** A feature built on data the backend already returns — a
+  commit graph instead of a field list, a dependency tree, per-kind actions. This
+  is the shape that runs third-party code in the webview, and the only one gated
+  on containment.
+- **Both.** A detector plus the panel that renders what it found. A Jujutsu
+  plugin is the clean example; the halves ship together because neither is much
+  use alone. Inherits the frontend half's trust requirements.
+
+The backend seam exists: `Detector` is a two-method trait and
+`default_detectors()` is the single registration point. A seam is not a plugin
+API, though, and what "installing" a Rust plugin means is a distribution problem
+before it is a technical one — see [Trust](#trust--it-sorts-by-kind-not-evenly).
+
+### Version control beyond git is a utility plugin, not a roadmap item
 
 Git is first-party and stays that way. **Mercurial, Subversion, Jujutsu,
 Perforce, Fossil** are deliberately *not* first-party work. Shipping and
@@ -204,46 +240,55 @@ placed to write them.
 Two facts make that a reasonable thing to ask of a contributor rather than a
 brush-off. Detectors are independent and unordered by design, so a Jujutsu
 repository colocated with a git one correctly reports *both* — there is no
-precedence rule to invent. And the UI needs no changes at all, because an
-unrecognised tracker already renders from its field names and shapes. A
-backend-only plugin is a complete, useful contribution on its own.
+precedence rule to invent. And these are backend-only utility plugins, the shape
+that needs no UI work and no containment design at all.
 
 **Perforce is the likely first one**, because a hook already exists: the Unreal
 detector reads the configured source-control provider out of
 `SourceControlSettings.ini`, so Unreal projects frequently already tell us they
 are on Perforce.
 
-### Trust — settle this before the API
+### Trust — it sorts by kind, not evenly
 
-Both shapes run somebody else's code, and they have completely different
-containment stories. This is the part to get right before any of it ships.
+The useful consequence of splitting plugins by purpose is that only one of the
+four categories is actually hard.
 
-**A UI plugin can be contained, if the work is done.** The frontend is a webview,
-and Tauri exposes `invoke` to everything running inside it. `invoke` reaches
-`delete_project_directory` and the application launcher. There is no per-script
-permission within a webview — a plugin has exactly the powers the app has. Three
-layers, in increasing order of effort:
+| Kind | What it is | What it can reach | Gated on |
+|------|-----------|-------------------|----------|
+| UI — theme, layout | a config file | nothing; it is data | nothing |
+| Utility, backend | a crate, compiled in | full user privileges | dependency trust |
+| Utility, frontend | JavaScript in the webview | everything `invoke` reaches | containment, below |
+| Utility, both | both halves | as above | as above |
+
+**Frontend code is the hard case.** The frontend is a webview, and Tauri exposes
+`invoke` to everything inside it; `invoke` reaches `delete_project_directory` and
+the application launcher. There is no per-script permission within a webview, so
+a plugin has exactly the powers the app has. Three layers, in increasing order of
+effort:
 
 1. **A content security policy** stops a plugin fetching more code or phoning
    home. It does not stop it calling `invoke`. Necessary but not sufficient —
    and now in place, in `svelte.config.js` and `tauri.conf.json`.
-2. **Capability scoping.** Tauri 2 can restrict which commands a given window may
-   call. Running plugins in their own webview with a reduced capability set is
-   the first real boundary.
-3. **No `invoke` for plugins at all.** Plugins get a narrow host API —
-   `host.tracker()`, `host.reveal(path)` — and never touch the command bridge.
-   The most work, and the only version that is actually safe rather than merely
-   inconvenient to abuse.
+2. **Capability scoping.** Tauri 2 restricts which commands a window may call,
+   and `src-tauri/capabilities/default.json` is already scoped to
+   `"windows": ["main"]`. Running plugins in their own webview with a smaller
+   set is the first boundary that is enforced rather than agreed to.
+3. **No `invoke` for plugins at all.** Plugins get a narrow host API and never
+   touch the command bridge. The most work, and the only version that is safe
+   rather than merely awkward to abuse.
 
-**A Rust plugin cannot be contained.** Native code loaded into the process has
-the user's full privileges: no CSP, no capability list, no sandbox, and nothing
-in Tauri changes that. That has one concrete consequence, recorded under
-[Considered and declined](#considered-and-declined): a runtime loader that picks
-up `.so`/`.dll` files from a folder should not be built. The realistic model is
-source distribution — a plugin is a crate, the user adds it and rebuilds, and
-trust is established the way it is for every other dependency. Slower to install,
-and the only version that does not hand every plugin author arbitrary code
-execution on every user's machine.
+Layers 2 and 3 are not interchangeable, and the choice between them is decided by
+something else: whether a frontend plugin is a module the app imports or a
+document in its own webview. A module shares the app's realm and can reach the
+IPC bridge on its own, which makes layer 3 a convention rather than a boundary
+and rules layer 2 out. That decision is not reversible once an API is published.
+
+**Native code cannot be contained.** A Rust plugin loaded into the process has
+the user's full privileges: no CSP applies, no capability list constrains it,
+there is no sandbox, and nothing in Tauri changes that. Hence the entry under
+[Considered and declined](#considered-and-declined): a runtime loader for
+`.so`/`.dll` files should not be built. Rust plugins are distributed as source
+and compiled in, and trust is established the way it is for any other dependency.
 
 ## Platform completeness
 
@@ -308,7 +353,7 @@ for each is in [`docs/architecture.md`](docs/architecture.md).
   has the user's full privileges and cannot be sandboxed, so this would hand
   every plugin author arbitrary code execution on every user's machine in
   exchange for a nicer install step. Rust plugins are distributed as source and
-  compiled in; see [Plugins → Trust](#trust--settle-this-before-the-api).
+  compiled in; see [Plugins → Trust](#trust--it-sorts-by-kind-not-evenly).
 
 ## Related work
 

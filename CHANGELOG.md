@@ -53,13 +53,16 @@ All notable changes to Project Indexer are documented here. The format follows
   the open module creates them too — which is the intended behaviour, since the
   open module still uses the userspace GL stack with the GBM failure.
 - The roadmap now treats version-control systems beyond git as plugin territory
-  rather than first-party work, describes plugins as two shapes (a UI plugin over
-  the existing backend, or a UI plugin paired with a Rust detector), records the
-  trust boundary each shape has, declines a runtime loader for native plugins,
-  and settles the CLI's `--json` compatibility contract.
+  rather than first-party work, and splits plugins by what they are for: **UI
+  plugins** change how the app looks and are data rather than code — a config
+  file, the way a dotfile is — while **utility plugins** change what the app can
+  do and ship as a backend half, a frontend half, or both. Only a frontend half
+  runs third-party code in the webview, so only that shape is gated on
+  containment; themes and backend detectors are not. A runtime loader for native
+  plugins is declined, and the CLI's `--json` compatibility contract is settled.
 - A handoff for the plugin initiative, `docs/handoffs/2026-09-04-plugins.md`,
-  covering both plugin shapes, the containment asymmetry between a UI plugin and a
-  Rust one, seven open design decisions, and the state of the tree as of 2026-09-04.
+  covering both kinds of plugin, how the trust story sorts by kind, ten open design
+  decisions, and the state of the tree as of 2026-09-04.
 - `PI-006` records that `tauri build` cannot produce an AppImage on Arch — two
   unrelated incompatibilities in linuxdeploy and its GTK plugin, neither caused by
   this project. The binary, `.deb` and `.rpm` all build; published AppImages come
