@@ -15,4 +15,4 @@ pub use error::{
     DetectorError, GitError, LauncherError, ProjectError, RepositoryError, UnrealError,
 };
 pub use infra::{SqliteRepository, CURRENT_SCHEMA_VERSION};
-pub use ports::{AppLauncher, ProjectReader, ProjectRepository};
+pub use ports::{AppLauncher, GroupReader, GroupRepository, ProjectReader, ProjectRepository};
