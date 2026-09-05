@@ -19,7 +19,7 @@
 - **The app is the only writer of `projects.db`.** devmon attaches it read-only.
 - **`CURRENT_SCHEMA_VERSION` ends this plan at `2`.** `open` must still refuse a database written by a newer binary.
 - **Commit trailer:** every commit ends with `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>` (name whichever model you are).
-- **Pre-commit hook:** already installed on this clone (`core.hooksPath = .githooks`). It runs `cargo fmt --check`, `cargo clippy --workspace --all-targets` and `cargo test --workspace` for Rust changes. Clippy has a **one-warning baseline** (`module-inception`); do not add a second.
+- **Pre-commit hook:** already installed on this clone (`core.hooksPath = .githooks`). It runs `cargo fmt --check`, `cargo clippy --workspace --all-targets` and `cargo test --workspace` for Rust changes. Clippy has a **two-warning baseline**: `module-inception`, and `unnecessary_sort_by` at `crates/core/src/platform/app_discovery.rs:116`. Both pre-date this plan and neither is in a file it touches — leave them alone and do not add a third. (Older docs, including the 2026-09-04 plugins handoff, still say one warning; that is stale.)
 - **Test counts today:** 105 Rust tests written, 102 run on Linux, 94 on Windows. Quote the number for the platform you are on.
 
 ---
