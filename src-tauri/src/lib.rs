@@ -9,7 +9,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
 
-use indexer_core::application::ProjectService;
+use indexer_core::application::{GroupService, ProjectService};
 use indexer_core::detectors::DetectorRunner;
 use indexer_core::infra::SqliteRepository;
 
@@ -191,12 +191,16 @@ pub fn run() {
                     fatal_startup_error(&format!("Project Indexer can't start:\n\n{e}"));
                 }
             };
+            // One repository, two services. `Arc<SqliteRepository>` coerces to
+            // each port, so both views share a single connection and its lock.
+            let repo = Arc::new(repo);
             let service = ProjectService::new(
-                Arc::new(repo),
+                repo.clone(),
                 Arc::new(OpenerLauncher),
                 Arc::new(DetectorRunner::default()),
             );
             app.manage(Arc::new(service));
+            app.manage(Arc::new(GroupService::new(repo)));
 
             TRAY_AVAILABLE.store(setup_tray_or_warn(app.handle()), Ordering::Relaxed);
             Ok(())
@@ -231,7 +235,12 @@ pub fn run() {
             commands::projects::refresh_project_trackers,
             commands::projects::detect_project_trackers,
             commands::projects::suggest_project_name,
-            commands::inspect::inspect_project
+            commands::inspect::inspect_project,
+            commands::groups::list_groups,
+            commands::groups::create_group,
+            commands::groups::update_group,
+            commands::groups::delete_group,
+            commands::groups::reorder_groups
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
