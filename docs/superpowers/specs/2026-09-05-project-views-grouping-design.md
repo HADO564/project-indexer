@@ -121,8 +121,11 @@ reasoning died with the sections.) Group icons come from the bundled set only �
 a custom SVG cannot be tinted, and a sidebar entry must take its group's colour.
 
 Validation mirrors `Project`: name non-empty after trim, unique
-case-insensitively, colour and icon must be known names. `UpdateGroup` follows
-the `UpdateProject` shape — `Option<T>` per field, absent means unchanged.
+case-insensitively, colour must be a known palette name, and icon must be
+non-empty — core does not own the bundled icon list, so an unknown icon name
+falls back to a default glyph at render rather than failing. `UpdateGroup`
+follows the `UpdateProject` shape — `Option<T>` per field, absent means
+unchanged.
 
 A new group takes `position = max(position) + 1`, so it appends rather than
 displacing existing entries. `set_group_positions` is the only thing that
