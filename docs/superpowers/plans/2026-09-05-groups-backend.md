@@ -1786,12 +1786,14 @@ mod tests {
 
     #[test]
     fn strips_foreign_object_use_and_image() {
-        let input = r#"<svg viewBox="0 0 1 1">
+        // `r##"…"##`, not `r#"…"#`: the `"#` inside `href="#x"` would close a
+        // single-hash raw string early and this would not compile.
+        let input = r##"<svg viewBox="0 0 1 1">
             <foreignObject><div>hi</div></foreignObject>
             <use href="#x"/>
             <image href="http://evil/x.png"/>
             <path d="M0 0"/>
-        </svg>"#;
+        </svg>"##;
         let out = sanitize_svg(input).expect("path survives");
         assert!(!out.contains("foreignObject"));
         assert!(!out.contains("<use"));
