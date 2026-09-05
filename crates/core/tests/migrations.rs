@@ -108,6 +108,11 @@ fn a_v1_database_opens_and_keeps_its_rows() {
 
 #[test]
 fn opening_stamps_the_current_schema_version_everywhere() {
+    // NOTE: At CURRENT_SCHEMA_VERSION == 1, seed_v1 already inserts
+    // ('schema_version','1') and stamps user_version = 1, so both assertions
+    // are satisfied by the seed data alone. This test only starts exercising
+    // the meta-upsert production code once CURRENT_SCHEMA_VERSION exceeds the
+    // seeded version in a future migration step.
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("projects.db");
     seed_v1(&path);
@@ -139,6 +144,12 @@ fn a_database_from_a_newer_binary_is_refused() {
 
 #[test]
 fn opening_an_already_current_database_is_a_no_op() {
+    // NOTE: At CURRENT_SCHEMA_VERSION == 1, seed_v1 stamps user_version = 1,
+    // so both open() calls execute the identical code path — the from < 1
+    // branch is false on the FIRST open already. This is a placeholder that
+    // verifies rows survive, but cannot catch non-idempotent migrations yet.
+    // It becomes load-bearing once Task 4 lands a step that differentiates
+    // from == 1 from from == CURRENT_SCHEMA_VERSION.
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("projects.db");
     seed_v1(&path);
