@@ -85,10 +85,10 @@ fn run_migrations(conn: &Connection, from: i64) -> Result<(), RepositoryError> {
                PRIMARY KEY (project_id, tag)
              );
              CREATE INDEX idx_project_tags_tag ON project_tags(tag);
+             PRAGMA user_version = 1;
              COMMIT;",
         )
         .map_err(be)?;
-        conn.pragma_update(None, "user_version", 1).map_err(be)?;
     }
 
     if from < 2 {
@@ -118,15 +118,15 @@ fn run_migrations(conn: &Connection, from: i64) -> Result<(), RepositoryError> {
              ALTER TABLE projects ADD COLUMN group_id TEXT
                REFERENCES groups(id) ON DELETE SET NULL;
              CREATE INDEX idx_projects_group_id ON projects(group_id);
+             PRAGMA user_version = 2;
              COMMIT;",
         )
         .map_err(be)?;
-        conn.pragma_update(None, "user_version", 2).map_err(be)?;
     }
 
     // Keep the `meta` mirror of the schema version in lockstep with
-    // `user_version` regardless of which migration steps ran — a future v2
-    // step that doesn't touch this row would otherwise leave it stale at '1'.
+    // `user_version` regardless of which migration steps ran — a future
+    // step that doesn't touch this row would otherwise leave it stale.
     conn.execute(
         "INSERT INTO meta (key, value) VALUES ('schema_version', ?1)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
