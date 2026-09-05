@@ -73,7 +73,14 @@ pub fn sanitize_svg(input: &str) -> Result<String, IconError> {
     // whole subtree, rather than just the element, is what keeps a
     // `<script>`'s text content out of the output.
     let mut skip_depth = 0usize;
-    let mut saw_svg = false;
+
+    // Nesting depth over *every* element, allowed or not — independent of
+    // `skip_depth` — so we always know whether we are looking at the
+    // document's single top-level element or at something nested inside it.
+    let mut depth = 0usize;
+    let mut root_seen = false;
+    let mut root_is_svg = false;
+    let mut extra_root = false;
     let mut saw_drawable = false;
 
     loop {
@@ -86,6 +93,18 @@ pub fn sanitize_svg(input: &str) -> Result<String, IconError> {
 
             Event::Start(e) => {
                 let name = local_name(e.name().as_ref());
+                let is_root = depth == 0;
+                if is_root {
+                    if root_seen {
+                        extra_root = true;
+                    }
+                    root_seen = true;
+                    if name == "svg" {
+                        root_is_svg = true;
+                    }
+                }
+                depth += 1;
+
                 if skip_depth > 0 {
                     skip_depth += 1;
                     continue;
@@ -94,34 +113,60 @@ pub fn sanitize_svg(input: &str) -> Result<String, IconError> {
                     skip_depth = 1;
                     continue;
                 }
-                if name == "svg" {
-                    saw_svg = true;
-                }
                 if DRAWABLE.contains(&name.as_str()) {
                     saw_drawable = true;
                 }
+                let mut start = filter_attributes(&name, &e)?;
+                if is_root && name == "svg" {
+                    // Emitted unconditionally, never taken from the input: a
+                    // sanitized icon must parse as an SVG document when later
+                    // loaded from a `data:image/svg+xml` URI, and a root
+                    // element in no namespace is not an SVG element there.
+                    // `xmlns` itself is not on `ALLOWED_ATTRS`, so any
+                    // input-supplied value was already dropped above — this
+                    // does not let input choose its own namespace.
+                    start.push_attribute(("xmlns", "http://www.w3.org/2000/svg"));
+                }
                 writer
-                    .write_event(Event::Start(filter_attributes(&name, &e)?))
+                    .write_event(Event::Start(start))
                     .map_err(|e| IconError::Malformed(e.to_string()))?;
             }
 
             Event::Empty(e) => {
+                let name = local_name(e.name().as_ref());
+                let is_root = depth == 0;
+                if is_root {
+                    if root_seen {
+                        extra_root = true;
+                    }
+                    root_seen = true;
+                    if name == "svg" {
+                        root_is_svg = true;
+                    }
+                }
+                // A self-closing element opens and closes within this single
+                // event, so it never changes `depth`.
+
                 if skip_depth > 0 {
                     continue;
                 }
-                let name = local_name(e.name().as_ref());
                 if !ALLOWED_ELEMENTS.contains(&name.as_str()) {
                     continue;
                 }
                 if DRAWABLE.contains(&name.as_str()) {
                     saw_drawable = true;
                 }
+                let mut elem = filter_attributes(&name, &e)?;
+                if is_root && name == "svg" {
+                    elem.push_attribute(("xmlns", "http://www.w3.org/2000/svg"));
+                }
                 writer
-                    .write_event(Event::Empty(filter_attributes(&name, &e)?))
+                    .write_event(Event::Empty(elem))
                     .map_err(|e| IconError::Malformed(e.to_string()))?;
             }
 
             Event::End(e) => {
+                depth = depth.saturating_sub(1);
                 if skip_depth > 0 {
                     skip_depth -= 1;
                     continue;
@@ -135,7 +180,12 @@ pub fn sanitize_svg(input: &str) -> Result<String, IconError> {
                     .map_err(|e| IconError::Malformed(e.to_string()))?;
             }
 
-            Event::Text(t) if skip_depth == 0 => {
+            // Text outside the (single) root element — before it, between
+            // sibling top-level nodes, or trailing after it closes — is
+            // dropped rather than copied, so the output can never end up
+            // with more top-level content than the one root element it is
+            // supposed to have.
+            Event::Text(t) if skip_depth == 0 && depth > 0 => {
                 writer
                     .write_event(Event::Text(t))
                     .map_err(|e| IconError::Malformed(e.to_string()))?;
@@ -148,7 +198,11 @@ pub fn sanitize_svg(input: &str) -> Result<String, IconError> {
         }
     }
 
-    if !saw_svg {
+    // Anything other than exactly one root element named `svg` is rejected:
+    // a second top-level element (two sibling roots) or a root whose local
+    // name isn't `svg` (e.g. a `<g>` wrapping a nested `<svg>`) would leave
+    // the caller no single well-formed SVG document to trust.
+    if !root_seen || !root_is_svg || extra_root {
         return Err(IconError::NotAnSvg);
     }
     if !saw_drawable {
@@ -183,7 +237,27 @@ fn filter_attributes(name: &str, e: &BytesStart<'_>) -> Result<BytesStart<'stati
             continue;
         }
 
-        let value = String::from_utf8_lossy(&attr.value).to_string();
+        // Decoded (XML entities resolved) before the scan below, so the scan
+        // sees the same text a real parser will. Scanning the raw bytes let an
+        // XML entity spell "url(" or "javascript:" without the literal
+        // substring ever appearing in the source.
+        let value = attr
+            .unescape_value()
+            .map_err(|e| IconError::Malformed(e.to_string()))?
+            .into_owned();
+
+        // No allow-listed SVG presentation attribute needs a backslash. `fill`
+        // and `stroke` are CSS-parsed presentation attributes, and CSS Syntax
+        // Level 3 lets an identifier consume a backslash escape (literal or
+        // numeric) while it is tokenized — so `\75 rl(`, `\000075rl(` and
+        // `u\72 l(` all tokenize as the ident `url` followed by `(`, a
+        // url-token, even though the literal substring "url(" never appears
+        // for the scan below to catch. Rather than reimplement CSS ident-escape
+        // parsing here, reject the escape mechanism outright.
+        if value.contains('\\') {
+            continue;
+        }
+
         let lowered = value.to_ascii_lowercase();
         // `url(…)` can reach an external resource or a filter; a `javascript:`
         // scheme is self-explanatory. Both are dropped even on an allowed
@@ -208,19 +282,50 @@ mod tests {
     </svg>"#;
 
     #[test]
-    fn escapes_numeric_entities_so_they_cannot_smuggle_url_past_the_raw_text_scan() {
-        // "&#117;" is the numeric character reference for 'u'. Our url(/javascript:
-        // check runs on the raw, un-unescaped attribute bytes, so a value spelled
-        // this way would not contain the literal substring "url(" at scan time.
-        // The property this test locks in: the writer re-escapes the leading '&'
-        // when the attribute is re-emitted, so a real XML parser's single decode
-        // pass yields the literal text "&#117;rl(#evil)", never "url(#evil)". If
-        // this ever stopped holding, the substring check above would be a false
-        // sense of safety.
+    fn decodes_numeric_entities_before_scanning_so_they_cannot_smuggle_url() {
+        // "&#117;" is the numeric character reference for 'u'. Scanning the
+        // raw, un-decoded attribute bytes would miss the literal substring
+        // "url(" here. Attributes are now decoded (`Attribute::unescape_value`)
+        // before the url(/javascript: scan runs, so this resolves to the
+        // literal value "url(#evil)" pre-scan and is dropped outright — not
+        // merely neutralized by the writer's own escaping on the way back out.
         let input = r##"<svg viewBox="0 0 1 1"><path d="M0 0" fill="&#117;rl(#evil)"/></svg>"##;
         let out = sanitize_svg(input).expect("path survives");
-        assert!(!out.contains(r#"fill="url(#evil)""#));
-        assert!(out.contains("&amp;#117;rl(#evil)"));
+        assert!(!out.contains("evil"));
+        assert!(!out.contains("fill="));
+        assert!(out.contains("M0 0"));
+    }
+
+    #[test]
+    fn drops_css_ident_escape_obfuscated_url_variants() {
+        // CSS Syntax Level 3 lets an identifier consume a backslash escape —
+        // literal (`\75`) or numeric with a trailing space (`\000075`) — while
+        // it is tokenized. `fill` and `stroke` are CSS-parsed presentation
+        // attributes, so a real renderer resolves each of these to the ident
+        // `url` followed by `(`, a url-token, even though the literal
+        // substring "url(" is never present in the raw XML text for the
+        // scan to catch. None of these contain an XML metacharacter, so
+        // nothing re-escapes the backslash the way an entity's '&' does.
+        for value in [r"\75 rl(#evil)", r"\000075rl(#evil)", r"u\72 l(#evil)"] {
+            let input = format!(r#"<svg viewBox="0 0 1 1"><path d="M0 0" fill="{value}"/></svg>"#);
+            let out = sanitize_svg(&input).expect("path survives");
+            assert!(
+                !out.contains("evil"),
+                "value {value:?} leaked into output: {out}"
+            );
+            assert!(out.contains("M0 0"));
+        }
+    }
+
+    #[test]
+    fn decoding_attribute_values_round_trips_ordinary_entities_correctly() {
+        // "&#35;" is the numeric character reference for '#' — a legal, inert
+        // spelling of a hex colour. Decoding before scanning must not mangle
+        // it: it should come out as the literal colour, not the still-escaped
+        // entity text (which would double-escape on any later re-sanitize).
+        let input = r##"<svg viewBox="0 0 1 1"><path d="M0 0" fill="&#35;fff"/></svg>"##;
+        let out = sanitize_svg(input).expect("path survives");
+        assert!(out.contains(r##"fill="#fff""##));
     }
 
     #[test]
@@ -230,6 +335,44 @@ mod tests {
         assert!(out.contains("viewBox"));
         assert!(out.contains("M3 6h18"));
         assert!(out.contains("<circle"));
+        // The root must carry the SVG namespace unconditionally — without it,
+        // a `data:image/svg+xml` payload parses with a root element in no
+        // namespace, which is not an SVG element, and the icon renders as
+        // nothing.
+        assert!(out.contains(r#"xmlns="http://www.w3.org/2000/svg""#));
+    }
+
+    #[test]
+    fn rejects_a_non_svg_root_even_when_svg_appears_nested_inside_it() {
+        let input = r#"<g><svg viewBox="0 0 1 1"><path d="M0 0"/></svg></g>"#;
+        assert!(matches!(sanitize_svg(input), Err(IconError::NotAnSvg)));
+    }
+
+    #[test]
+    fn rejects_two_sibling_svg_roots() {
+        let input = r#"<svg viewBox="0 0 1 1"><path d="M0 0"/></svg><svg viewBox="0 0 1 1"><path d="M1 1"/></svg>"#;
+        assert!(matches!(sanitize_svg(input), Err(IconError::NotAnSvg)));
+    }
+
+    #[test]
+    fn drops_trailing_text_after_the_root_closes_instead_of_rejecting_it() {
+        let input = r#"<svg viewBox="0 0 1 1"><path d="M0 0"/></svg>trailing garbage"#;
+        let out = sanitize_svg(input).expect("a single well-formed root still sanitizes");
+        assert!(!out.contains("trailing"));
+        assert!(out.contains("M0 0"));
+    }
+
+    #[test]
+    fn a_self_closing_root_with_no_children_has_nothing_drawable() {
+        // Previously misreported as `NotAnSvg` because the old `saw_svg` flag
+        // was only ever set from the `Start` arm, never `Empty`. With root
+        // tracking covering both event forms, this now gets the accurate
+        // error: the root is a valid, singular `<svg>`, it just draws nothing.
+        let input = r#"<svg viewBox="0 0 1 1"/>"#;
+        assert!(matches!(
+            sanitize_svg(input),
+            Err(IconError::NothingDrawable)
+        ));
     }
 
     #[test]
