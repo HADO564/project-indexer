@@ -16,6 +16,9 @@ export interface Project {
   notes: string | null;
   client: string | null;
   trackers: Tracker[];
+  group_id: string | null;
+  color: string | null;
+  icon: string | null;
 }
 
 // Mirrors src-tauri/src/models/git.rs
@@ -87,6 +90,9 @@ export interface UpdateProject {
   open_with?: string | null;
   notes?: string | null;
   client?: string | null;
+  group_id?: string | null;
+  color?: string | null;
+  icon?: string | null;
 }
 
 export interface CreateProjectInput {
