@@ -52,6 +52,9 @@ pub enum ProjectError {
 
     #[error("Group with id '{0}' not found")]
     GroupNotFound(String),
+
+    #[error("Icon problem: {0}")]
+    Icon(String),
 }
 
 impl From<crate::error::RepositoryError> for ProjectError {
@@ -63,6 +66,12 @@ impl From<crate::error::RepositoryError> for ProjectError {
 impl From<crate::error::LauncherError> for ProjectError {
     fn from(e: crate::error::LauncherError) -> Self {
         ProjectError::OpenFailed(e.0)
+    }
+}
+
+impl From<crate::error::IconError> for ProjectError {
+    fn from(e: crate::error::IconError) -> Self {
+        ProjectError::Icon(e.to_string())
     }
 }
 

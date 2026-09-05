@@ -14,6 +14,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "2"
 git2 = "0.21.0"
 rusqlite = { version = "0.32", features = ["bundled"] }
+quick-xml = "0.37"
 
 [dev-dependencies]
 tempfile = "3"
