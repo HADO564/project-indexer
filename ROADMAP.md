@@ -161,6 +161,39 @@ cheap, running full detection on every directory is not. Detection should be
 gated behind a cheap marker test — does a `.git` or `.uproject` even exist here —
 which is the fast-versus-deep split again, arriving from a second direction.
 
+## Project linking
+
+Connect one project to another the way Obsidian connects notes — an explicit,
+navigable edge between two entries, and a graph view over the whole set. The
+project list answers "what do I have"; links answer "what did I build this
+*out of*", which is the question that turns a list into a knowledgebase.
+
+The value shows up where a flat list is weakest: a tool and the game that uses
+it, a fork and its upstream, a client engagement and the three repositories it
+spans. Groups already give one exclusive band per project — links are the
+non-exclusive, many-to-many relation that groups deliberately are not.
+
+The graph is drawn with **Svelte Flow** (`@xyflow/svelte`), the SvelteKit
+counterpart to React Flow from the same authors. It has to be a bundled
+dependency rather than anything CDN-loaded — the content security policy
+forbids fetching code at runtime, and that is a property worth keeping.
+
+What needs deciding:
+
+- **Are links typed, and are they directed?** "depends on" and "forked from"
+  have a direction that "related to" does not. Untyped and undirected is the
+  cheap start; adding a type later is additive, adding direction later is not.
+- **Where links live.** A many-to-many edge does not fit the JSON project blob
+  the way a scalar field does, so this is a real table and a schema step. It
+  should land on the same migration machinery the groups work builds, not
+  invent a second one.
+- **Whether the graph is a view or the view.** A focused neighbourhood around
+  one project is a panel on the project page. A whole-set canvas is a route of
+  its own. They are different features wearing one name.
+- **What a link does when a project is deleted.** Soft-deleted projects stay in
+  the bin, so their edges should presumably persist and grey out rather than
+  vanish — otherwise restoring a project silently loses its connections.
+
 ## Plugins
 
 The extension mechanism, and the answer to "who adds the next twenty project
