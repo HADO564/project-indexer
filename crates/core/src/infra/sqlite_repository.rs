@@ -4,9 +4,9 @@ use std::sync::Mutex;
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::domain::normalize::normalize_directory;
-use crate::domain::Project;
+use crate::domain::{Group, Project};
 use crate::error::RepositoryError;
-use crate::ports::{ProjectReader, ProjectRepository};
+use crate::ports::{GroupReader, GroupRepository, ProjectReader, ProjectRepository};
 
 /// The schema version this binary understands. `open` migrates up to this and
 /// refuses any database already past it.
@@ -186,19 +186,21 @@ impl ProjectRepository for SqliteRepository {
         let mut conn = self.lock_conn();
         let tx = conn.transaction().map_err(be)?;
         tx.execute(
-            "INSERT INTO projects (id, data, is_deleted, directory_normalized, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO projects (id, data, is_deleted, directory_normalized, updated_at, group_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(id) DO UPDATE SET
                data = excluded.data,
                is_deleted = excluded.is_deleted,
                directory_normalized = excluded.directory_normalized,
-               updated_at = excluded.updated_at",
+               updated_at = excluded.updated_at,
+               group_id = excluded.group_id",
             rusqlite::params![
                 project.id,
                 data,
                 project.is_deleted as i64,
                 dir_norm,
                 project.updated_at.to_rfc3339(),
+                project.group_id,
             ],
         )
         .map_err(be)?;
@@ -228,6 +230,150 @@ impl ProjectRepository for SqliteRepository {
     }
 }
 
+impl GroupReader for SqliteRepository {
+    fn get_group(&self, id: &str) -> Result<Option<Group>, RepositoryError> {
+        let conn = self.lock_conn();
+        conn.query_row(
+            "SELECT id, name, color, icon, position, created_at, updated_at
+             FROM groups WHERE id = ?1",
+            [id],
+            group_from_row,
+        )
+        .optional()
+        .map_err(be)?
+        .transpose()
+    }
+
+    fn list_groups(&self) -> Result<Vec<Group>, RepositoryError> {
+        let conn = self.lock_conn();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, color, icon, position, created_at, updated_at
+                 FROM groups ORDER BY position ASC",
+            )
+            .map_err(be)?;
+        let rows = stmt.query_map([], group_from_row).map_err(be)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(be)??);
+        }
+        Ok(out)
+    }
+}
+
+impl GroupRepository for SqliteRepository {
+    fn save_group(&self, group: &Group) -> Result<(), RepositoryError> {
+        let conn = self.lock_conn();
+        conn.execute(
+            "INSERT INTO groups (id, name, color, icon, position, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(id) DO UPDATE SET
+               name = excluded.name,
+               color = excluded.color,
+               icon = excluded.icon,
+               position = excluded.position,
+               updated_at = excluded.updated_at",
+            rusqlite::params![
+                group.id,
+                group.name,
+                group.color,
+                group.icon,
+                group.position,
+                group.created_at.to_rfc3339(),
+                group.updated_at.to_rfc3339(),
+            ],
+        )
+        .map_err(be)?;
+        Ok(())
+    }
+
+    fn delete_group(&self, id: &str) -> Result<(), RepositoryError> {
+        let mut conn = self.lock_conn();
+        let tx = conn.transaction().map_err(be)?;
+
+        // Read the members first: the blob is the authoritative copy of
+        // `group_id`, so clearing the column alone would leave it stale.
+        let members: Vec<(String, String)> = {
+            let mut stmt = tx
+                .prepare("SELECT id, data FROM projects WHERE group_id = ?1")
+                .map_err(be)?;
+            let rows = stmt
+                .query_map([id], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                })
+                .map_err(be)?;
+            let mut out = Vec::new();
+            for row in rows {
+                out.push(row.map_err(be)?);
+            }
+            out
+        };
+
+        for (project_id, data) in members {
+            let mut project = parse(&data)?;
+            project.group_id = None;
+            let updated = serde_json::to_string(&project)
+                .map_err(|e| RepositoryError::Backend(format!("serialize: {e}")))?;
+            tx.execute(
+                "UPDATE projects SET data = ?2, group_id = NULL WHERE id = ?1",
+                rusqlite::params![project_id, updated],
+            )
+            .map_err(be)?;
+        }
+
+        tx.execute("DELETE FROM groups WHERE id = ?1", [id])
+            .map_err(be)?;
+        tx.commit().map_err(be)?;
+        Ok(())
+    }
+
+    fn set_group_positions(&self, ordered_ids: &[String]) -> Result<(), RepositoryError> {
+        let mut conn = self.lock_conn();
+        let tx = conn.transaction().map_err(be)?;
+        for (position, id) in ordered_ids.iter().enumerate() {
+            tx.execute(
+                "UPDATE groups SET position = ?2 WHERE id = ?1",
+                rusqlite::params![id, position as i64],
+            )
+            .map_err(be)?;
+        }
+        tx.commit().map_err(be)?;
+        Ok(())
+    }
+}
+
+/// Row mapper shared by `get_group` and `list_groups`. The outer `Result` is
+/// rusqlite's; the inner one carries a timestamp that failed to parse, which is
+/// corruption rather than a backend fault.
+fn group_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Group, RepositoryError>> {
+    let created_at: String = row.get(5)?;
+    let updated_at: String = row.get(6)?;
+    Ok((|| {
+        Ok(Group {
+            id: row_string(row, 0)?,
+            name: row_string(row, 1)?,
+            color: row_string(row, 2)?,
+            icon: row_string(row, 3)?,
+            position: row
+                .get(4)
+                .map_err(|e| RepositoryError::Corrupt(e.to_string()))?,
+            created_at: parse_timestamp(&created_at)?,
+            updated_at: parse_timestamp(&updated_at)?,
+        })
+    })())
+}
+
+fn row_string(row: &rusqlite::Row<'_>, idx: usize) -> Result<String, RepositoryError> {
+    row.get(idx)
+        .map_err(|e| RepositoryError::Corrupt(e.to_string()))
+}
+
+fn parse_timestamp(raw: &str) -> Result<chrono::DateTime<chrono::Utc>, RepositoryError> {
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .map_err(|e| RepositoryError::Corrupt(format!("timestamp {raw:?}: {e}")))
+}
+
 fn be(e: rusqlite::Error) -> RepositoryError {
     RepositoryError::Backend(e.to_string())
 }
@@ -239,7 +385,8 @@ fn parse(data: &str) -> Result<Project, RepositoryError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::Project;
+    use crate::domain::Group;
+    use crate::ports::{GroupReader, GroupRepository};
 
     fn sample(id: &str, dir: &str) -> Project {
         let mut p = Project::new("Name".into(), dir.into(), None, Some(vec!["Rust".into()]))
@@ -251,6 +398,119 @@ mod tests {
     // Project::new validates the directory exists, so tests point at a real temp dir.
     fn tmp() -> String {
         std::env::temp_dir().to_string_lossy().into_owned()
+    }
+
+    fn group(name: &str, position: i64) -> Group {
+        Group::new(name.into(), "cyan".into(), "briefcase".into(), position).expect("valid group")
+    }
+
+    #[test]
+    fn round_trips_a_group() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        let g = group("Client work", 0);
+        repo.save_group(&g).unwrap();
+        let got = repo.get_group(&g.id).unwrap().unwrap();
+        assert_eq!(got.name, "Client work");
+        assert_eq!(got.color, "cyan");
+        assert_eq!(got.icon, "briefcase");
+    }
+
+    #[test]
+    fn lists_groups_in_position_order() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        repo.save_group(&group("Third", 2)).unwrap();
+        repo.save_group(&group("First", 0)).unwrap();
+        repo.save_group(&group("Second", 1)).unwrap();
+
+        let names: Vec<String> = repo
+            .list_groups()
+            .unwrap()
+            .into_iter()
+            .map(|g| g.name)
+            .collect();
+        assert_eq!(names, vec!["First", "Second", "Third"]);
+    }
+
+    #[test]
+    fn save_writes_group_id_to_both_the_blob_and_the_column() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        let g = group("Client work", 0);
+        repo.save_group(&g).unwrap();
+
+        let mut p = sample("id-1", &tmp());
+        p.group_id = Some(g.id.clone());
+        repo.save(&p).unwrap();
+
+        assert_eq!(
+            repo.get("id-1").unwrap().unwrap().group_id,
+            Some(g.id.clone())
+        );
+        let column: Option<String> = repo
+            .conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT group_id FROM projects WHERE id = 'id-1'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(column, Some(g.id));
+    }
+
+    #[test]
+    fn deleting_a_group_ungroups_its_projects_in_blob_and_column() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        let g = group("Client work", 0);
+        repo.save_group(&g).unwrap();
+        let mut p = sample("id-1", &tmp());
+        p.group_id = Some(g.id.clone());
+        repo.save(&p).unwrap();
+
+        repo.delete_group(&g.id).unwrap();
+
+        // The project survives — deleting a group never deletes a project.
+        let got = repo.get("id-1").unwrap().expect("project must survive");
+        assert!(
+            got.group_id.is_none(),
+            "the blob must be cleared, not just the column"
+        );
+        let column: Option<String> = repo
+            .conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT group_id FROM projects WHERE id = 'id-1'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(column.is_none());
+        assert!(repo.get_group(&g.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn deleting_a_missing_group_is_idempotent() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        assert!(repo.delete_group("nope").is_ok());
+    }
+
+    #[test]
+    fn set_group_positions_rewrites_the_whole_ordering() {
+        let repo = SqliteRepository::in_memory().unwrap();
+        let a = group("A", 0);
+        let b = group("B", 1);
+        let c = group("C", 2);
+        for g in [&a, &b, &c] {
+            repo.save_group(g).unwrap();
+        }
+
+        repo.set_group_positions(&[c.id.clone(), a.id.clone(), b.id.clone()])
+            .unwrap();
+
+        let names: Vec<String> = repo
+            .list_groups()
+            .unwrap()
+            .into_iter()
+            .map(|g| g.name)
+            .collect();
+        assert_eq!(names, vec!["C", "A", "B"]);
     }
 
     #[test]
