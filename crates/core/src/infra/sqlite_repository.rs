@@ -10,7 +10,7 @@ use crate::ports::{ProjectReader, ProjectRepository};
 
 /// The schema version this binary understands. `open` migrates up to this and
 /// refuses any database already past it.
-pub const CURRENT_SCHEMA_VERSION: i64 = 1;
+pub const CURRENT_SCHEMA_VERSION: i64 = 2;
 
 pub struct SqliteRepository {
     conn: Mutex<Connection>,
@@ -89,6 +89,39 @@ fn run_migrations(conn: &Connection, from: i64) -> Result<(), RepositoryError> {
         )
         .map_err(be)?;
         conn.pragma_update(None, "user_version", 1).map_err(be)?;
+    }
+
+    if from < 2 {
+        // Groups, and the project's membership in one.
+        //
+        // `group_id` is added to `projects` as a mirror of the same key inside
+        // the JSON blob — the house pattern, as `directory_normalized` already
+        // is. `ON DELETE SET NULL` is a safety net only: `delete_group` clears
+        // blob and column together in one transaction, because the constraint
+        // alone would fix the column and leave the blob stale.
+        //
+        // SQLite permits a REFERENCES clause on ADD COLUMN as long as the
+        // default is NULL, which it is.
+        conn.execute_batch(
+            "BEGIN;
+             CREATE TABLE groups (
+               id         TEXT PRIMARY KEY,
+               name       TEXT NOT NULL,
+               color      TEXT NOT NULL,
+               icon       TEXT NOT NULL,
+               position   INTEGER NOT NULL,
+               created_at TEXT NOT NULL,
+               updated_at TEXT NOT NULL
+             );
+             CREATE UNIQUE INDEX idx_groups_name_nocase ON groups(name COLLATE NOCASE);
+             CREATE INDEX idx_groups_position ON groups(position);
+             ALTER TABLE projects ADD COLUMN group_id TEXT
+               REFERENCES groups(id) ON DELETE SET NULL;
+             CREATE INDEX idx_projects_group_id ON projects(group_id);
+             COMMIT;",
+        )
+        .map_err(be)?;
+        conn.pragma_update(None, "user_version", 2).map_err(be)?;
     }
 
     // Keep the `meta` mirror of the schema version in lockstep with

@@ -90,6 +90,33 @@ fn meta_schema_version(path: &Path) -> String {
         .expect("read meta schema_version")
 }
 
+fn table_exists(path: &Path, name: &str) -> bool {
+    Connection::open(path)
+        .expect("reopen")
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [name],
+            |r| r.get::<_, i64>(0),
+        )
+        .expect("query sqlite_master")
+        > 0
+}
+
+fn column_exists(path: &Path, table: &str, column: &str) -> bool {
+    let conn = Connection::open(path).expect("reopen");
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .expect("table_info");
+    let mut rows = stmt.query([]).expect("query");
+    while let Some(row) = rows.next().expect("row") {
+        let name: String = row.get(1).expect("column name");
+        if name == column {
+            return true;
+        }
+    }
+    false
+}
+
 #[test]
 fn a_v1_database_opens_and_keeps_its_rows() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -108,11 +135,11 @@ fn a_v1_database_opens_and_keeps_its_rows() {
 
 #[test]
 fn opening_stamps_the_current_schema_version_everywhere() {
-    // NOTE: At CURRENT_SCHEMA_VERSION == 1, seed_v1 already inserts
-    // ('schema_version','1') and stamps user_version = 1, so both assertions
-    // are satisfied by the seed data alone. This test only starts exercising
-    // the meta-upsert production code once CURRENT_SCHEMA_VERSION exceeds the
-    // seeded version in a future migration step.
+    // seed_v1 stamps user_version = 1 and meta.schema_version = '1'. Now that
+    // CURRENT_SCHEMA_VERSION is 2, the `from < 2` step and the meta-upsert
+    // that follows it are both required to make these assertions pass — this
+    // proves `open` actually runs the v2 migration and keeps the mirror in
+    // sync, rather than the seed data satisfying the checks on its own.
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("projects.db");
     seed_v1(&path);
@@ -144,12 +171,11 @@ fn a_database_from_a_newer_binary_is_refused() {
 
 #[test]
 fn opening_an_already_current_database_is_a_no_op() {
-    // NOTE: At CURRENT_SCHEMA_VERSION == 1, seed_v1 stamps user_version = 1,
-    // so both open() calls execute the identical code path — the from < 1
-    // branch is false on the FIRST open already. This is a placeholder that
-    // verifies rows survive, but cannot catch non-idempotent migrations yet.
-    // It becomes load-bearing once Task 4 lands a step that differentiates
-    // from == 1 from from == CURRENT_SCHEMA_VERSION.
+    // seed_v1 stamps user_version = 1, so the first open runs the `from < 2`
+    // step (from == 1) and the second open does not (from == 2). If the v2
+    // migration weren't idempotent — e.g. re-running the CREATE TABLE or ADD
+    // COLUMN — the second open would error instead of returning cleanly, so
+    // this test now genuinely distinguishes the two code paths.
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("projects.db");
     seed_v1(&path);
@@ -160,4 +186,45 @@ fn opening_an_already_current_database_is_a_no_op() {
 
     assert_eq!(user_version(&path), CURRENT_SCHEMA_VERSION);
     assert!(repo.get("seeded-1").expect("read").is_some());
+}
+
+#[test]
+fn v2_adds_groups_and_the_project_group_column() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("projects.db");
+    seed_v1(&path);
+
+    let _repo = SqliteRepository::open(&path).expect("open");
+
+    assert_eq!(user_version(&path), 2);
+    assert!(table_exists(&path, "groups"));
+    assert!(column_exists(&path, "projects", "group_id"));
+}
+
+#[test]
+fn v2_leaves_existing_projects_ungrouped() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("projects.db");
+    seed_v1(&path);
+
+    let repo = SqliteRepository::open(&path).expect("open");
+
+    let project = repo.get("seeded-1").expect("read").expect("still there");
+    assert!(
+        project.group_id.is_none(),
+        "a migrated project must land in Ungrouped, not in a group that does not exist"
+    );
+
+    let column: Option<String> = Connection::open(&path)
+        .expect("reopen")
+        .query_row(
+            "SELECT group_id FROM projects WHERE id = 'seeded-1'",
+            [],
+            |r| r.get(0),
+        )
+        .expect("read column");
+    assert!(
+        column.is_none(),
+        "the mirrored column must agree with the blob"
+    );
 }
