@@ -8,7 +8,9 @@ pub mod ports;
 
 pub use application::{ProjectInspection, ProjectService};
 pub use detectors::{Detection, DetectorOutcome, DetectorRunner};
-pub use domain::{GitInfo, InstalledApp, Project, Tracker, UnrealInfo, UpdateProject};
+pub use domain::{
+    GitInfo, Group, InstalledApp, Project, Tracker, UnrealInfo, UpdateGroup, UpdateProject,
+};
 pub use error::{
     DetectorError, GitError, LauncherError, ProjectError, RepositoryError, UnrealError,
 };
