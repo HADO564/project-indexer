@@ -1,0 +1,404 @@
+# Project views, colour, icons and groups — design
+
+**Date:** 2026-09-05
+**Status:** approved, ready for implementation planning
+
+## Goal
+
+Make the default project view something you *scan* rather than read. Three view
+modes (list, grid, compact), a colour and an icon per project, and first-class
+**groups** that section the view into collapsible bands.
+
+Two of these are cosmetic and one is not: groups are a new domain entity with
+their own table, which makes this the project's **first schema migration**.
+
+## Motivation
+
+The main view is a single flat `<ul>` of full-width rows. That is the right
+shape for eight projects and the wrong one for eighty — and eighty is exactly
+what the folder-scanning roadmap item will produce. Everything that
+distinguishes one row from another today is text: a name, a path, some tracker
+badges. There is no pre-attentive signal, so finding a project means reading.
+
+Colour and an icon give each project a signal you can find without reading.
+Groups give the *set* a shape — "client work", "personal", "archived" — which a
+flat list cannot express at any length. Tags exist, but they are non-exclusive
+labels: they can filter, they cannot section, and a project with four tags
+belongs under four headings or none.
+
+This is also the moment the deferred migration-fixture work becomes due.
+`ROADMAP.md` gates it on `CURRENT_SCHEMA_VERSION` going to 2; groups take it
+there.
+
+## Non-goals (YAGNI)
+
+- **An icon on the group.** The section heading is already text. Cut
+  deliberately; re-add only if a group heading turns out to need one.
+- **Multi-group membership.** Membership is exclusive, by decision — it is what
+  makes every project appear exactly once under exactly one heading. Tags remain
+  the non-exclusive mechanism.
+- **Nested groups.** One flat level of bands. No trees, no group-in-group.
+- **Free-form hex colours.** Colours are named palette entries resolved through
+  theme tokens (see "Colour"). A literal `#rrggbb` is a possible later additive
+  change, since the stored field is a string either way.
+- **Tinting custom icons.** A custom SVG renders through `<img>` and keeps its
+  own colours. The pip carries project colour instead.
+- **Persisting sort.** Sort state is unpersisted today. Leaving it that way
+  rather than widening scope; view mode and collapse state are new state and do
+  persist.
+- **Project linking / the graph view.** Recorded in `ROADMAP.md` under *Project
+  linking*, and explicitly not built here. It needs a many-to-many edge table
+  and should reuse the migration machinery this spec builds.
+- **UI plugins / themes.** Parked mid-brainstorm; the two settled decisions are
+  recorded, and this spec is written so it does not contradict them.
+- **Changing `FavoritesModal` or `BinModal`.** Untouched.
+
+## Decisions locked during brainstorming
+
+1. **Three view modes** — list (today's rows), grid (tiles), compact (dense
+   single-line rows).
+2. **Colours are named palette entries**, resolved to theme tokens at render,
+   not stored literals. A theme swap recolours every project coherently.
+3. **Two colour levels** — a **primary** on the group, a **secondary** on the
+   project distinguishing siblings within a band.
+4. **Icons: a curated bundled set, plus user-supplied SVGs.**
+5. **Custom SVGs render as `<img src="data:…">`**, sanitized on import. Inert by
+   construction; keeps its own colours; cannot be tinted.
+6. **Groups are first-class with exclusive membership** — a `groups` table plus
+   a `group_id` on the project.
+7. **Groups display as collapsible sections in place**, all sections shown by
+   default, plus a search box and a group filter.
+
+## Architecture
+
+### Domain — `crates/core/src/domain/group.rs`
+
+```rust
+pub struct Group {
+    pub id: String,          // uuid v4, as Project does
+    pub name: String,
+    pub color: String,       // palette name, e.g. "cyan"
+    pub position: i64,       // band order in the view
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+
+Validation mirrors `Project`: name non-empty after trim, unique
+case-insensitively, colour must be a known palette name. `UpdateGroup` follows
+the `UpdateProject` shape — `Option<T>` per field, absent means unchanged.
+
+A new group takes `position = max(position) + 1`, so it appends rather than
+displacing existing bands. `set_group_positions` is the only thing that
+renumbers, and it rewrites the whole ordering rather than patching one row.
+
+**Errors.** Spec 1 settled the taxonomy: one public application error
+(`ProjectError`) plus small port-level errors mapped into it. Groups and icons
+follow it rather than introducing a parallel hierarchy — group validation
+failures become `ProjectError` variants, and a new port-level `IconError`
+(malformed SVG, oversize input, nothing drawable left) maps into it the way
+`RepositoryError` already does.
+
+### Domain — three new `Project` fields
+
+```rust
+#[serde(default)] pub group_id: Option<String>,
+#[serde(default)] pub color: Option<String>,   // secondary
+#[serde(default)] pub icon: Option<String>,    // "gamepad" | "custom:my-logo"
+```
+
+All three are `Option<T>`, so every record written by an older build still
+loads — the contract documented at the top of `project.rs` and guarded by
+`loads_a_record_missing_every_absorbable_field`, which gains assertions for
+these three.
+
+`UpdateProject` gains the same three as **double options**
+(`Option<Option<String>>` with `deserialize_some`), matching `open_with` /
+`notes` / `client`. All three are clearable, so "key absent" and "key present
+but null" must stay distinguishable.
+
+### Persistence — migration to `user_version = 2`
+
+`CURRENT_SCHEMA_VERSION` becomes `2`, and `run_migrations` gains a `from < 2`
+step:
+
+```sql
+BEGIN;
+CREATE TABLE groups (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  color      TEXT NOT NULL,
+  position   INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_groups_name_nocase ON groups(name COLLATE NOCASE);
+CREATE INDEX idx_groups_position ON groups(position);
+ALTER TABLE projects ADD COLUMN group_id TEXT
+  REFERENCES groups(id) ON DELETE SET NULL;
+CREATE INDEX idx_projects_group_id ON projects(group_id);
+COMMIT;
+```
+
+`ADD COLUMN` with a `REFERENCES` clause is legal in SQLite provided the default
+is `NULL`, which it is.
+
+**Storage follows the existing house pattern: the JSON blob is the truth, the
+column is a queryable mirror.** `project_tags` and `directory_normalized`
+already work this way. `group_id` therefore lives in `data` *and* in the new
+column, written together in the same statement as every other project save.
+
+The `meta` mirror of `schema_version` already updates itself from
+`CURRENT_SCHEMA_VERSION` on every open, so it needs no change — that was
+written in anticipation of exactly this step.
+
+### Group deletion is one transaction
+
+`ON DELETE SET NULL` is a safety net, not the mechanism: it would fix the column
+and leave a stale `group_id` inside the JSON blob. So `delete_group` does the
+whole thing explicitly in a single transaction — load the affected projects,
+clear `group_id` in each blob, write blob and column back, then delete the
+group row.
+
+**Deleting a group never deletes a project.** Its members fall to Ungrouped.
+
+### Ports — `crates/core/src/ports/repository.rs`
+
+Split read from write exactly as `ProjectReader` / `ProjectRepository` are, so
+devmon's read-only story stays consistent:
+
+```rust
+pub trait GroupReader: Send + Sync {
+    fn get_group(&self, id: &str) -> Result<Option<Group>, RepositoryError>;
+    fn list_groups(&self) -> Result<Vec<Group>, RepositoryError>;  // by position
+}
+
+pub trait GroupRepository: GroupReader {
+    fn save_group(&self, group: &Group) -> Result<(), RepositoryError>;
+    /// Clears membership and deletes the group in one transaction. Idempotent.
+    fn delete_group(&self, id: &str) -> Result<(), RepositoryError>;
+    /// Rewrites `position` to match the given order, in one transaction.
+    fn set_group_positions(&self, ordered_ids: &[String]) -> Result<(), RepositoryError>;
+}
+```
+
+The cross-blob transaction lives in the `SqliteRepository` implementation, not
+in a service — one connection, one transaction, no way for a caller to get it
+half-done.
+
+### Application — `GroupService`
+
+Holds `Arc<dyn GroupRepository>`. Create, rename, recolour, reorder, delete,
+list. Assigning a project to a group is a `ProjectService` concern
+(`UpdateProject.group_id`) and needs no new method.
+
+### Commands — `src-tauri/src/commands/groups.rs`
+
+`create_group`, `update_group`, `delete_group`, `list_groups`,
+`reorder_groups`. Thin, matching the existing command style.
+
+### Custom icons
+
+**Sanitizer** — `crates/core/src/icons/sanitize.rs`, pure logic, no Tauri (the
+compiler enforces this). Allow-list, never deny-list:
+
+- **Elements:** `svg`, `g`, `path`, `circle`, `ellipse`, `rect`, `line`,
+  `polyline`, `polygon`, `title`, `desc`.
+- **Attributes:** `viewBox`, `d`, `cx`, `cy`, `r`, `rx`, `ry`, `x`, `y`, `x1`,
+  `y1`, `x2`, `y2`, `width`, `height`, `points`, `transform`, `fill`, `stroke`,
+  `stroke-width`, `stroke-linecap`, `stroke-linejoin`, `fill-rule`,
+  `clip-rule`, `opacity`.
+- **Stripped unconditionally:** `script`, `style`, `foreignObject`, `use`,
+  `image`, `animate*`, every `on*` handler, `href` / `xlink:href`, and any
+  attribute whose value contains a `url(` or a `javascript:` scheme.
+- **Caps:** 256 KB input; reject a result with no drawable element.
+
+Parsing uses `quick-xml` — a new `core` dependency, justified by the rule that
+you do not hand-roll an XML parser at a trust boundary. Its event API suits
+allow-list filtering directly: read events, drop what is not permitted, write
+the rest.
+
+**Store** — `crates/core/src/infra/icon_store.rs`, an `IconStore` over a
+directory. `src-tauri` resolves `app_config_dir()/icons/` and passes the path
+in, so core never learns about Tauri. Operations: `import(&Path)`, `list()`,
+`read(name)`, `delete(name)`.
+
+**Commands** — `list_custom_icons`, `import_custom_icon(path)`,
+`delete_custom_icon(name)`. The frontend receives `{ name, data_uri }` and
+renders `<img>`. `img-src 'self' data:` is already present in **both** the
+SvelteKit and Tauri policies, so no CSP change is required.
+
+Defence in depth: even if the sanitizer misses a vector, an SVG referenced by an
+`<img>` cannot execute script or load external resources. The sanitizer is the
+first layer; the render path is the second.
+
+### Colour
+
+`app.css` gains a documented swatch palette in the `@theme` block — the existing
+semantic tokens (`--color-accent`, `--color-gold`, …) are too few to distinguish
+many projects, and using them for this would overload their meaning:
+
+```css
+--color-swatch-cyan:   …;   --color-swatch-violet: …;
+--color-swatch-gold:   …;   --color-swatch-green:  …;
+--color-swatch-amber:  …;   --color-swatch-blue:   …;
+--color-swatch-rust:   …;   --color-swatch-pink:   …;
+```
+
+Eight, all tuned to read on the dark ground the way `trackerColor` already
+guarantees for tracker hues. A stored colour is the bare name (`"cyan"`);
+`src/lib/palette.ts` resolves it to `var(--color-swatch-cyan)` and falls back to
+a neutral for an unknown name — the same ignore-what-you-do-not-know rule the
+`--json` contract uses.
+
+Because these are theme tokens, a future theme plugin restyles every project and
+group colour coherently. That is the whole reason for storing names.
+
+**Where each colour lands:**
+
+| Level | Stored on | Renders as |
+|-------|-----------|------------|
+| Primary | `Group.color` | section heading + left edge of every card in the band |
+| Secondary | `Project.color` | a pip on the card, beside the icon |
+
+The pip carries project colour rather than the icon, because a custom `<img>`
+icon cannot be tinted — this keeps colour reading identically for bundled and
+custom icons. Bundled icons additionally tint to the secondary colour, since
+they are inline and can.
+
+### Frontend structure
+
+`ProjectCard.svelte` currently mixes identity, metadata and the actions menu.
+Three modes make that untenable, so presentation splits from shared behaviour:
+
+| File | Responsibility |
+|------|----------------|
+| `ProjectActionsMenu.svelte` | the `⋯` menu and its handlers, extracted once |
+| `ProjectMark.svelte` | icon + colour pip |
+| `ProjectRow.svelte` | list presentation (today's card) |
+| `ProjectTile.svelte` | grid presentation |
+| `ProjectCompactRow.svelte` | compact presentation |
+| `ProjectSection.svelte` | one collapsible group band |
+| `ProjectList.svelte` | sectioning container only |
+| `ViewControls.svelte` | mode toggle, search box, group filter |
+| `GroupManagerModal.svelte` | create / rename / recolour / reorder / delete |
+
+Two pure modules, so the logic is testable without mounting components:
+
+- `src/lib/grouping.ts` — `(projects, groups, sort, query, groupFilter) →
+  Section[]`. Ungrouped trails last; sections empty under an active query are
+  omitted, not shown empty.
+- `src/lib/palette.ts` — colour name → CSS custom property, with fallback.
+
+`src/lib/viewState.ts` persists view mode, the collapsed-group set, and the
+query in `localStorage`. **Not** in `projects.db`: the database is a cross-app
+contract that devmon attaches read-only, and UI preferences are none of its
+business.
+
+## Data flow
+
+1. `+page.svelte` loads projects (`getAllProjects`) and groups (`listGroups`).
+2. `grouping.ts` folds them into sections, applying sort within each band, the
+   text query across name/path/tags, and the group filter.
+3. `ProjectList` renders one `ProjectSection` per band; each section renders the
+   presentation component for the active mode.
+4. Editing colour, icon or group goes through `updateProject` and refetches, as
+   every other edit already does.
+5. Group edits go through the group commands and refetch both.
+
+## Invariants
+
+### Preserved
+
+- `indexer-core` does not import Tauri; the compiler enforces it.
+- The app is the only writer of `projects.db`.
+- The JSON blob is the truth; columns are queryable mirrors.
+- A new `Project` field is `Option<T>` or `#[serde(default)]`.
+- `open` refuses a database written by a newer binary.
+- No component uses a raw colour; everything resolves through a theme token.
+
+### New
+
+- A stored colour is a **palette name**, never a literal. An unknown name falls
+  back to neutral rather than failing.
+- A custom icon is sanitized **on import**, not on render — the stored file is
+  already safe, and nothing renders an unsanitized SVG.
+- A custom icon renders only through `<img>` with a `data:` URI. Never inline.
+- Deleting a group never deletes a project.
+- Group membership is exclusive: a project has zero or one group.
+
+## Testing
+
+Test-driven throughout, per the repo's practice.
+
+**Rust**
+
+- **Migration fixtures** — the scaffold `ROADMAP.md` gates on this exact version
+  bump. Seed a database at `user_version = 1` with known rows, run `open`,
+  assert the v2 result: tables present, existing projects intact, `group_id`
+  null, `meta.schema_version` at `2`. Also assert a v2 database opens unchanged,
+  and that a v3 database is still refused.
+- **Group CRUD** — create, rename, recolour, duplicate-name rejection
+  (case-insensitive), reorder, delete.
+- **Delete clears membership** — members survive, `group_id` cleared in *both*
+  the blob and the column; asserted by reading each back.
+- **Project field absorption** — the legacy-record test gains the three new
+  fields.
+- **The sanitizer**, the heaviest suite here: `<script>` stripped, `onload=` and
+  every `on*` stripped, `xlink:href` and `href` stripped, `foreignObject`
+  stripped, `<use>` and `<image>` stripped, `url(…)` values rejected,
+  `javascript:` rejected, entity-encoded and nested-CDATA payloads, oversize
+  input rejected, an empty result rejected, and a well-formed icon surviving
+  intact.
+
+**Frontend (vitest, following `trackers.test.ts`)**
+
+- `grouping.ts` — band ordering by position, Ungrouped last, sort within a band,
+  query matching name/path/tags, empty sections omitted under a query, group
+  filter narrowing to one band.
+- `palette.ts` — known name resolves, unknown name falls back.
+
+**Manual, before calling it done.** Neither CI nor the pre-commit hook launches
+the app, and `PI-005` is the standing reminder that a build can pass every gate
+and still fail to show a window. This change touches startup (a migration runs
+on open), so run the real thing on the platforms available.
+
+## Tasks
+
+Ordered so each step is independently verifiable.
+
+1. `Group` domain type + `UpdateGroup`, with validation tests.
+2. Three new `Project` fields + `UpdateProject` double-options; extend the
+   absorption test; mirror all of it into `src/lib/api/types.ts`, which is a
+   hand-maintained mirror of the Rust models and drifts silently otherwise.
+3. Migration fixtures scaffold, against the current v1 schema.
+4. `CURRENT_SCHEMA_VERSION = 2` + the migration step; fixtures go green.
+5. `GroupReader` / `GroupRepository` ports + `SqliteRepository` implementation,
+   including the transactional delete.
+6. `GroupService`.
+7. `commands/groups.rs` + registration in `lib.rs`.
+8. SVG sanitizer in core, with its full suite.
+9. `IconStore` + the three icon commands + config-dir wiring.
+10. Swatch palette in `app.css`; `palette.ts`.
+11. `grouping.ts` + its tests.
+12. Component split: `ProjectActionsMenu`, `ProjectMark`, then the three
+    presentations. No behaviour change at this step — list mode must look as it
+    does today.
+13. `ProjectSection` + sectioning in `ProjectList`.
+14. `ViewControls` (mode, search, filter) + `viewState.ts`.
+15. `GroupManagerModal`.
+16. Colour and icon pickers in the create/edit forms.
+17. Bundled icon set.
+18. Docs: `checklist.md`, `CHANGELOG.md`, and `architecture.md` where the schema
+    is described.
+
+## Risks and mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| The sanitizer misses a vector | The `<img>` render path is inert regardless — two independent layers, and the spec says never to inline a custom SVG |
+| First migration corrupts a real database | Fixtures assert each step; `open` already refuses a newer database; the migration is one transaction |
+| Blob and column diverge on `group_id` | Both written in the same statement; the transactional delete is the only other writer; tests read both back |
+| The component split regresses list mode | Task 12 is explicitly a no-behaviour-change refactor, verified before any new mode is added |
+| Eight swatches are too few | Additive — more tokens, no stored-data change, because the stored value is a name |
+| Scope creep into project linking | Recorded in `ROADMAP.md` as separate work with its own open questions |
