@@ -6,7 +6,7 @@ pub mod infra;
 pub mod platform;
 pub mod ports;
 
-pub use application::{ProjectInspection, ProjectService};
+pub use application::{GroupService, ProjectInspection, ProjectService};
 pub use detectors::{Detection, DetectorOutcome, DetectorRunner};
 pub use domain::{
     GitInfo, Group, InstalledApp, Project, Tracker, UnrealInfo, UpdateGroup, UpdateProject,
