@@ -2,6 +2,7 @@ pub mod application;
 pub mod detectors;
 pub mod domain;
 pub mod error;
+pub mod icons;
 pub mod infra;
 pub mod platform;
 pub mod ports;
@@ -12,7 +13,7 @@ pub use domain::{
     GitInfo, Group, InstalledApp, Project, Tracker, UnrealInfo, UpdateGroup, UpdateProject,
 };
 pub use error::{
-    DetectorError, GitError, LauncherError, ProjectError, RepositoryError, UnrealError,
+    DetectorError, GitError, IconError, LauncherError, ProjectError, RepositoryError, UnrealError,
 };
 pub use infra::{SqliteRepository, CURRENT_SCHEMA_VERSION};
 pub use ports::{AppLauncher, GroupReader, GroupRepository, ProjectReader, ProjectRepository};
