@@ -15,5 +15,5 @@ pub use domain::{
 pub use error::{
     DetectorError, GitError, IconError, LauncherError, ProjectError, RepositoryError, UnrealError,
 };
-pub use infra::{SqliteRepository, CURRENT_SCHEMA_VERSION};
+pub use infra::{IconStore, SqliteRepository, StoredIcon, CURRENT_SCHEMA_VERSION};
 pub use ports::{AppLauncher, GroupReader, GroupRepository, ProjectReader, ProjectRepository};
