@@ -1,8 +1,11 @@
 <script lang="ts">
   import { page } from "$app/stores";
+  import { listGroups } from "$lib/api/groups";
+  import { listCustomIcons } from "$lib/api/icons";
   import { isOpenWithAppMissing, openProjectDirectory } from "$lib/api/opener";
   import { inspectProject, refreshProjectTrackers } from "$lib/api/projects";
-  import type { ProjectInspection } from "$lib/api/types";
+  import type { Group, ProjectInspection } from "$lib/api/types";
+  import { customIconSrc } from "$lib/icons";
   import EditProjectForm from "$lib/components/EditProjectForm.svelte";
   import ErrorBanner from "$lib/components/ErrorBanner.svelte";
   import ProjectIdentity from "$lib/components/ProjectIdentity.svelte";
@@ -20,6 +23,28 @@
   let loading = $state(false);
   let editing = $state(false);
   let activeKind = $state<string | null>(null);
+  // The edit form offers a group and an icon here too, so this route needs the
+  // same two lists the main page fetches. Both are best-effort: failing to
+  // load them must not stop the detail view rendering.
+  let groups = $state<Group[]>([]);
+  let customIcons = $state<Map<string, string>>(new Map());
+
+  async function loadGroups() {
+    try {
+      groups = await listGroups();
+    } catch {
+      groups = [];
+    }
+  }
+
+  async function loadCustomIcons() {
+    try {
+      const icons = await listCustomIcons();
+      customIcons = new Map(icons.map((i) => [i.name, customIconSrc(i.svg)]));
+    } catch {
+      customIcons = new Map();
+    }
+  }
 
   async function load(only?: string) {
     if (!id) return;
@@ -55,6 +80,11 @@
     // re-runs when `id` changes
     void id;
     load();
+  });
+
+  $effect(() => {
+    loadGroups();
+    loadCustomIcons();
   });
 
   let detected = $derived(inspection?.results.filter((r) => r.status === "detected") ?? []);
@@ -231,6 +261,10 @@
       </h2>
       <EditProjectForm
         project={inspection.project}
+        {groups}
+        {customIcons}
+        onIconsChanged={loadCustomIcons}
+        onGroupsStale={loadGroups}
         onSaved={handleSaved}
         onCancel={() => (editing = false)}
         onerror={(m) => (banner = m)}

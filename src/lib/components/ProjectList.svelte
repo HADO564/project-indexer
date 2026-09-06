@@ -29,6 +29,8 @@
     emptyMessage = "No projects yet.",
     binMode = false,
     onBinChanged,
+    onIconsChanged,
+    onGroupsStale,
     onerror,
   }: {
     projects: Project[];
@@ -55,6 +57,8 @@
     // and must not open the edit form either.
     binMode?: boolean;
     onBinChanged?: () => void | Promise<void>;
+    onIconsChanged?: () => void | Promise<void>;
+    onGroupsStale?: () => void | Promise<void>;
     onerror: (message: string) => void;
   } = $props();
 
@@ -132,7 +136,16 @@
             : undefined}
         >
           {#if editingId === project.id && !binMode}
-            <EditProjectForm {project} {onSaved} onCancel={onCancelEdit} {onerror} />
+            <EditProjectForm
+              {project}
+              {groups}
+              {customIcons}
+              {onIconsChanged}
+              {onGroupsStale}
+              {onSaved}
+              onCancel={onCancelEdit}
+              {onerror}
+            />
           {:else if mode === "grid"}
             <ProjectTile
               {project}

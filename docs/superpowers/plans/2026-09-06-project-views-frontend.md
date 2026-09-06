@@ -3520,7 +3520,7 @@ Run: `pnpm tauri dev`:
 - Clearing a group (choosing Ungrouped) always works, even for a group that has just been deleted.
 - **Open a project's edit form, delete its group from the group manager in the same session, then save.** Expect the message "That group no longer exists — the selection was cleared. Save again.", the group select back at Ungrouped, and the project unchanged in the backend. Save again — it succeeds.
 - **Import a valid SVG icon.** It appears in the picker and renders on the project.
-- **Import each failure case and confirm the reason reaches the error banner, not a generic message:** an SVG containing `&nbsp;`, one with a bare `&` in text, one with `&xxe;`, a file over 256 KB, a file with a backslash in an attribute value, and an SVG containing only a `<script>` (nothing drawable). Each should name its own reason.
+- **Import each failure case and confirm the reason reaches the error banner, not a generic message:** an SVG containing `&nbsp;`, one with a bare `&` in text, one with `&xxe;`, a file over 256 KB, and an SVG containing only a `<script>` (nothing drawable). Each should name its own reason.
 - **Import an SVG using `stroke-dasharray`** and confirm the dashes survive — this is what Task 1 bought.
 - Deleting a custom icon removes it from the picker; a project still naming it falls back to the bundled `folder` glyph rather than breaking.
 

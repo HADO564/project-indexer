@@ -163,8 +163,15 @@ rejects any SVG that would not re-parse as well-formed XML — an undefined enti
 (`&xxe;`), a bare `&` in text, and notably `&nbsp;`, which is an HTML entity that
 is simply not defined in XML and turns up in HTML-flavoured icon exports. It also
 rejects anything with no drawable element left after sanitizing, anything over
-256 KB, and any attribute value containing a backslash. All arrive as
-`ProjectError::Icon(...)` with a message naming the reason. Surface that message
+256 KB, and anything that is not an SVG at all. All arrive as
+`ProjectError::Icon(...)` with a message naming the reason.
+
+*Correction, verified against `sanitize.rs:286` while implementing this half:*
+a backslash in an attribute value does **not** fail the import. The sanitizer
+`continue`s — it drops that one attribute and keeps the icon. So there is no
+message to surface for it, and nothing for the UI to do; the icon simply
+imports having quietly lost that attribute, the same way it loses any
+attribute off the allow-list. Surface that message
 rather than a generic failure — "this icon could not be imported" tells the user
 nothing they can act on, and the reasons here are all things they can fix.
 
