@@ -37,6 +37,10 @@ impl GroupService {
         Group::check_for_duplicate_name(&name, &existing)?;
 
         let position = existing.iter().map(|g| g.position).max().unwrap_or(-1) + 1;
+        // This read-then-write is safe only because Tauri's ExecutionContext::Blocking
+        // serializes non-async commands: we list all groups to compute the next position,
+        // then save. If commands were concurrent, another create could pick the same
+        // position, causing a duplicate sidebar entry; the position index is non-unique.
         let group = Group::new(name, color, icon, position)?;
         self.repo.save_group(&group)?;
         Ok(group)
@@ -58,6 +62,11 @@ impl GroupService {
                 .filter(|g| g.id != group.id)
                 .collect();
             Group::check_for_duplicate_name(name, &others)?;
+            // This check-then-write is safe only because Tauri's ExecutionContext::Blocking
+            // serializes non-async commands: we verify the name against other groups, then
+            // save. If commands were concurrent, another update could change a group's name
+            // to our target between the check and the save; the database's case-insensitive
+            // unique index is a backstop that prevents silent data corruption.
         }
 
         group.update(update)?;
