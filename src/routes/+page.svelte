@@ -13,7 +13,9 @@
   import ProjectList from "$lib/components/ProjectList.svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import SortControls from "$lib/components/SortControls.svelte";
+  import ViewControls from "$lib/components/ViewControls.svelte";
   import { resolveView, viewCounts, type View } from "$lib/views";
+  import { loadView, loadViewMode, saveView, saveViewMode, type ViewMode } from "$lib/viewState";
 
   let projects = $state<Project[]>([]);
   let groups = $state<Group[]>([]);
@@ -35,6 +37,18 @@
   let sortBy = $state<SortBy>("last_opened");
   let sortDirection = $state<SortDirection>("descending");
 
+  // Initialised directly rather than in an $effect: +layout.ts sets
+  // `ssr = false`, so component init only ever runs in the browser and
+  // localStorage is there. The first render is already the restored mode,
+  // with no save-effect racing the load.
+  let viewMode = $state<ViewMode>(loadViewMode());
+
+  // The selected view cannot be restored the same way: "group:<id>" falls back
+  // to All when that group no longer exists, and answering that needs the
+  // group list, which has not been fetched at init.
+  let groupsLoaded = $state(false);
+  let viewRestored = $state(false);
+
   let selectedView = $state<View>({ kind: "all" });
   // Stays empty until the Bin becomes a sidebar view; the Bin entry is hidden
   // and its count reads 0 until then, so nothing depends on it yet.
@@ -46,8 +60,24 @@
 
   function handleSelectView(view: View) {
     selectedView = view;
+    saveView(view);
     error = "";
   }
+
+  // Restore the view exactly once, on the first completed group load. The
+  // viewRestored guard is what stops a later refetch — after a group is
+  // created or deleted — from yanking the user back to the stored view they
+  // have since navigated away from.
+  $effect(() => {
+    if (groupsLoaded && !viewRestored) {
+      selectedView = loadView(groups);
+      viewRestored = true;
+    }
+  });
+
+  $effect(() => {
+    saveViewMode(viewMode);
+  });
 
   // A group can disappear underneath the selection — from the group manager,
   // or from another window. Falling back to All beats rendering an empty list
@@ -87,6 +117,10 @@
       groups = await listGroups();
     } catch (err) {
       error = (err as Error).message;
+    } finally {
+      // Either way the attempt is finished. A failed fetch cannot validate a
+      // stored group id, and falling back to All is the right answer there too.
+      groupsLoaded = true;
     }
   }
 
@@ -260,7 +294,10 @@
     <main class="min-w-0 flex-1">
       <CreateProjectForm onCreated={handleCreated} onerror={handleError} />
 
-      <div class="mb-3 flex justify-end">
+      <div class="mb-3 flex items-center gap-2">
+        <div class="min-w-0 flex-1">
+          <ViewControls bind:mode={viewMode} bind:query />
+        </div>
         <SortControls bind:by={sortBy} bind:direction={sortDirection} />
       </div>
 
@@ -268,6 +305,7 @@
         projects={visibleProjects}
         {groups}
         {customIcons}
+        mode={viewMode}
         {loading}
         {editingId}
         {missingDirs}
