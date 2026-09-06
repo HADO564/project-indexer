@@ -209,6 +209,7 @@ pub fn run() {
                 repo.clone(),
                 Arc::new(OpenerLauncher),
                 Arc::new(DetectorRunner::default()),
+                repo.clone(),
             );
             app.manage(Arc::new(service));
             app.manage(Arc::new(GroupService::new(repo)));
