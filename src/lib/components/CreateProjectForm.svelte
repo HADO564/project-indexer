@@ -1,13 +1,24 @@
 <script lang="ts">
-  import { createProject, suggestProjectName } from "$lib/api/projects";
-  import type { CreateProjectInput } from "$lib/api/types";
+  import { isGroupNotFound } from "$lib/api/groups";
+  import { createProject, suggestProjectName, updateProject } from "$lib/api/projects";
+  import type { CreateProjectInput, Group } from "$lib/api/types";
   import DirectoryField from "./DirectoryField.svelte";
+  import IconPicker from "./IconPicker.svelte";
+  import SwatchPicker from "./SwatchPicker.svelte";
   import { cardClass, inputClass, labelClass, primaryButtonClass } from "./styles";
 
   let {
+    groups,
+    customIcons,
+    onIconsChanged,
+    onGroupsStale,
     onCreated,
     onerror,
   }: {
+    groups: Group[];
+    customIcons: Map<string, string>;
+    onIconsChanged?: () => void | Promise<void>;
+    onGroupsStale?: () => void | Promise<void>;
     onCreated: () => void | Promise<void>;
     onerror?: (message: string) => void;
   } = $props();
@@ -16,6 +27,9 @@
   let directory = $state("");
   let description = $state("");
   let tags = $state("");
+  let color = $state<string | null>(null);
+  let icon = $state<string | null>(null);
+  let groupId = $state<string | null>(null);
   let creating = $state(false);
 
   function parseTags(raw: string): string[] {
@@ -47,14 +61,34 @@
         description: description || null,
         tags: parseTags(tags),
       };
-      await createProject(input);
+      const created = await createProject(input);
+      // create_project takes only name/directory/description/tags, so the
+      // three new fields are applied straight after. One extra call against a
+      // local database, and CreateProjectInput stays unchanged.
+      if (color || icon || groupId) {
+        await updateProject(created.id, { color, icon, group_id: groupId });
+      }
       name = "";
       directory = "";
       description = "";
       tags = "";
+      color = null;
+      icon = null;
+      groupId = null;
       await onCreated();
     } catch (err) {
-      onerror?.((err as Error).message);
+      // The project itself was created; only the group assignment failed,
+      // because the group was deleted between opening this form and
+      // submitting it. Clear the stale selection and refetch rather than
+      // retrying — the backend rejected the write and changed nothing.
+      if (isGroupNotFound(err)) {
+        groupId = null;
+        await onGroupsStale?.();
+        onerror?.("That group no longer exists — the project was created without one.");
+        await onCreated();
+      } else {
+        onerror?.((err as Error).message);
+      }
     } finally {
       creating = false;
     }
@@ -82,6 +116,17 @@
       Tags (comma separated)
       <input bind:value={tags} placeholder="rust, tauri" class={inputClass} />
     </label>
+    <label class={labelClass}>
+      Group
+      <select bind:value={groupId} class={inputClass}>
+        <option value={null}>Ungrouped</option>
+        {#each groups as group (group.id)}
+          <option value={group.id}>{group.name}</option>
+        {/each}
+      </select>
+    </label>
+    <SwatchPicker bind:value={color} allowNone />
+    <IconPicker bind:value={icon} {customIcons} {onIconsChanged} onerror={(m) => onerror?.(m)} />
     <button type="submit" disabled={creating} class={`self-start ${primaryButtonClass}`}>
       {creating ? "Creating…" : "Create project"}
     </button>

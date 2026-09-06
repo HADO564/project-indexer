@@ -253,7 +253,14 @@
     />
 
     <main class="min-w-0 flex-1">
-      <CreateProjectForm onCreated={handleCreated} onerror={handleError} />
+      <CreateProjectForm
+        {groups}
+        {customIcons}
+        onIconsChanged={loadCustomIcons}
+        onGroupsStale={loadGroups}
+        onCreated={handleCreated}
+        onerror={handleError}
+      />
 
       <div class="mb-3 flex items-center gap-2">
         <div class="min-w-0 flex-1">
@@ -285,6 +292,8 @@
             : "No projects yet."}
         binMode={selectedView.kind === "bin"}
         onBinChanged={handleBinChanged}
+        onIconsChanged={loadCustomIcons}
+        onGroupsStale={loadGroups}
         onerror={handleError}
       />
     </main>
