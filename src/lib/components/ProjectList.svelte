@@ -2,6 +2,7 @@
   import type { Group, Project } from "$lib/api/types";
   import { swatchVar } from "$lib/palette";
   import type { ViewMode } from "$lib/viewState";
+  import BinActions from "./BinActions.svelte";
   import EditProjectForm from "./EditProjectForm.svelte";
   import ProjectActionsMenu from "./ProjectActionsMenu.svelte";
   import ProjectCompactRow from "./ProjectCompactRow.svelte";
@@ -26,6 +27,8 @@
     onOpenWithAppMissing,
     onToggleFavorite,
     emptyMessage = "No projects yet.",
+    binMode = false,
+    onBinChanged,
     onerror,
   }: {
     projects: Project[];
@@ -48,8 +51,23 @@
     // Per-view, because "No projects yet." is wrong for a view that filters:
     // you may well have projects and no favourites.
     emptyMessage?: string;
+    // Bin rows never offer Open, Edit or Detect type — the directory is gone —
+    // and must not open the edit form either.
+    binMode?: boolean;
+    onBinChanged?: () => void | Promise<void>;
     onerror: (message: string) => void;
   } = $props();
+
+  // Which Bin row, if any, has had its purge button clicked once. Owned here
+  // rather than per row so arming one disarms the others, which is what
+  // BinModal's single confirmPurgeId did.
+  let confirmPurgeId = $state<string | null>(null);
+
+  // Leaving the Bin disarms. BinModal reset this by being destroyed on close;
+  // this list survives the view change, so it has to do it explicitly.
+  $effect(() => {
+    if (!binMode) confirmPurgeId = null;
+  });
 
   // The group's palette *name*, resolved per project. Null when the project
   // has no group or when its group has since been deleted.
@@ -81,6 +99,20 @@
       />
     {/snippet}
 
+    {#snippet binActions(project: Project)}
+      <BinActions
+        {project}
+        armed={confirmPurgeId === project.id}
+        onArm={() => (confirmPurgeId = project.id)}
+        onRestored={() => onBinChanged?.()}
+        onPurged={() => {
+          confirmPurgeId = null;
+          return onBinChanged?.();
+        }}
+        {onerror}
+      />
+    {/snippet}
+
     <ul
       class={mode === "grid"
         ? "grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3"
@@ -99,7 +131,7 @@
             ? `border-left: 2px solid ${swatchVar(groupColor)}`
             : undefined}
         >
-          {#if editingId === project.id}
+          {#if editingId === project.id && !binMode}
             <EditProjectForm {project} {onSaved} onCancel={onCancelEdit} {onerror} />
           {:else if mode === "grid"}
             <ProjectTile
@@ -109,7 +141,7 @@
               {groupColor}
               {onToggleFavorite}
             >
-              {#snippet actions()}{@render standardActions(project)}{/snippet}
+              {#snippet actions()}{@render (binMode ? binActions : standardActions)(project)}{/snippet}
             </ProjectTile>
           {:else if mode === "compact"}
             <ProjectCompactRow
@@ -119,7 +151,7 @@
               {groupColor}
               {onToggleFavorite}
             >
-              {#snippet actions()}{@render standardActions(project)}{/snippet}
+              {#snippet actions()}{@render (binMode ? binActions : standardActions)(project)}{/snippet}
             </ProjectCompactRow>
           {:else}
             <ProjectRow
@@ -129,7 +161,7 @@
               {groupColor}
               {onToggleFavorite}
             >
-              {#snippet actions()}{@render standardActions(project)}{/snippet}
+              {#snippet actions()}{@render (binMode ? binActions : standardActions)(project)}{/snippet}
             </ProjectRow>
           {/if}
         </li>

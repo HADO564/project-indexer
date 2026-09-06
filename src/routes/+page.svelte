@@ -1,10 +1,14 @@
 <script lang="ts">
   import { listGroups } from "$lib/api/groups";
   import { listCustomIcons } from "$lib/api/icons";
-  import { getAllProjects, listMissingDirectories, updateProject } from "$lib/api/projects";
+  import {
+    getAllProjects,
+    getDeletedProjects,
+    listMissingDirectories,
+    updateProject,
+  } from "$lib/api/projects";
   import type { Group, Project, SortBy, SortDirection } from "$lib/api/types";
   import { customIconSrc } from "$lib/icons";
-  import BinModal from "$lib/components/BinModal.svelte";
   import CreateProjectForm from "$lib/components/CreateProjectForm.svelte";
   import DeleteModal from "$lib/components/DeleteModal.svelte";
   import ErrorBanner from "$lib/components/ErrorBanner.svelte";
@@ -27,7 +31,6 @@
   let error = $state("");
   let editingId = $state<string | null>(null);
   let deleteTarget = $state<Project | null>(null);
-  let binOpen = $state(false);
   let openWithMissingTarget = $state<Project | null>(null);
   let missingDirs = $state<Set<string>>(new Set());
   // Matches the order the main list has always shown by default (most
@@ -48,8 +51,6 @@
   let viewRestored = $state(false);
 
   let selectedView = $state<View>({ kind: "all" });
-  // Stays empty until the Bin becomes a sidebar view; the Bin entry is hidden
-  // and its count reads 0 until then, so nothing depends on it yet.
   let deletedProjects = $state<Project[]>([]);
   let query = $state("");
 
@@ -94,6 +95,7 @@
     error = "";
     try {
       projects = await getAllProjects({ by: sortBy, direction: sortDirection });
+      deletedProjects = await getDeletedProjects({ by: sortBy, direction: sortDirection });
     } catch (err) {
       error = (err as Error).message;
     } finally {
@@ -185,16 +187,8 @@
     await loadProjects();
   }
 
-  function handleOpenBin() {
-    binOpen = true;
-    error = "";
-  }
-
-  function handleCloseBin() {
-    binOpen = false;
-  }
-
-  async function handleRestored() {
+  // Restore and purge both change which list a project is in, so both refetch.
+  async function handleBinChanged() {
     error = "";
     await loadProjects();
   }
@@ -233,32 +227,6 @@
     <h1 class="text-2xl tracking-wide text-phos">
       <span class="text-accent">&#9612;</span> PROJECT INDEXER
     </h1>
-    <div class="flex items-center gap-1">
-    <button
-      type="button"
-      onclick={handleOpenBin}
-      class="rounded-sm p-1.5 text-phos-dim hover:bg-panel-2 hover:text-phos"
-      title="Bin"
-      aria-label="Open bin"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="h-5 w-5"
-      >
-        <path d="M3 6h18" />
-        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-        <path d="M10 11v6" />
-        <path d="M14 11v6" />
-      </svg>
-    </button>
-    </div>
   </div>
 
   <ErrorBanner message={error} />
@@ -270,6 +238,7 @@
       selected={selectedView}
       onSelect={handleSelectView}
       showFavorites
+      showBin
     />
 
     <main class="min-w-0 flex-1">
@@ -298,7 +267,13 @@
         onTrackersRefreshed={handleTrackersRefreshed}
         onOpenWithAppMissing={handleOpenWithAppMissing}
         onToggleFavorite={selectedView.kind === "favorites" ? handleToggleFavorite : undefined}
-        emptyMessage={selectedView.kind === "favorites" ? "No favourites yet." : "No projects yet."}
+        emptyMessage={selectedView.kind === "bin"
+          ? "The bin is empty."
+          : selectedView.kind === "favorites"
+            ? "No favourites yet."
+            : "No projects yet."}
+        binMode={selectedView.kind === "bin"}
+        onBinChanged={handleBinChanged}
         onerror={handleError}
       />
     </main>
@@ -312,10 +287,6 @@
     onCancel={handleCancelDelete}
     onerror={handleError}
   />
-{/if}
-
-{#if binOpen}
-  <BinModal onClose={handleCloseBin} onRestored={handleRestored} onerror={handleError} />
 {/if}
 
 {#if openWithMissingTarget}
