@@ -18,7 +18,7 @@
 - **A custom icon renders only as `<img src="data:image/svg+xml;charset=utf-8,…">`.** Never `{@html}`. The sanitizer in `core` is layer one; the `<img>` is layer two, and it is inert regardless of what layer one missed. Two rounds of adversarial review have already found real bypasses in that sanitizer — do not make it load-bearing alone.
 - **`src/lib/api/types.ts` is a hand-maintained mirror of the Rust models and nothing checks it.** Update it in the same commit as anything it mirrors.
 - **`pnpm run check` baseline: 0 errors, exactly 8 `state_referenced_locally` warnings**, all in `EditProjectForm.svelte`. That is `PI-003`, a documented false positive. Do not fix them. Do not add a ninth.
-- **Rust clippy baseline: exactly 2 warnings** — `module-inception` in `indexer-core`, and `unnecessary_sort_by` at `crates/core/src/platform/app_discovery.rs:116`. The pre-commit hook runs clippy **without** `-D warnings`, so it enforces no baseline at all; count them yourself with `cargo clippy --workspace --all-targets 2>&1 | grep -c "^warning: "`.
+- **Rust clippy baseline: exactly 2 warnings** — `module-inception` in `indexer-core`, and `unnecessary_sort_by` at `crates/core/src/platform/app_discovery.rs:116`. The pre-commit hook runs clippy **without** `-D warnings`, so it enforces no baseline at all; count them yourself with `cargo clippy --workspace --all-targets 2>&1 | grep "^warning: " | sort | uniq -c`. Read the *distinct* lines, not a raw count: cargo prints a per-crate "generated 2 warnings" summary line alongside each real warning, so a bare `grep -c` reports 4 on a clean tree.
 - **The pre-commit hook runs `cargo fmt --check` against the WORKING TREE, not the index.** Run `cargo fmt` *before* `git add`, or you will commit unformatted code through a green hook.
 - **Install the hook on a fresh clone:** `git config core.hooksPath .githooks`.
 - **Follow the existing style.** Shared Tailwind utility strings live in `src/lib/components/styles.ts` — use `inputClass`, `labelClass`, `buttonClass`, `primaryButtonClass`, `dangerButtonClass`, `cardClass` rather than re-typing them. Chrome uses `font-display` (VT323) at 13–15px; data text uses the body mono.
@@ -196,8 +196,8 @@ Expected: all pass, including the 23 pre-existing sanitizer tests and the 2 new 
 
 - [ ] **Step 5: Check formatting and the clippy baseline**
 
-Run: `cargo fmt && cargo clippy --workspace --all-targets 2>&1 | grep -c "^warning: "`
-Expected: `2`. If it is 3, you introduced one — fix it, do not proceed.
+Run: `cargo fmt && cargo clippy --workspace --all-targets 2>&1 | grep "^warning: " | sort | uniq -c`
+Expected: four lines — `consider using sort_by_key`, `module has the same name as its containing module`, and cargo's two "generated 2 warnings" summaries. A fifth line is one you introduced; fix it, do not proceed.
 
 - [ ] **Step 6: Amend the spec**
 
@@ -3703,7 +3703,7 @@ Not a task — the gate over all of them. Run every item and record the actual o
 
 - [ ] `cargo test --workspace` — all pass.
 - [ ] `cargo fmt --check` — clean. (Run `cargo fmt` *before* `git add`, not after.)
-- [ ] `cargo clippy --workspace --all-targets 2>&1 | grep -c "^warning: "` — **2**, the pre-existing baseline.
+- [ ] `cargo clippy --workspace --all-targets 2>&1 | grep "^warning: " | sort | uniq -c` — exactly the two pre-existing warnings (`consider using sort_by_key`, `module has the same name as its containing module`) plus cargo's two summary lines. Four lines total on a clean tree; anything else is yours.
 - [ ] `pnpm test` — all suites pass; note the total.
 - [ ] `pnpm run check` — **0 errors**, and a warning count you have reconciled with Task 10 Step 2 and with `docs/KNOWN-ISSUES.md` PI-003.
 - [ ] `pnpm run build` — succeeds.
