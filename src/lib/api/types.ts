@@ -1,4 +1,8 @@
-// Mirrors src-tauri/src/models/project.rs and update_project.rs.
+// Mirrors the Rust models in crates/core/src/domain/ (project.rs,
+// update_project.rs, group.rs, update_group.rs, tracker.rs, git.rs,
+// unreal.rs, sorting.rs, installed_app.rs) and crates/core/src/infra/
+// icon_store.rs. Hand-maintained — nothing checks it, so update it in the
+// same commit as anything it mirrors.
 // Dates stay as ISO strings (chrono::DateTime<Utc> serializes to RFC3339).
 
 export interface Project {
@@ -21,7 +25,7 @@ export interface Project {
   icon: string | null;
 }
 
-// Mirrors src-tauri/src/models/git.rs
+// Mirrors crates/core/src/domain/git.rs
 export interface GitInfo {
   repo_root: string;
   dirty: boolean;
@@ -34,7 +38,7 @@ export interface GitInfo {
   commit_hash: string | null;
 }
 
-// Mirrors src-tauri/src/models/unreal.rs
+// Mirrors crates/core/src/domain/unreal.rs
 export interface UnrealInfo {
   project_root: string;
   project_name: string;
@@ -47,7 +51,7 @@ export interface UnrealInfo {
   vcs_provider: string | null;
 }
 
-// Mirrors src-tauri/src/models/tracker.rs. Serde's default (externally
+// Mirrors crates/core/src/domain/tracker.rs. Serde's default (externally
 // tagged) enum representation: a variant with data becomes `{ VariantName:
 // <data> }`, and a plain unit variant (none today) would be just its name as
 // a string — trackers.ts handles both shapes generically.
@@ -102,13 +106,13 @@ export interface CreateProjectInput {
   tags?: string[] | null;
 }
 
-// Mirrors src-tauri/src/models/installed_app.rs
+// Mirrors crates/core/src/domain/installed_app.rs
 export interface InstalledApp {
   name: string;
   path: string;
 }
 
-// Mirrors src-tauri/src/utils/sorting.rs. Used by get_favorite_projects and
+// Mirrors crates/core/src/domain/sorting.rs. Used by get_favorite_projects and
 // get_deleted_projects; omit entirely to get the backend default
 // (alphabetical, ascending).
 export type SortBy = "alphabetical" | "last_opened";
@@ -117,4 +121,39 @@ export type SortDirection = "ascending" | "descending";
 export interface SortOptions {
   by: SortBy;
   direction: SortDirection;
+}
+
+// Mirrors crates/core/src/domain/group.rs. `color` is a palette name (see
+// palette.ts); `icon` is a bundled icon name (see icons.ts) — core validates
+// only that it is non-empty, because it does not own the bundled set, so an
+// unknown name falls back to a default glyph at render rather than failing.
+export interface Group {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Mirrors crates/core/src/domain/update_group.rs. Unlike UpdateProject, no
+// field here is nullable — a group always has a name, a colour and an icon —
+// so an omitted key means unchanged and there is no "clear" case.
+// `position` is deliberately absent: reordering goes through reorderGroups,
+// which rewrites the whole ordering, so there is exactly one path that
+// renumbers.
+export interface UpdateGroup {
+  name?: string;
+  color?: string;
+  icon?: string;
+}
+
+// Mirrors crates/core/src/infra/icon_store.rs. `svg` is sanitized SVG
+// *source*, not a data URI — core returns source so it needs no base64
+// dependency; the browser assembles the URI in one expression. See
+// customIconSrc in src/lib/icons.ts, which is the only place that happens.
+export interface StoredIcon {
+  name: string;
+  svg: string;
 }
