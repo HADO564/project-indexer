@@ -9,9 +9,9 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
 
-use indexer_core::application::ProjectService;
+use indexer_core::application::{GroupService, ProjectService};
 use indexer_core::detectors::DetectorRunner;
-use indexer_core::infra::SqliteRepository;
+use indexer_core::infra::{IconStore, SqliteRepository};
 
 use crate::adapters::OpenerLauncher;
 
@@ -158,6 +158,17 @@ fn open_repository(app: &tauri::App) -> Result<SqliteRepository, String> {
         .map_err(|e| format!("failed to open the project database: {e}"))
 }
 
+/// The icon store lives beside `projects.db` in the app config directory. The
+/// directory itself is created lazily on first import, so a missing one is not
+/// a startup failure.
+fn icon_store(app: &tauri::App) -> Result<IconStore, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("could not locate the app config directory: {e}"))?;
+    Ok(IconStore::new(dir.join("icons")))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -191,12 +202,25 @@ pub fn run() {
                     fatal_startup_error(&format!("Project Indexer can't start:\n\n{e}"));
                 }
             };
+            // One repository, two services. `Arc<SqliteRepository>` coerces to
+            // each port, so both views share a single connection and its lock.
+            let repo = Arc::new(repo);
             let service = ProjectService::new(
-                Arc::new(repo),
+                repo.clone(),
                 Arc::new(OpenerLauncher),
                 Arc::new(DetectorRunner::default()),
+                repo.clone(),
             );
             app.manage(Arc::new(service));
+            app.manage(Arc::new(GroupService::new(repo)));
+
+            let icons = match icon_store(app) {
+                Ok(store) => store,
+                Err(e) => {
+                    fatal_startup_error(&format!("Project Indexer can't start:\n\n{e}"));
+                }
+            };
+            app.manage(Arc::new(icons));
 
             TRAY_AVAILABLE.store(setup_tray_or_warn(app.handle()), Ordering::Relaxed);
             Ok(())
@@ -231,7 +255,15 @@ pub fn run() {
             commands::projects::refresh_project_trackers,
             commands::projects::detect_project_trackers,
             commands::projects::suggest_project_name,
-            commands::inspect::inspect_project
+            commands::inspect::inspect_project,
+            commands::groups::list_groups,
+            commands::groups::create_group,
+            commands::groups::update_group,
+            commands::groups::delete_group,
+            commands::groups::reorder_groups,
+            commands::icons::list_custom_icons,
+            commands::icons::import_custom_icon,
+            commands::icons::delete_custom_icon
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

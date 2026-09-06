@@ -32,20 +32,24 @@ future observer CLI (Spec 2).
   │                    NO tauri, NO clap                   │
   │                                                       │
   │  application/  ProjectService — one method per command │
+  │                GroupService — group CRUD + reorder     │
   │                inspection (ProjectInspection DTOs)     │
   │      │                                                 │
   │      ├─► ports/    ProjectReader + ProjectRepository   │
+  │      │             GroupReader + GroupRepository        │
   │      │             AppLauncher                         │
   │      ├─► domain/   Project · Tracker · UpdateProject   │
+  │      │             Group · UpdateGroup · palette        │
   │      │             git · unreal · normalize · sorting  │
   │      │             naming                              │
   │      ├─► detectors/ Detector · DetectorRunner ·        │
   │      │              registry · git/ · unreal/          │
   │      ├─► platform/  filesystem · app_discovery         │
-  │      ├─► infra/     SqliteRepository                   │
-  │      └─► error/     ProjectError (+ the two port errs) │
+  │      ├─► icons/     sanitize_svg — the SVG sanitizer    │
+  │      ├─► infra/     SqliteRepository · IconStore        │
+  │      └─► error/     ProjectError (+ the three port errs)│
   └───────────────────────────────────────────────────────┘
-             │ impl ProjectRepository
+             │ impl ProjectRepository, GroupRepository
              ▼
      app_config_dir()/projects.db   (SQLite, WAL, foreign_keys=ON)
 ```
@@ -53,7 +57,8 @@ future observer CLI (Spec 2).
 Dependency direction is compiler-enforced: `src-tauri → indexer-core` and
 (later) `crates/cli → indexer-core`, never the reverse, and a `use tauri::` in
 `core` fails to compile. `indexer-core` depends only on std, serde, serde_json,
-chrono, uuid, thiserror, git2, rusqlite (+ `winreg`/`parselnk` on Windows).
+chrono, uuid, thiserror, git2, rusqlite, quick-xml (+ `winreg`/`parselnk` on
+Windows).
 
 The GUI's `#[tauri::command]` functions are ~3-line pass-throughs over
 `State<Arc<ProjectService>>`; `AppHandle` is gone from every signature. The one
@@ -126,10 +131,26 @@ if it regresses.
    a `use tauri::` anywhere in `indexer-core` fails to build, and
    `cargo tree -p indexer-core` shows no `tauri`. This is what guarantees "add
    a frontend (CLI, …) without reworking the backend".
-10. **All persistence goes through `ProjectRepository`.** No frontend touches
-    SQLite — or any store — directly; `ProjectService` is the only caller of
-    the port. The read half is a separate `ProjectReader` trait so an external
+10. **All persistence goes through a repository port.** No frontend touches
+    SQLite directly; `ProjectService` is the only caller of `ProjectRepository`
+    and `GroupService` the only caller of `GroupRepository`. Each has a
+    separate reader trait (`ProjectReader`, `GroupReader`) so an external
     consumer (devmon) can depend on read access without the write surface.
+    (One exception — see below.)
+
+    *Exception: `IconStore`.* `src-tauri/src/commands/icons.rs` calls
+    `indexer_core::infra::IconStore` directly — `State<'_, Arc<IconStore>>`,
+    no service, no port — the only place in the codebase that skips the
+    commands → application → port → infra chain. This is deliberate, not a
+    precedent: icon import/list/delete has no orchestration for a service to
+    hold (each command is already a one-line pass-through to the store), and
+    a port with exactly one implementation would be speculative abstraction.
+    If a second `IconStore` implementation ever shows up, or any orchestration
+    grows around icons (validation against something else, cross-referencing
+    groups, …), it should adopt the `ProjectReader`/`GroupReader` shape — a
+    plain `IconReader` port `IconStore` implements — which is also what would
+    give the planned `devmon` app a read-only story for icons, the same way
+    it gets one for projects and groups.
 11. **The binary owns forward migration; it never reads a newer DB.**
     `SqliteRepository::open` runs the `user_version` steps up to
     `CURRENT_SCHEMA_VERSION` and returns
@@ -202,24 +223,38 @@ in `application/service.rs` (plus the runner-level
 ### SQLite as a document store
 
 `Project` is stored as its full serde JSON in a `data TEXT` blob (source of
-truth), with three columns *promoted* out of it for querying —
+truth), with four columns *promoted* out of it for querying —
 `is_deleted` (list filtering), `directory_normalized` (dup check /
-`find_by_directory` / activity attribution), `updated_at` (sort, RFC3339 UTC).
-`tags` is additionally mirrored into a `project_tags(project_id, tag)` table,
+`find_by_directory` / activity attribution), `updated_at` (sort, RFC3339 UTC),
+`group_id` (the project's group membership, filtering by sidebar view). `tags`
+is additionally mirrored into a `project_tags(project_id, tag)` table,
 rewritten on every `save` inside the same transaction — a derived projection for
 future SQL-level tag queries (devmon, search); the blob stays authoritative and
 nothing reads `project_tags` back yet.
 
-*Why not fully relational:* `trackers` is a `Vec<Tracker>` where `Tracker` is a
-sum type with per-variant payloads (`GitInfo`, `UnrealInfo`, …). Normalizing it
-means a satellite table and a migration *per detector*, which breaks invariant 1
-("add a detector = zero persistence change"). SQL querying of tracker internals
-("all dirty git repos") is a known deferred `user_version` migration — promote
-fields or add a `project_trackers` table when a feature needs it. Until then the
-blob is scanned in Rust.
+Groups get their own table, `groups(id, name, color, icon, position,
+created_at, updated_at)` — a real row per group rather than a blob, since a
+group has no sum-type payload to dodge and the sidebar needs to query and order
+them directly. `projects.group_id` is a foreign key onto it
+(`ON DELETE SET NULL` as a safety net; `GroupRepository::delete_group` clears
+the blob's copy and the column together in one transaction, since the
+constraint alone would leave the blob's `group_id` stale). This is
+`user_version` 2, the first schema migration since the SQLite move — see
+`run_migrations` in `SqliteRepository` and the "Migration fixtures" entry
+below.
 
-*Guarded by:* the `SqliteRepository` round-trip / upsert / cascade / tag tests
-and `fresh_db_is_at_current_schema_version`.
+*Why not fully relational (trackers):* `trackers` is a `Vec<Tracker>` where
+`Tracker` is a sum type with per-variant payloads (`GitInfo`, `UnrealInfo`, …).
+Normalizing it means a satellite table and a migration *per detector*, which
+breaks invariant 1 ("add a detector = zero persistence change"). SQL querying
+of tracker internals ("all dirty git repos") is a known deferred
+`user_version` migration — promote fields or add a `project_trackers` table
+when a feature needs it. Until then the blob is scanned in Rust. Groups didn't
+face this problem, hence the different treatment.
+
+*Guarded by:* the `SqliteRepository` round-trip / upsert / cascade / tag tests,
+the group round-trip / position-ordering / cascade-ungroup tests, and
+`fresh_db_is_at_current_schema_version`.
 
 ### Tauri-free `core` crate
 
@@ -324,6 +359,15 @@ Curated and reordered from a broader architectural review. Prioritized by
       `mark_opened`) / all-or-nothing refresh / bin-only delete guard /
       `delete_directory` both branches / restore / inspect-bad-dir /
       `ensure_project` idempotency.
+- [x] **Migration fixtures.** Trigger fired: `CURRENT_SCHEMA_VERSION` went to 2
+      for the groups schema (`user_version` 1→2, see "SQLite as a document
+      store"). `crates/core/tests/migrations.rs` seeds a `user_version = 1`
+      database with representative rows, runs `open`, and asserts the v2
+      result — `groups` present, existing projects intact and left ungrouped,
+      `meta.schema_version` at `2`. Also asserts an already-v2 database opens
+      unchanged and that `schema_version` is stamped regardless of which steps
+      ran. The version-skew guard (invariant 11) was already tested and is
+      unaffected.
 
 ### Deferred — gated on a concrete trigger, not a date
 
@@ -337,13 +381,6 @@ Curated and reordered from a broader architectural review. Prioritized by
   `core::platform`. Still a plain function, not a trait behind a port:
   `core::platform::list_installed_apps()` (`app_discovery.rs`). Give it a trait
   *as* the macOS work — that's when a third impl makes the seam pay.
-- **Migration fixtures.** *Kept and promoted — now load-bearing.* Once the app
-  self-updates from GitHub Releases (see the spec's §"App updates"), a newer
-  binary opening an older `projects.db` is the *normal* case, so every
-  `user_version` step must ship with a test that seeds a `user_version = N` DB
-  with representative rows and asserts the `v(N)→v(N+1)` result. Set up the
-  `fixtures/` scaffold when `CURRENT_SCHEMA_VERSION` first goes to 2. The
-  version-skew guard (invariant 11) is already tested.
 - **Structured detection logging** (`detector · duration · result`). Low value
   at 2–6 detectors; revisit if detection gets slow enough to debug.
 - **Frontend page-state extraction** (`lib/stores/*`). `+page.svelte` is

@@ -37,6 +37,24 @@ pub enum ProjectError {
 
     #[error("Failed to detect project type: {0}")]
     Detection(String),
+
+    #[error("Group name cannot be empty")]
+    InvalidGroupName,
+
+    #[error("Group icon cannot be empty")]
+    InvalidGroupIcon,
+
+    #[error("Not a known colour: {0}")]
+    UnknownSwatch(String),
+
+    #[error("A group with this name already exists: {0}")]
+    DuplicateGroupName(String),
+
+    #[error("Group with id '{0}' not found")]
+    GroupNotFound(String),
+
+    #[error("Icon problem: {0}")]
+    Icon(String),
 }
 
 impl From<crate::error::RepositoryError> for ProjectError {
@@ -48,6 +66,12 @@ impl From<crate::error::RepositoryError> for ProjectError {
 impl From<crate::error::LauncherError> for ProjectError {
     fn from(e: crate::error::LauncherError) -> Self {
         ProjectError::OpenFailed(e.0)
+    }
+}
+
+impl From<crate::error::IconError> for ProjectError {
+    fn from(e: crate::error::IconError) -> Self {
+        ProjectError::Icon(e.to_string())
     }
 }
 
