@@ -12,6 +12,7 @@
   import CreateProjectForm from "$lib/components/CreateProjectForm.svelte";
   import DeleteModal from "$lib/components/DeleteModal.svelte";
   import ErrorBanner from "$lib/components/ErrorBanner.svelte";
+  import GroupManagerModal from "$lib/components/GroupManagerModal.svelte";
   import OpenWithMissingModal from "$lib/components/OpenWithMissingModal.svelte";
   import ProjectList from "$lib/components/ProjectList.svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
@@ -30,6 +31,7 @@
   let loading = $state(false);
   let error = $state("");
   let editingId = $state<string | null>(null);
+  let groupManagerOpen = $state(false);
   let deleteTarget = $state<Project | null>(null);
   let openWithMissingTarget = $state<Project | null>(null);
   let missingDirs = $state<Set<string>>(new Set());
@@ -139,6 +141,14 @@
     loadCustomIcons();
   });
 
+  async function handleGroupsChanged() {
+    error = "";
+    await loadGroups();
+    // A project's group_id may have been cleared by a group deletion, so the
+    // project list is stale too.
+    await loadProjects();
+  }
+
   function handleError(message: string) {
     error = message;
   }
@@ -239,6 +249,7 @@
       onSelect={handleSelectView}
       showFavorites
       showBin
+      onManageGroups={() => (groupManagerOpen = true)}
     />
 
     <main class="min-w-0 flex-1">
@@ -279,6 +290,15 @@
     </main>
   </div>
 </div>
+
+{#if groupManagerOpen}
+  <GroupManagerModal
+    {groups}
+    onChanged={handleGroupsChanged}
+    onClose={() => (groupManagerOpen = false)}
+    onerror={handleError}
+  />
+{/if}
 
 {#if deleteTarget}
   <DeleteModal
