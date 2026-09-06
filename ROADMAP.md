@@ -359,9 +359,6 @@ These are not "someday". Each has a specific condition that should start it.
   inspection, with a cache keyed on directory and HEAD. Trigger: the first
   detector that genuinely needs expensive work — git contributors, or dependency
   parsing.
-- **Migration fixtures.** A `fixtures/` scaffold that seeds a database at
-  `user_version = N` and asserts the result of each step. Trigger:
-  `CURRENT_SCHEMA_VERSION` going to 2.
 - **Structured detection logging.** Low value at two to six detectors. Trigger:
   detection getting slow enough to need debugging.
 - **Frontend page-state extraction.** `+page.svelte` is around 250 lines. Watch

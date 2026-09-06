@@ -81,16 +81,23 @@ library crate. Spec:
 
 ## Test counts (Rust, `cargo test --workspace`)
 
-105 `#[test]` attributes in total. **102 execute on Linux**, 94 on Windows — the
-difference either way is platform-gated tests (11 `#[cfg(unix/linux)]`, the rest
-`#[cfg(windows)]`). `cargo test -p project-indexer` is 0; everything lives in
-`indexer-core`.
+168 `#[test]` attributes in the `indexer-core` lib, plus a `tests/migrations.rs`
+integration suite (6, cross-platform). **165 lib tests execute on Linux**, 157 on
+Windows — the difference either way is platform-gated tests (11
+`#[cfg(unix/linux)]`, mostly the Linux `.desktop`/Flatpak launch-argument suite
+under `platform::app_discovery`'s `linux_impl`, the rest `#[cfg(windows)]`).
+Migrations run identically on both. Workspace total via
+`cargo test --workspace`: **171 on Linux, 163 on Windows**. `cargo test -p
+project-indexer` is 0; everything lives in `indexer-core`.
 
 - [x] `Gitector` (11), `UnrealDetector` (10), detector-runner + `results_from`
 - [x] `normalize`, `sorting`, `Project` invariants / soft-delete / health checks
 - [x] `naming` (8) — SSH/HTTPS remotes, `.git` suffix, trailing separators, no-remote fallback, empty
-- [x] `SqliteRepository` (11) — round-trip, upsert, idempotent+cascading delete (tag mirror asserted non-empty first), tag-mirror populate+replace, `list` incl. deleted, `find_by_directory` (normalized index + prefers live most-recent row), corrupt blob, fresh-DB schema, file-backed `open` creates schema (wal / `user_version` / `meta.schema_version`), refuses-newer-DB
-- [x] `ProjectService` (15) — dup rejects, best-effort create, open (missing dir / missing app / success), all-or-nothing refresh, bin-only delete, `delete_directory` both branches, restore, inspect-bad-dir, `ensure_project` idempotency
+- [x] `SqliteRepository` (17: 11 project + 6 group) — round-trip, upsert, idempotent+cascading delete (tag mirror asserted non-empty first), tag-mirror populate+replace, `list` incl. deleted, `find_by_directory` (normalized index + prefers live most-recent row), corrupt blob, fresh-DB schema, file-backed `open` creates schema (wal / `user_version` / `meta.schema_version`), refuses-newer-DB; plus group round-trip, position ordering, `set_group_positions` rewrites the whole ordering, deleting a group cascades to ungroup its members in both blob and column, deleting a missing group is idempotent, `save` writes `group_id` to both blob and column
+- [x] Migration suite (`tests/migrations.rs`, 6) — a v1 database opens and keeps its rows, v1→v2 adds `groups` and `projects.group_id` and leaves existing projects ungrouped, opening an already-current database is a no-op, `meta.schema_version` is stamped regardless of which steps ran, a database from a newer binary is refused
+- [x] Icon sanitizer (`icons::sanitize`, 23) — strips `<script>`/`<style>`/event handlers/`foreignObject`/`use`/`image`, decodes entities before scanning so numeric or undefined entities can't smuggle a `url()` past the filter, closes the CSS-escape `url()` bypass, drops `href` incl. the `xlink:href` form, enforces exactly one well-formed `<svg>` root, a size cap, and rejects non-SVG input or an SVG with nothing drawable left
+- [x] Icon store (`infra::icon_store`, 10) — import sanitizes and stores the sanitized form, never the original; a name collision doesn't overwrite the first icon; delete refuses a name that could escape the store directory; listing skips a non-UTF-8 file or a directory masquerading as an icon without failing the rest of the listing
+- [x] `ProjectService` (18) — dup rejects, best-effort create, open (missing dir / missing app / success), all-or-nothing refresh, bin-only delete, `delete_directory` both branches, restore, inspect-bad-dir, `ensure_project` idempotency, group assignment (an existing group succeeds, a nonexistent one is `GroupNotFound` and leaves the project unchanged, clearing the group needs no group to exist)
 
 ## Background operation
 
