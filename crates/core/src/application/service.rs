@@ -8,7 +8,7 @@ use crate::domain::sorting::{filter_deleted, filter_favorites, sort_projects, So
 use crate::domain::{Project, Tracker, UpdateProject};
 use crate::error::ProjectError;
 use crate::platform::{check_directory_status, remove_directory, DirectoryStatus};
-use crate::ports::{AppLauncher, ProjectRepository};
+use crate::ports::{AppLauncher, GroupReader, ProjectRepository};
 
 /// All the orchestration that used to live in the Tauri command handlers:
 /// one method per current command, with the logic lifted unchanged. The
@@ -18,6 +18,7 @@ pub struct ProjectService {
     repo: Arc<dyn ProjectRepository>,
     launcher: Arc<dyn AppLauncher>,
     detectors: Arc<DetectorRunner>,
+    groups: Arc<dyn GroupReader>,
 }
 
 /// Opaque by necessity — every field is a `dyn` port with no `Debug` bound, and
@@ -34,11 +35,13 @@ impl ProjectService {
         repo: Arc<dyn ProjectRepository>,
         launcher: Arc<dyn AppLauncher>,
         detectors: Arc<DetectorRunner>,
+        groups: Arc<dyn GroupReader>,
     ) -> Self {
         Self {
             repo,
             launcher,
             detectors,
+            groups,
         }
     }
 
@@ -79,6 +82,15 @@ impl ProjectService {
 
     pub fn update(&self, id: &str, update: UpdateProject) -> Result<Project, ProjectError> {
         let mut project = self.load(id)?;
+        // Checked here rather than in `Project::update` because it needs the
+        // group store — a foreign key the DB would otherwise reject only
+        // after the rest of the update was already applied in memory.
+        // `Some(None)` (clearing the group) needs no check.
+        if let Some(Some(group_id)) = &update.group_id {
+            if self.groups.get_group(group_id)?.is_none() {
+                return Err(ProjectError::GroupNotFound(group_id.clone()));
+            }
+        }
         project.update(update)?;
         self.repo.save(&project)?;
         Ok(project)
@@ -301,6 +313,7 @@ impl ProjectService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::GroupService;
     use crate::detectors::DetectorRunner;
     use crate::infra::SqliteRepository;
     use std::sync::{Arc, Mutex};
@@ -324,10 +337,12 @@ mod tests {
     }
 
     fn service(launcher: Arc<FakeLauncher>) -> ProjectService {
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
         ProjectService::new(
-            Arc::new(SqliteRepository::in_memory().unwrap()),
+            repo.clone(),
             launcher,
             Arc::new(DetectorRunner::default()),
+            repo,
         )
     }
 
@@ -479,9 +494,10 @@ mod tests {
         }
         let repo = Arc::new(SqliteRepository::in_memory().unwrap());
         let svc = ProjectService::new(
-            repo,
+            repo.clone(),
             Arc::new(FakeLauncher::default()),
             Arc::new(DetectorRunner::new(vec![Box::new(Boom)])),
+            repo,
         );
         let p = svc
             .create("R".into(), tmpdir("refresh"), None, None)
@@ -521,5 +537,78 @@ mod tests {
         let b = svc.ensure_project(&dir).unwrap();
         assert_eq!(a.id, b.id);
         assert_eq!(svc.list(Default::default()).unwrap().len(), 1);
+    }
+
+    fn mk_update_group_id(id: Option<&str>) -> UpdateProject {
+        serde_json::from_value(serde_json::json!({ "group_id": id })).unwrap()
+    }
+
+    #[test]
+    fn update_assigns_project_to_an_existing_group() {
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+        let groups = GroupService::new(repo.clone());
+        let svc = ProjectService::new(
+            repo.clone(),
+            Arc::new(FakeLauncher::default()),
+            Arc::new(DetectorRunner::default()),
+            repo,
+        );
+        let group = groups
+            .create("Work".into(), "cyan".into(), "briefcase".into())
+            .unwrap();
+        let p = svc
+            .create("Assignable".into(), tmpdir("group-assign"), None, None)
+            .unwrap();
+
+        let updated = svc
+            .update(&p.id, mk_update_group_id(Some(&group.id)))
+            .unwrap();
+
+        assert_eq!(updated.group_id.as_deref(), Some(group.id.as_str()));
+        assert_eq!(
+            svc.get(&p.id).unwrap().group_id.as_deref(),
+            Some(group.id.as_str())
+        );
+    }
+
+    #[test]
+    fn update_rejects_assignment_to_a_nonexistent_group_and_leaves_project_unchanged() {
+        let svc = service(Arc::new(FakeLauncher::default()));
+        let p = svc
+            .create("Untouched".into(), tmpdir("group-missing"), None, None)
+            .unwrap();
+        let before = svc.get(&p.id).unwrap();
+
+        let err = svc.update(&p.id, mk_update_group_id(Some("no-such-group")));
+
+        assert!(matches!(err, Err(ProjectError::GroupNotFound(id)) if id == "no-such-group"));
+        let after = svc.get(&p.id).unwrap();
+        assert_eq!(after.group_id, before.group_id);
+        assert_eq!(after.updated_at, before.updated_at);
+    }
+
+    #[test]
+    fn update_clears_group_without_needing_one_to_exist() {
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+        let groups = GroupService::new(repo.clone());
+        let svc = ProjectService::new(
+            repo.clone(),
+            Arc::new(FakeLauncher::default()),
+            Arc::new(DetectorRunner::default()),
+            repo,
+        );
+        let group = groups
+            .create("Personal".into(), "gold".into(), "star".into())
+            .unwrap();
+        let p = svc
+            .create("Clearable".into(), tmpdir("group-clear"), None, None)
+            .unwrap();
+        svc.update(&p.id, mk_update_group_id(Some(&group.id)))
+            .unwrap();
+
+        let cleared = svc.update(&p.id, mk_update_group_id(None)).unwrap();
+
+        assert!(cleared.group_id.is_none());
+        assert!(svc.get(&p.id).unwrap().group_id.is_none());
     }
 }
