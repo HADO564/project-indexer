@@ -1,4 +1,4 @@
-use quick_xml::events::{BytesEnd, BytesStart, Event};
+use quick_xml::events::{BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 
 use crate::error::IconError;
@@ -186,8 +186,20 @@ pub fn sanitize_svg(input: &str) -> Result<String, IconError> {
             // with more top-level content than the one root element it is
             // supposed to have.
             Event::Text(t) if skip_depth == 0 && depth > 0 => {
+                // Decoded, then re-escaped from the decoded string, rather
+                // than the raw bytes forwarded verbatim. Forwarding raw bytes
+                // would let an entity undefined once its declaring DOCTYPE is
+                // stripped (e.g. `&xxe;`) — or a bare `&` that was never a
+                // valid entity reference to begin with — sail through as
+                // literal text that is fatal to any consumer that re-parses
+                // the output, such as a real `data:image/svg+xml` loader.
+                // Decoding here fails closed on exactly that; `BytesText::new`
+                // re-escapes the decoded text for output.
+                let decoded = t
+                    .unescape()
+                    .map_err(|e| IconError::Malformed(e.to_string()))?;
                 writer
-                    .write_event(Event::Text(t))
+                    .write_event(Event::Text(BytesText::new(&decoded)))
                     .map_err(|e| IconError::Malformed(e.to_string()))?;
             }
 
@@ -226,6 +238,12 @@ fn local_name(raw: &[u8]) -> String {
 /// inert.
 fn filter_attributes(name: &str, e: &BytesStart<'_>) -> Result<BytesStart<'static>, IconError> {
     let mut out = BytesStart::new(name.to_string());
+    // Names already emitted for this element. `.with_checks(false)` below
+    // means the reader will not reject a duplicate attribute name itself, and
+    // a duplicate is not well-formed XML: reproducing it in the output would
+    // leave the caller no single well-formed document to trust. Compared
+    // case-insensitively, consistent with the allow-list check just below.
+    let mut seen = Vec::new();
 
     for attr in e.attributes().with_checks(false) {
         let attr = attr.map_err(|err| IconError::Malformed(err.to_string()))?;
@@ -236,6 +254,12 @@ fn filter_attributes(name: &str, e: &BytesStart<'_>) -> Result<BytesStart<'stati
         if !ALLOWED_ATTRS.iter().any(|a| a.eq_ignore_ascii_case(&key)) {
             continue;
         }
+
+        let key_lower = key.to_ascii_lowercase();
+        if seen.contains(&key_lower) {
+            continue;
+        }
+        seen.push(key_lower);
 
         // Decoded (XML entities resolved) before the scan below, so the scan
         // sees the same text a real parser will. Scanning the raw bytes let an
@@ -281,6 +305,42 @@ mod tests {
         <circle cx="12" cy="12" r="4"/>
     </svg>"#;
 
+    /// Re-parses `xml`, resolving every entity reference and rejecting a
+    /// duplicate attribute, the way a real consumer — e.g. a
+    /// `data:image/svg+xml` loader — would. This is what actually proves
+    /// "the output is a single well-formed document"; a substring assertion
+    /// cannot catch an unresolved entity, a bare `&`, or a duplicate
+    /// attribute, all of which a naive scan happily lets through.
+    fn assert_reparses_as_well_formed_xml(xml: &str) {
+        let mut reader = Reader::from_str(xml);
+        loop {
+            let event = reader
+                .read_event()
+                .unwrap_or_else(|e| panic!("output did not re-parse ({e}): {xml}"));
+            match event {
+                Event::Eof => break,
+                Event::Start(ref e) | Event::Empty(ref e) => {
+                    // Default `Attributes` checks (no `with_checks(false)`
+                    // here) reject a duplicate attribute name on their own.
+                    for attr in e.attributes() {
+                        let attr = attr.unwrap_or_else(|err| {
+                            panic!("attribute error on re-parse ({err}): {xml}")
+                        });
+                        attr.unescape_value().unwrap_or_else(|err| {
+                            panic!("unresolved entity in an attribute on re-parse ({err}): {xml}")
+                        });
+                    }
+                }
+                Event::Text(t) => {
+                    t.unescape().unwrap_or_else(|err| {
+                        panic!("unresolved entity in text on re-parse ({err}): {xml}")
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+
     #[test]
     fn decodes_numeric_entities_before_scanning_so_they_cannot_smuggle_url() {
         // "&#117;" is the numeric character reference for 'u'. Scanning the
@@ -306,7 +366,12 @@ mod tests {
         // substring "url(" is never present in the raw XML text for the
         // scan to catch. None of these contain an XML metacharacter, so
         // nothing re-escapes the backslash the way an entity's '&' does.
-        for value in [r"\75 rl(#evil)", r"\000075rl(#evil)", r"u\72 l(#evil)"] {
+        for value in [
+            r"\75 rl(#evil)",
+            r"\000075rl(#evil)",
+            r"u\72 l(#evil)",
+            r"\55 RL(#evil)",
+        ] {
             let input = format!(r#"<svg viewBox="0 0 1 1"><path d="M0 0" fill="{value}"/></svg>"#);
             let out = sanitize_svg(&input).expect("path survives");
             assert!(
@@ -476,5 +541,54 @@ mod tests {
     fn rejects_malformed_xml() {
         let input = r#"<svg viewBox="0 0 1 1"><path d="M0 0"></svg>"#;
         assert!(sanitize_svg(input).is_err());
+    }
+
+    #[test]
+    fn rejects_an_undefined_entity_instead_of_emitting_it_raw() {
+        // "&xxe;" is undefined once its declaring DOCTYPE is stripped, which
+        // it always is. Forwarding it as raw text (the old behavior) would
+        // produce output that is fatal for any consumer that re-parses it —
+        // a real `data:image/svg+xml` loader raises "unrecognized entity
+        // 'xxe'". Failing closed here, instead of emitting it, is what keeps
+        // "the output is a single well-formed document" true rather than
+        // merely usually true.
+        let input = r#"<svg viewBox="0 0 1 1"><path d="M0 0"/><title>&xxe;</title></svg>"#;
+        assert!(matches!(sanitize_svg(input), Err(IconError::Malformed(_))));
+    }
+
+    #[test]
+    fn rejects_a_bare_ampersand_in_text_instead_of_emitting_it_raw() {
+        // A bare '&' not part of a valid `&name;` or `&#N;` reference is not
+        // well-formed XML text either. The same decode step that closes the
+        // undefined-entity case above closes this one too: `unescape()` fails
+        // on it just as it fails on an unknown named entity.
+        let input = r#"<svg viewBox="0 0 1 1"><path d="M0 0"/><title>A & B</title></svg>"#;
+        assert!(matches!(sanitize_svg(input), Err(IconError::Malformed(_))));
+    }
+
+    #[test]
+    fn drops_a_duplicate_attribute_and_the_result_is_well_formed() {
+        let input = r#"<svg viewBox="0 0 1 1"><path d="M0 0" d="M9 9"/></svg>"#;
+        let out = sanitize_svg(input).expect("the first occurrence of a duplicate attribute wins");
+        assert_reparses_as_well_formed_xml(&out);
+        assert!(out.contains("M0 0"));
+        assert!(!out.contains("M9 9"));
+    }
+
+    #[test]
+    fn a_realistic_two_tone_icon_reparses_as_well_formed_xml() {
+        // A lucide-style icon: a wrapping <g>, several drawable primitives,
+        // ordinary presentation attributes, no funny business. The re-parse
+        // is what actually proves "well-formed" — a substring check on GOOD
+        // above would not have caught any of the three bugs this round of
+        // review found.
+        let input = r#"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <g stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v20"/>
+                <circle cx="12" cy="12" r="10"/>
+            </g>
+        </svg>"#;
+        let out = sanitize_svg(input).expect("a clean icon must survive");
+        assert_reparses_as_well_formed_xml(&out);
     }
 }
