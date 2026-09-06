@@ -44,6 +44,10 @@ impl IconStore {
             .unwrap_or_default();
         let name = self.unique_name(&slugify(&stem))?;
 
+        // This read-then-write is safe only because Tauri's ExecutionContext::Blocking
+        // serializes non-async commands: `unique_name` lists the directory to pick an
+        // unused name, then we write the file. If commands were concurrent, another
+        // import could choose the same name, silently overwriting the first icon.
         std::fs::create_dir_all(&self.dir)
             .map_err(|e| IconError::Io(format!("{}: {e}", self.dir.display())))?;
         let path = self.dir.join(format!("{name}.svg"));
