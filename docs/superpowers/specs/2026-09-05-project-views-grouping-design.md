@@ -417,7 +417,10 @@ to start. Both default to All.
 - A custom icon is sanitized **on import**, not on render — the stored file is
   already safe, and nothing renders an unsanitized SVG.
 - A custom icon renders only through `<img>` with a `data:` URI. Never inline.
-- A group icon comes from the bundled set only, so it can take the group colour.
+- A group icon is a bundled-set icon *name* by convention; the frontend
+  resolves it and lets it take the group colour. Core validates only that the
+  name is non-empty — it does not own the bundled icon list — and an unknown
+  name falls back to a default glyph at render rather than failing.
 - Deleting a group never deletes a project.
 - Group membership is exclusive: a project has zero or one group.
 - No view can hide projects without saying so: the sidebar always shows every
