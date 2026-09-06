@@ -1,8 +1,12 @@
 # Handoff — project views, colour, icons and groups (frontend half)
 
 **Date:** 2026-09-05
-**Status:** **ready — the backend half is complete and merged to `main`.** Nothing
-here needs a design decision first; the shape is settled and written down.
+**Status:** **complete** — implemented by
+[`docs/superpowers/plans/2026-09-06-project-views-frontend.md`](../superpowers/plans/2026-09-06-project-views-frontend.md).
+The five open questions in §6 are answered in that plan's "Decisions this plan
+settles"; two deviations from §3 and from the spec are argued in its "Two
+deviations from the spec", and one correction to §3's icon-error list is inline
+below. Kept for the reasoning, not as live work.
 **Prerequisite:** satisfied. [`docs/superpowers/plans/2026-09-05-groups-backend.md`](../superpowers/plans/2026-09-05-groups-backend.md)
 shipped as 30 commits: nine TDD tasks each independently reviewed, a whole-branch
 review, and a six-item fix wave with its own re-review. The eight commands below
