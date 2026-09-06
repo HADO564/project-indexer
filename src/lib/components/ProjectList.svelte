@@ -24,6 +24,8 @@
     onOpened,
     onTrackersRefreshed,
     onOpenWithAppMissing,
+    onToggleFavorite,
+    emptyMessage = "No projects yet.",
     onerror,
   }: {
     projects: Project[];
@@ -40,6 +42,12 @@
     onOpened: () => void | Promise<void>;
     onTrackersRefreshed: () => void | Promise<void>;
     onOpenWithAppMissing: (project: Project) => void;
+    // Only the Favourites view supplies this; elsewhere the star stays a
+    // static marker, exactly as it is today.
+    onToggleFavorite?: (project: Project) => void;
+    // Per-view, because "No projects yet." is wrong for a view that filters:
+    // you may well have projects and no favourites.
+    emptyMessage?: string;
     onerror: (message: string) => void;
   } = $props();
 
@@ -59,7 +67,7 @@
          current list on screen rather than flashing this. -->
     <p class="text-sm text-phos-dim">Loading…</p>
   {:else if projects.length === 0}
-    <p class="text-sm text-phos-dim">No projects yet.</p>
+    <p class="text-sm text-phos-dim">{emptyMessage}</p>
   {:else}
     {#snippet standardActions(project: Project)}
       <ProjectActionsMenu
@@ -94,15 +102,33 @@
           {#if editingId === project.id}
             <EditProjectForm {project} {onSaved} onCancel={onCancelEdit} {onerror} />
           {:else if mode === "grid"}
-            <ProjectTile {project} directoryMissing={missing} {customIcons} {groupColor}>
+            <ProjectTile
+              {project}
+              directoryMissing={missing}
+              {customIcons}
+              {groupColor}
+              {onToggleFavorite}
+            >
               {#snippet actions()}{@render standardActions(project)}{/snippet}
             </ProjectTile>
           {:else if mode === "compact"}
-            <ProjectCompactRow {project} directoryMissing={missing} {customIcons} {groupColor}>
+            <ProjectCompactRow
+              {project}
+              directoryMissing={missing}
+              {customIcons}
+              {groupColor}
+              {onToggleFavorite}
+            >
               {#snippet actions()}{@render standardActions(project)}{/snippet}
             </ProjectCompactRow>
           {:else}
-            <ProjectRow {project} directoryMissing={missing} {customIcons} {groupColor}>
+            <ProjectRow
+              {project}
+              directoryMissing={missing}
+              {customIcons}
+              {groupColor}
+              {onToggleFavorite}
+            >
               {#snippet actions()}{@render standardActions(project)}{/snippet}
             </ProjectRow>
           {/if}

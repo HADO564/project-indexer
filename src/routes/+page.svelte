@@ -1,14 +1,13 @@
 <script lang="ts">
   import { listGroups } from "$lib/api/groups";
   import { listCustomIcons } from "$lib/api/icons";
-  import { getAllProjects, listMissingDirectories } from "$lib/api/projects";
+  import { getAllProjects, listMissingDirectories, updateProject } from "$lib/api/projects";
   import type { Group, Project, SortBy, SortDirection } from "$lib/api/types";
   import { customIconSrc } from "$lib/icons";
   import BinModal from "$lib/components/BinModal.svelte";
   import CreateProjectForm from "$lib/components/CreateProjectForm.svelte";
   import DeleteModal from "$lib/components/DeleteModal.svelte";
   import ErrorBanner from "$lib/components/ErrorBanner.svelte";
-  import FavoritesModal from "$lib/components/FavoritesModal.svelte";
   import OpenWithMissingModal from "$lib/components/OpenWithMissingModal.svelte";
   import ProjectList from "$lib/components/ProjectList.svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
@@ -29,7 +28,6 @@
   let editingId = $state<string | null>(null);
   let deleteTarget = $state<Project | null>(null);
   let binOpen = $state(false);
-  let favoritesOpen = $state(false);
   let openWithMissingTarget = $state<Project | null>(null);
   let missingDirs = $state<Set<string>>(new Set());
   // Matches the order the main list has always shown by default (most
@@ -201,17 +199,16 @@
     await loadProjects();
   }
 
-  function handleOpenFavorites() {
-    favoritesOpen = true;
-    error = "";
-  }
-
-  function handleCloseFavorites() {
-    favoritesOpen = false;
-  }
-
-  async function handleFavoritesChanged() {
-    error = "";
+  // Only offered in the Favourites view, mirroring the star FavoritesModal
+  // had — it and the edit form's checkbox were the only ways to un-favourite,
+  // and this view replaces the first of those. A failure still refetches, so
+  // the list matches what the backend holds rather than an optimistic guess.
+  async function handleToggleFavorite(project: Project) {
+    try {
+      await updateProject(project.id, { favorite: !project.favorite });
+    } catch (err) {
+      error = (err as Error).message;
+    }
     await loadProjects();
   }
 
@@ -237,28 +234,6 @@
       <span class="text-accent">&#9612;</span> PROJECT INDEXER
     </h1>
     <div class="flex items-center gap-1">
-    <button
-      type="button"
-      onclick={handleOpenFavorites}
-      class="rounded-sm p-1.5 text-phos-dim hover:bg-panel-2 hover:text-phos"
-      title="Favorites"
-      aria-label="Open favorites"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="h-5 w-5"
-      >
-        <path
-          d="M12 3.5l2.6 5.27 5.82.85-4.21 4.1.99 5.79L12 16.9l-5.2 2.61.99-5.79-4.21-4.1 5.82-.85z"
-        />
-      </svg>
-    </button>
     <button
       type="button"
       onclick={handleOpenBin}
@@ -289,7 +264,13 @@
   <ErrorBanner message={error} />
 
   <div class="mt-4 flex gap-6">
-    <Sidebar {groups} {counts} selected={selectedView} onSelect={handleSelectView} />
+    <Sidebar
+      {groups}
+      {counts}
+      selected={selectedView}
+      onSelect={handleSelectView}
+      showFavorites
+    />
 
     <main class="min-w-0 flex-1">
       <CreateProjectForm onCreated={handleCreated} onerror={handleError} />
@@ -316,6 +297,8 @@
         onOpened={handleOpened}
         onTrackersRefreshed={handleTrackersRefreshed}
         onOpenWithAppMissing={handleOpenWithAppMissing}
+        onToggleFavorite={selectedView.kind === "favorites" ? handleToggleFavorite : undefined}
+        emptyMessage={selectedView.kind === "favorites" ? "No favourites yet." : "No projects yet."}
         onerror={handleError}
       />
     </main>
@@ -333,15 +316,6 @@
 
 {#if binOpen}
   <BinModal onClose={handleCloseBin} onRestored={handleRestored} onerror={handleError} />
-{/if}
-
-{#if favoritesOpen}
-  <FavoritesModal
-    onClose={handleCloseFavorites}
-    onChanged={handleFavoritesChanged}
-    onOpenWithAppMissing={handleOpenWithAppMissing}
-    onerror={handleError}
-  />
 {/if}
 
 {#if openWithMissingTarget}
