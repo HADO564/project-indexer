@@ -1,11 +1,15 @@
 <script lang="ts">
-  import type { Project } from "$lib/api/types";
+  import type { Group, Project } from "$lib/api/types";
+  import { swatchVar } from "$lib/palette";
   import EditProjectForm from "./EditProjectForm.svelte";
-  import ProjectCard from "./ProjectCard.svelte";
+  import ProjectActionsMenu from "./ProjectActionsMenu.svelte";
+  import ProjectRow from "./ProjectRow.svelte";
   import { cardClass } from "./styles";
 
   let {
     projects,
+    groups,
+    customIcons,
     loading,
     editingId,
     missingDirs,
@@ -19,6 +23,8 @@
     onerror,
   }: {
     projects: Project[];
+    groups: Group[];
+    customIcons: Map<string, string>;
     loading: boolean;
     editingId: string | null;
     missingDirs: Set<string>;
@@ -31,6 +37,13 @@
     onOpenWithAppMissing: (project: Project) => void;
     onerror: (message: string) => void;
   } = $props();
+
+  // The group's palette *name*, resolved per project. Null when the project
+  // has no group or when its group has since been deleted.
+  function groupColorOf(project: Project): string | null {
+    if (!project.group_id) return null;
+    return groups.find((g) => g.id === project.group_id)?.color ?? null;
+  }
 </script>
 
 <section class={cardClass}>
@@ -45,20 +58,32 @@
   {:else}
     <ul class="flex flex-col gap-3">
       {#each projects as project (project.id)}
-        <li class="rounded-sm border border-line p-3">
+        {@const groupColor = groupColorOf(project)}
+        <li
+          class="rounded-sm border border-line p-3"
+          style={groupColor ? `border-left: 2px solid ${swatchVar(groupColor)}` : undefined}
+        >
           {#if editingId === project.id}
             <EditProjectForm {project} {onSaved} onCancel={onCancelEdit} {onerror} />
           {:else}
-            <ProjectCard
+            <ProjectRow
               {project}
               directoryMissing={missingDirs.has(project.id)}
-              {onEdit}
-              {onRequestDelete}
-              {onOpened}
-              {onTrackersRefreshed}
-              {onOpenWithAppMissing}
-              {onerror}
-            />
+              {customIcons}
+              {groupColor}
+            >
+              {#snippet actions()}
+                <ProjectActionsMenu
+                  {project}
+                  {onEdit}
+                  {onRequestDelete}
+                  {onOpened}
+                  {onTrackersRefreshed}
+                  {onOpenWithAppMissing}
+                  {onerror}
+                />
+              {/snippet}
+            </ProjectRow>
           {/if}
         </li>
       {/each}
