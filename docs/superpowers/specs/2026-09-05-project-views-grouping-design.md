@@ -248,8 +248,16 @@ compiler enforces this). Allow-list, never deny-list:
   `polyline`, `polygon`, `title`, `desc`.
 - **Attributes:** `viewBox`, `d`, `cx`, `cy`, `r`, `rx`, `ry`, `x`, `y`, `x1`,
   `y1`, `x2`, `y2`, `width`, `height`, `points`, `transform`, `fill`, `stroke`,
-  `stroke-width`, `stroke-linecap`, `stroke-linejoin`, `fill-rule`, `clip-rule`,
-  `opacity`.
+  `stroke-width`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`,
+  `stroke-dashoffset`, `stroke-miterlimit`, `fill-rule`, `fill-opacity`,
+  `stroke-opacity`, `clip-rule`, `opacity`. The implementation shipped by the
+  backend half omits the three `stroke-*` and two `*-opacity` additions above
+  — a gap in this list, not a slip in the code, which matches what this list
+  said at the time. Widening `ALLOWED_ATTRS` to this corrected list is gated
+  before the bundled icon set in the frontend handoff (task 19), because
+  sanitizing is on import only and the store keeps just the sanitized form —
+  an icon imported before the widening has already lost those attributes for
+  good.
 - **Stripped unconditionally:** `script`, `style`, `foreignObject`, `use`,
   `image`, `animate*`, every `on*` handler, `href` / `xlink:href`, and any
   attribute whose value contains a `url(` or a `javascript:` scheme.

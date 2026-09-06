@@ -144,7 +144,7 @@ one expression:
 const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon.svg)}`;
 ```
 
-## 4. The work — spec tasks 10 to 20
+## 4. The work — spec tasks 10 to 21
 
 Write the plan for these with the `superpowers:writing-plans` skill; the spec
 lists them, and the ordering below is the one it settled on.
@@ -166,8 +166,23 @@ lists them, and the ordering below is the one it settled on.
 16. **Fold Bin in** with `BinActions`; delete `BinModal.svelte`.
 17. **`GroupManagerModal`** — create, rename, recolour, re-icon, reorder, delete.
 18. **Colour, icon and group pickers** in the create/edit forms.
-19. **The bundled icon set** (~24 lucide-style inline SVGs, keyed by name).
-20. **Docs** — `checklist.md`, `CHANGELOG.md`, and `architecture.md` where the
+19. **Widen the icon sanitizer's attribute allow-list.** `ALLOWED_ATTRS` in
+    `crates/core/src/icons/sanitize.rs` is missing `stroke-dasharray`,
+    `stroke-dashoffset`, `stroke-miterlimit`, `fill-opacity` and
+    `stroke-opacity` — five inert presentation attributes (no URL or script
+    surface) that real icon sets use routinely. The gap is in the spec's own
+    attribute list, not a slip in the code, which implements that list
+    exactly. **Must land before the next task.** Sanitizing happens once, on
+    import, and the store keeps only the sanitized SVG — nothing re-sanitizes
+    on render. So this is lossy and irreversible: an icon imported before this
+    widening has already lost those five attributes for good, and widening the
+    list after the fact does not bring them back for icons already stored.
+    Nobody can import a custom icon until this half ships the picker, which is
+    why the fix belongs here rather than in the backend half — but it has to
+    be the *first* icon-affecting change this half makes, before task 20 gives
+    people something to import.
+20. **The bundled icon set** (~24 lucide-style inline SVGs, keyed by name).
+21. **Docs** — `checklist.md`, `CHANGELOG.md`, and `architecture.md` where the
     schema is described.
 
 Tasks 15 and 16 are deliberately late and deliberately separate. Each retires a
