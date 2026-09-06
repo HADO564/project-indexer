@@ -1,11 +1,14 @@
 # Handoff — project views, colour, icons and groups (frontend half)
 
 **Date:** 2026-09-05
-**Status:** blocked on the backend plan, then ready. Nothing here needs a design
-decision first — the shape is settled and written down.
-**Prerequisite:** [`docs/superpowers/plans/2026-09-05-groups-backend.md`](../superpowers/plans/2026-09-05-groups-backend.md)
-complete and merged. Check it: if `list_groups` does not answer from the
-devtools console, the backend is not done.
+**Status:** **ready — the backend half is complete and merged to `main`.** Nothing
+here needs a design decision first; the shape is settled and written down.
+**Prerequisite:** satisfied. [`docs/superpowers/plans/2026-09-05-groups-backend.md`](../superpowers/plans/2026-09-05-groups-backend.md)
+shipped as 30 commits: nine TDD tasks each independently reviewed, a whole-branch
+review, and a six-item fix wave with its own re-review. The eight commands below
+are registered and callable, the v2 migration has been verified against a real
+database, and the app launches. Every API detail in section 3 was checked against
+the merged code rather than against the plan.
 
 This is the second half of one feature. The first half builds the entire
 backend — the `Group` entity, the first schema migration, an SVG sanitizer and
@@ -144,6 +147,27 @@ one expression:
 const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon.svg)}`;
 ```
 
+**Two error cases you have to handle, both added late in the backend half and
+both reachable through ordinary use.**
+
+*Assigning a project to a group that no longer exists* returns
+`ProjectError::GroupNotFound`, surfacing as the string
+`Group with id '<id>' not found`. This is not a hypothetical: an edit form open
+while the group is deleted from the group manager produces exactly it. The
+backend rejects the write and changes nothing, so the correct response is to
+refetch the group list and clear the stale selection, not to retry. Clearing a
+group (`group_id: null`) is always allowed and never checks anything.
+
+*Importing an icon can fail for content reasons*, not just IO. The sanitizer
+rejects any SVG that would not re-parse as well-formed XML — an undefined entity
+(`&xxe;`), a bare `&` in text, and notably `&nbsp;`, which is an HTML entity that
+is simply not defined in XML and turns up in HTML-flavoured icon exports. It also
+rejects anything with no drawable element left after sanitizing, anything over
+256 KB, and any attribute value containing a backslash. All arrive as
+`ProjectError::Icon(...)` with a message naming the reason. Surface that message
+rather than a generic failure — "this icon could not be imported" tells the user
+nothing they can act on, and the reasons here are all things they can fix.
+
 ## 4. The work — spec tasks 10 to 21
 
 Write the plan for these with the `superpowers:writing-plans` skill; the spec
@@ -182,8 +206,14 @@ lists them, and the ordering below is the one it settled on.
     be the *first* icon-affecting change this half makes, before task 20 gives
     people something to import.
 20. **The bundled icon set** (~24 lucide-style inline SVGs, keyed by name).
-21. **Docs** — `checklist.md`, `CHANGELOG.md`, and `architecture.md` where the
-    schema is described.
+21. **Docs** — `checklist.md` and `CHANGELOG.md` for the frontend work.
+    `architecture.md`, `ROADMAP.md` and the backend half of `checklist.md` were
+    **already brought up to date in the backend branch**: the schema section
+    describes `groups` and `projects.group_id`, the module map lists `icons/` and
+    `IconStore`, the dependency list includes `quick-xml`, invariant 10 records
+    the `IconStore` direct-access exception, and the migration-fixture item moved
+    from deferred to done in both documents. Read them rather than rewriting
+    them; you are adding the frontend's story, not the backend's.
 
 Tasks 15 and 16 are deliberately late and deliberately separate. Each retires a
 working feature, so each is verified against the modal it replaces rather than
