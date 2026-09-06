@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { listGroups } from "$lib/api/groups";
+  import { listCustomIcons } from "$lib/api/icons";
   import { getAllProjects, listMissingDirectories } from "$lib/api/projects";
-  import type { Project, SortBy, SortDirection } from "$lib/api/types";
+  import type { Group, Project, SortBy, SortDirection } from "$lib/api/types";
+  import { customIconSrc } from "$lib/icons";
   import BinModal from "$lib/components/BinModal.svelte";
   import CreateProjectForm from "$lib/components/CreateProjectForm.svelte";
   import DeleteModal from "$lib/components/DeleteModal.svelte";
@@ -11,6 +14,12 @@
   import SortControls from "$lib/components/SortControls.svelte";
 
   let projects = $state<Project[]>([]);
+  let groups = $state<Group[]>([]);
+  // name -> data URI, built once from listCustomIcons and drilled down to
+  // ProjectMark. There is no store precedent here — architecture.md lists
+  // lib/stores/* as deliberately deferred — so this follows the existing
+  // prop-drilling pattern rather than importing a new one.
+  let customIcons = $state<Map<string, string>>(new Map());
   let loading = $state(false);
   let error = $state("");
   let editingId = $state<string | null>(null);
@@ -42,8 +51,30 @@
     }
   }
 
+  // Best-effort, both of them: a failure to load groups or custom icons must
+  // not stop the project list rendering. No group just means no left edge; a
+  // missing custom icon falls back to the bundled glyph.
+  async function loadGroups() {
+    try {
+      groups = await listGroups();
+    } catch (err) {
+      error = (err as Error).message;
+    }
+  }
+
+  async function loadCustomIcons() {
+    try {
+      const icons = await listCustomIcons();
+      customIcons = new Map(icons.map((i) => [i.name, customIconSrc(i.svg)]));
+    } catch {
+      customIcons = new Map();
+    }
+  }
+
   $effect(() => {
     loadProjects();
+    loadGroups();
+    loadCustomIcons();
   });
 
   function handleError(message: string) {
@@ -203,6 +234,8 @@
 
   <ProjectList
     {projects}
+    {groups}
+    {customIcons}
     {loading}
     {editingId}
     {missingDirs}
