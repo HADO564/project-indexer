@@ -137,6 +137,20 @@ if it regresses.
     separate reader trait (`ProjectReader`, `GroupReader`) so an external
     consumer (devmon) can depend on read access without the write surface.
     (One exception — see below.)
+
+    *Exception: `IconStore`.* `src-tauri/src/commands/icons.rs` calls
+    `indexer_core::infra::IconStore` directly — `State<'_, Arc<IconStore>>`,
+    no service, no port — the only place in the codebase that skips the
+    commands → application → port → infra chain. This is deliberate, not a
+    precedent: icon import/list/delete has no orchestration for a service to
+    hold (each command is already a one-line pass-through to the store), and
+    a port with exactly one implementation would be speculative abstraction.
+    If a second `IconStore` implementation ever shows up, or any orchestration
+    grows around icons (validation against something else, cross-referencing
+    groups, …), it should adopt the `ProjectReader`/`GroupReader` shape — a
+    plain `IconReader` port `IconStore` implements — which is also what would
+    give the planned `devmon` app a read-only story for icons, the same way
+    it gets one for projects and groups.
 11. **The binary owns forward migration; it never reads a newer DB.**
     `SqliteRepository::open` runs the `user_version` steps up to
     `CURRENT_SCHEMA_VERSION` and returns
