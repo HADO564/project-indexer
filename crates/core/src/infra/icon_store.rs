@@ -55,6 +55,11 @@ impl IconStore {
 
     /// Every stored icon. A store that has never been written to is empty
     /// rather than an error — the directory is created lazily on first import.
+    /// A junk entry — a directory, a non-UTF-8 file, a name outside the
+    /// slugified alphabet — is skipped rather than failing the whole listing,
+    /// since a single bad file must not disable both `list` and `import`
+    /// (which calls `list` via `unique_name`) with no way to recover from the
+    /// UI. Only a failure to read the store directory itself is fatal.
     pub fn list(&self) -> Result<Vec<StoredIcon>, IconError> {
         if !self.dir.exists() {
             return Ok(Vec::new());
@@ -64,17 +69,31 @@ impl IconStore {
 
         let mut out = Vec::new();
         for entry in entries {
-            let entry = entry.map_err(|e| IconError::Io(e.to_string()))?;
+            // A single bad entry — a permission error mid-iteration, a
+            // directory or an unreadable file masquerading as an icon —
+            // must not take the whole listing down with it. Skip it and keep
+            // going; only a failure to open the store directory itself
+            // (above) is treated as fatal, mirroring the lazy-directory rule
+            // that a store degrades rather than errors.
+            let Ok(entry) = entry else {
+                continue;
+            };
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) != Some("svg") {
                 continue;
             }
-            let name = match path.file_stem().and_then(|s| s.to_str()) {
-                Some(name) => name.to_string(),
-                None => continue,
+            let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+                continue;
             };
-            let svg = std::fs::read_to_string(&path)
-                .map_err(|e| IconError::Io(format!("{}: {e}", path.display())))?;
+            // Filters `list` through the same alphabet `delete` requires, so
+            // the two ends always agree: a name `delete` would refuse is
+            // never offered to the frontend as one it can act on.
+            let Ok(name) = safe_name(stem) else {
+                continue;
+            };
+            let Ok(svg) = std::fs::read_to_string(&path) else {
+                continue;
+            };
             out.push(StoredIcon { name, svg });
         }
         out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -257,5 +276,71 @@ mod tests {
             .list()
             .expect("list must tolerate a store never written to")
             .is_empty());
+    }
+
+    #[test]
+    fn list_skips_a_directory_masquerading_as_an_icon_and_import_still_works() {
+        let (dir, store) = store();
+        let good = source(dir.path(), "logo.svg", GOOD);
+        store.import(&good).expect("import the real icon");
+
+        // A directory literally named `trap.svg` — same extension, same
+        // apparent stem, but `read_to_string` on it fails ("Access is
+        // denied" on Windows). It must be skipped, not propagated.
+        let store_dir = dir.path().join("icons");
+        std::fs::create_dir_all(store_dir.join("trap.svg")).expect("plant a trap directory");
+
+        let listed = store.list().expect("list must skip the trap, not fail");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].name, "logo");
+
+        // `import` calls `list` via `unique_name`, so the trap must not
+        // disable importing either.
+        let other = source(dir.path(), "other.svg", GOOD);
+        let imported = store
+            .import(&other)
+            .expect("import must not be disabled by a bad entry elsewhere in the store");
+        assert_eq!(imported.name, "other");
+    }
+
+    #[test]
+    fn list_skips_a_non_utf8_svg_file_and_import_still_works() {
+        let (dir, store) = store();
+        let good = source(dir.path(), "logo.svg", GOOD);
+        store.import(&good).expect("import the real icon");
+
+        // A renamed PNG or a truncated write: valid filename, invalid UTF-8
+        // contents. Must be skipped, not propagated.
+        let store_dir = dir.path().join("icons");
+        std::fs::write(store_dir.join("trap.svg"), [0xFF, 0xFE, 0xFD])
+            .expect("plant a non-utf8 file");
+
+        let listed = store
+            .list()
+            .expect("list must skip invalid utf-8, not fail");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].name, "logo");
+
+        let other = source(dir.path(), "other.svg", GOOD);
+        let imported = store
+            .import(&other)
+            .expect("import must not be disabled by a bad entry elsewhere in the store");
+        assert_eq!(imported.name, "other");
+    }
+
+    #[test]
+    fn list_does_not_offer_a_name_that_delete_would_refuse() {
+        let (dir, store) = store();
+        let store_dir = dir.path().join("icons");
+        std::fs::create_dir_all(&store_dir).expect("create store dir");
+        // Written directly to disk, bypassing `slugify` — the only way a
+        // non-slug stem can land in the store.
+        std::fs::write(store_dir.join("Weird Name.svg"), GOOD).expect("plant a non-slug stem");
+
+        let listed = store.list().expect("list");
+        assert!(
+            listed.is_empty(),
+            "a name delete would refuse must not be listed either"
+        );
     }
 }
