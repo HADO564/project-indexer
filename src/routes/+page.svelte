@@ -11,7 +11,9 @@
   import FavoritesModal from "$lib/components/FavoritesModal.svelte";
   import OpenWithMissingModal from "$lib/components/OpenWithMissingModal.svelte";
   import ProjectList from "$lib/components/ProjectList.svelte";
+  import Sidebar from "$lib/components/Sidebar.svelte";
   import SortControls from "$lib/components/SortControls.svelte";
+  import { resolveView, viewCounts, type View } from "$lib/views";
 
   let projects = $state<Project[]>([]);
   let groups = $state<Group[]>([]);
@@ -32,6 +34,32 @@
   // recently opened first) — SortControls lets the user override it.
   let sortBy = $state<SortBy>("last_opened");
   let sortDirection = $state<SortDirection>("descending");
+
+  let selectedView = $state<View>({ kind: "all" });
+  // Stays empty until the Bin becomes a sidebar view; the Bin entry is hidden
+  // and its count reads 0 until then, so nothing depends on it yet.
+  let deletedProjects = $state<Project[]>([]);
+  let query = $state("");
+
+  const counts = $derived(viewCounts(projects, deletedProjects, groups));
+  const visibleProjects = $derived(resolveView(selectedView, projects, deletedProjects, query));
+
+  function handleSelectView(view: View) {
+    selectedView = view;
+    error = "";
+  }
+
+  // A group can disappear underneath the selection — from the group manager,
+  // or from another window. Falling back to All beats rendering an empty list
+  // with nothing on screen saying why.
+  $effect(() => {
+    // Read into a local first: `selectedView` is a $state accessor, so
+    // TypeScript cannot narrow it across the &&.
+    const view = selectedView;
+    if (view.kind === "group" && !groups.some((g) => g.id === view.id)) {
+      selectedView = { kind: "all" };
+    }
+  });
 
   async function loadProjects() {
     loading = true;
@@ -169,7 +197,7 @@
   }
 </script>
 
-<main class="mx-auto max-w-3xl px-4 py-8">
+<div class="mx-auto max-w-6xl px-4 py-8">
   <div class="mb-6 flex items-center justify-between gap-2 border-b border-line pb-3">
     <h1 class="text-2xl tracking-wide text-phos">
       <span class="text-accent">&#9612;</span> PROJECT INDEXER
@@ -226,29 +254,35 @@
 
   <ErrorBanner message={error} />
 
-  <CreateProjectForm onCreated={handleCreated} onerror={handleError} />
+  <div class="mt-4 flex gap-6">
+    <Sidebar {groups} {counts} selected={selectedView} onSelect={handleSelectView} />
 
-  <div class="mb-3 flex justify-end">
-    <SortControls bind:by={sortBy} bind:direction={sortDirection} />
+    <main class="min-w-0 flex-1">
+      <CreateProjectForm onCreated={handleCreated} onerror={handleError} />
+
+      <div class="mb-3 flex justify-end">
+        <SortControls bind:by={sortBy} bind:direction={sortDirection} />
+      </div>
+
+      <ProjectList
+        projects={visibleProjects}
+        {groups}
+        {customIcons}
+        {loading}
+        {editingId}
+        {missingDirs}
+        onEdit={handleEdit}
+        onCancelEdit={handleCancelEdit}
+        onSaved={handleSaved}
+        onRequestDelete={handleRequestDelete}
+        onOpened={handleOpened}
+        onTrackersRefreshed={handleTrackersRefreshed}
+        onOpenWithAppMissing={handleOpenWithAppMissing}
+        onerror={handleError}
+      />
+    </main>
   </div>
-
-  <ProjectList
-    {projects}
-    {groups}
-    {customIcons}
-    {loading}
-    {editingId}
-    {missingDirs}
-    onEdit={handleEdit}
-    onCancelEdit={handleCancelEdit}
-    onSaved={handleSaved}
-    onRequestDelete={handleRequestDelete}
-    onOpened={handleOpened}
-    onTrackersRefreshed={handleTrackersRefreshed}
-    onOpenWithAppMissing={handleOpenWithAppMissing}
-    onerror={handleError}
-  />
-</main>
+</div>
 
 {#if deleteTarget}
   <DeleteModal
