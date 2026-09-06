@@ -130,6 +130,9 @@ mod tests {
             notes: None,
             client: None,
             trackers: Vec::new(),
+            group_id: None,
+            color: None,
+            icon: None,
         }
     }
 

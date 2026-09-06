@@ -45,6 +45,16 @@ pub struct Project {
     pub client: Option<String>,
     #[serde(default)]
     pub trackers: Vec<Tracker>,
+    /// The group this project belongs to, or `None` for Ungrouped.
+    /// Mirrored into the `projects.group_id` column for querying.
+    #[serde(default)]
+    pub group_id: Option<String>,
+    /// Secondary palette colour — distinguishes this project from others.
+    #[serde(default)]
+    pub color: Option<String>,
+    /// Bundled icon name (`"gamepad"`) or a custom one (`"custom:my-logo"`).
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 /// Assigns each listed field from `$update` onto `$self` only when present
@@ -143,6 +153,9 @@ impl Project {
             notes: None,
             client: None,
             trackers: Vec::new(),
+            group_id: None,
+            color: None,
+            icon: None,
         })
     }
 
@@ -154,6 +167,12 @@ impl Project {
         let normalized_directory = update.directory.as_deref().map(normalize_directory);
         if let Some(directory) = &normalized_directory {
             Self::validate_directory(directory)?;
+        }
+
+        if let Some(Some(color)) = &update.color {
+            if !crate::domain::palette::is_known_swatch(color) {
+                return Err(ProjectError::UnknownSwatch(color.clone()));
+            }
         }
 
         if let Some(name) = update.name {
@@ -175,7 +194,10 @@ impl Project {
             favorite,
             open_with,
             notes,
-            client
+            client,
+            group_id,
+            color,
+            icon
         );
         self.updated_at = Utc::now();
 
@@ -221,6 +243,9 @@ mod tests {
             notes: None,
             client: None,
             trackers: Vec::new(),
+            group_id: None,
+            color: None,
+            icon: None,
         }
     }
 
@@ -318,6 +343,9 @@ mod tests {
         assert!(project.description.is_empty());
         assert!(project.last_opened_at.is_none());
         assert!(project.trackers.is_empty());
+        assert!(project.group_id.is_none());
+        assert!(project.color.is_none());
+        assert!(project.icon.is_none());
     }
 
     #[test]
@@ -332,5 +360,80 @@ mod tests {
         }"#;
 
         assert!(serde_json::from_str::<Project>(corrupt).is_err());
+    }
+
+    #[test]
+    fn new_project_has_no_group_colour_or_icon() {
+        let p = Project::new(
+            "Name".into(),
+            std::env::temp_dir().to_string_lossy().into_owned(),
+            None,
+            None,
+        )
+        .expect("temp dir exists");
+        assert!(p.group_id.is_none());
+        assert!(p.color.is_none());
+        assert!(p.icon.is_none());
+    }
+
+    #[test]
+    fn update_sets_and_clears_group_colour_and_icon() {
+        let mut p = project_with_dir(&std::env::temp_dir().to_string_lossy());
+
+        p.update(UpdateProject {
+            name: None,
+            directory: None,
+            description: None,
+            tags: None,
+            favorite: None,
+            open_with: None,
+            notes: None,
+            client: None,
+            group_id: Some(Some("group-1".into())),
+            color: Some(Some("gold".into())),
+            icon: Some(Some("gamepad".into())),
+        })
+        .expect("valid update");
+        assert_eq!(p.group_id.as_deref(), Some("group-1"));
+        assert_eq!(p.color.as_deref(), Some("gold"));
+        assert_eq!(p.icon.as_deref(), Some("gamepad"));
+
+        // An explicit null clears; an absent key leaves it alone.
+        p.update(UpdateProject {
+            name: None,
+            directory: None,
+            description: None,
+            tags: None,
+            favorite: None,
+            open_with: None,
+            notes: None,
+            client: None,
+            group_id: Some(None),
+            color: None,
+            icon: None,
+        })
+        .expect("valid update");
+        assert!(p.group_id.is_none());
+        assert_eq!(p.color.as_deref(), Some("gold"));
+    }
+
+    #[test]
+    fn update_rejects_an_unknown_colour() {
+        let mut p = project_with_dir(&std::env::temp_dir().to_string_lossy());
+        let result = p.update(UpdateProject {
+            name: None,
+            directory: None,
+            description: None,
+            tags: None,
+            favorite: None,
+            open_with: None,
+            notes: None,
+            client: None,
+            group_id: None,
+            color: Some(Some("chartreuse".into())),
+            icon: None,
+        });
+        assert!(matches!(result, Err(ProjectError::UnknownSwatch(_))));
+        assert!(p.color.is_none());
     }
 }

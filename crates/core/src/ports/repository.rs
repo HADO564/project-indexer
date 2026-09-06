@@ -20,3 +20,31 @@ pub trait ProjectRepository: ProjectReader {
     /// Idempotent — a missing id is `Ok(())`.
     fn delete(&self, id: &str) -> Result<(), RepositoryError>;
 }
+
+use crate::domain::Group;
+
+/// Read access to stored groups. Split from [`GroupRepository`] for the same
+/// reason [`ProjectReader`] is split from [`ProjectRepository`]: an external
+/// consumer can depend on reads without the write surface.
+pub trait GroupReader: Send + Sync {
+    fn get_group(&self, id: &str) -> Result<Option<Group>, RepositoryError>;
+    /// Every group, ordered by `position` ascending.
+    fn list_groups(&self) -> Result<Vec<Group>, RepositoryError>;
+}
+
+pub trait GroupRepository: GroupReader {
+    /// Insert or replace by `group.id`.
+    fn save_group(&self, group: &Group) -> Result<(), RepositoryError>;
+
+    /// Deletes the group **and** clears membership from every project that
+    /// belonged to it, in one transaction. Idempotent — a missing id is `Ok(())`.
+    ///
+    /// The blob and the column are cleared together deliberately: the
+    /// `ON DELETE SET NULL` constraint on the column would leave a stale
+    /// `group_id` inside the JSON, which is the authoritative copy.
+    fn delete_group(&self, id: &str) -> Result<(), RepositoryError>;
+
+    /// Rewrites `position` so it matches the given order, in one transaction.
+    /// The single path that renumbers; ids not listed are left untouched.
+    fn set_group_positions(&self, ordered_ids: &[String]) -> Result<(), RepositoryError>;
+}
