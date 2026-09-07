@@ -22,7 +22,7 @@ project is built, tested and worked on live in
   time; tags stay the non-exclusive mechanism. Deleting a group never deletes a
   project — its members become Ungrouped.
 - **A colour and an icon per project, and per group.** Icons come from a
-  bundled set of 24, or from your own SVGs. Colours are eight palette entries
+  bundled set of 25, or from your own SVGs. Colours are eight palette entries
   resolved through the theme, so a future theme recolours everything
   coherently.
 - **Search** across project name, path, tags and property values, applied

@@ -1,4 +1,4 @@
-// The bundled icon set: 24 line glyphs, each a list of SVG path `d` strings on
+// The bundled icon set: 25 line glyphs, each a list of SVG path `d` strings on
 // a 0 0 24 24 viewBox, stroked in currentColor. Bundled icons are inline and
 // therefore tintable, which is why a group's sidebar entry can take its
 // group's colour and a project's icon can take the project's.
@@ -90,6 +90,13 @@ const GLYPHS: Record<string, readonly string[]> = {
   star: ["M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.6l5.8-.8z"],
   flag: ["M5 21V4", "M5 4h11l-2 3.5L16 11H5"],
   home: ["M4 11l8-7 8 7", "M6 9.5V20h12V9.5", "M10 20v-5h4v5"],
+  trash: [
+    "M3 6h18",
+    "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2",
+    "M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6",
+    "M10 11v6",
+    "M14 11v6",
+  ],
 };
 
 export const ICON_NAMES: readonly string[] = Object.keys(GLYPHS);
