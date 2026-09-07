@@ -214,6 +214,25 @@ The mechanics that need deciding:
   Still holds regardless of mode: stop descending once a directory *is* a
   project. A repository inside a repository is usually vendored or a submodule,
   not a separate thing to track.
+- ~~**Which detectors run.**~~ **Settled 2026-09-07: the user checks the ones to
+  scan for, and the check decides *whether to register*, not what gets
+  recorded.** Pointing the scanner at `~/projects` with only git ticked imports
+  the code repositories and leaves the Unity and Godot ones alone — the intent
+  is "import my repos, not my games", which is a selection criterion rather
+  than a performance knob.
+
+  Once a directory is being kept, **every** installed detector runs against it.
+  A directory that is both git and Unity registers **once**, carrying both
+  trackers — `Project.trackers` is a `Vec<Tracker>` and `create` already stores
+  every match, so this needs no new machinery. Recording only the ticked
+  detectors would instead leave permanently half-detected records that fix
+  themselves only if somebody remembers to refresh them, and it would buy
+  nothing: a detector that does not match costs a couple of `stat` calls and no
+  allocation.
+
+  **This is a scan, not a daemon.** It is user-triggered, bounded and finite.
+  The continuous-loop version is the open question under *Rescanning* below,
+  and it is a different feature; do not let the two merge under one name.
 - **Review before committing.** A scan that silently registers two hundred
   entries is hostile. Find, present, let the user deselect, then add. Registering
   a project is a durable act; a bulk one should be a deliberate one.
@@ -252,6 +271,29 @@ Two seams already exist for this. `find_by_directory` plus the indexed
 `directory_normalized` column make "do we already track this?" cheap enough to
 ask once per candidate, and detection is already resilient — one detector failing
 on one directory does not abort a sweep.
+
+Four things the implementation will meet, all cheap to know in advance:
+
+- **`ensure_project(directory)` is the scanner's entry point**, not `create`.
+  `create` calls `check_for_duplicate_name_or_dir` and returns
+  `DuplicateDirectory` for a path already tracked, so re-scanning a folder — or
+  scanning one containing projects added by hand — would fail per directory.
+  `ensure_project` is get-or-create, is indexed, and was built for the observer
+  CLI with no GUI caller yet.
+- **Detector selection needs a set, and no such filter exists.** `create` runs
+  everything via `detect_project`; the only filtering available is
+  `inspect(path, only: Option<&str>)`, a *single* kind, for per-tracker
+  re-detect. Selection wants `Option<&[&str]>` or equivalent. Note the
+  single-kind form stays necessary for the re-detect sweep — both shapes are
+  real.
+- **Never `refresh_trackers` in the bulk path.** It uses `into_result()`, which
+  is deliberately all-or-nothing: one failing detector discards everything.
+  Right for a user pressing refresh on one project, wrong across two hundred
+  directories where a single corrupt repository would abort the sweep. Use
+  `create`'s best-effort pattern — `trackers()` plus logged errors.
+- **A scan is where name collisions actually bite**, not a theoretical concern:
+  `~/code/api` and `~/work/api` collide on the first run. Same unresolved
+  question as `ensure_project`'s, and it should be answered once for both.
 
 The performance shape is worth getting right early: walking is I/O bound and
 cheap, running full detection on every directory is not. Detection should be
