@@ -86,6 +86,15 @@ impl ScanService {
                 .find_by_directory(&candidate.directory)?
                 .is_some();
 
+            // An already-tracked directory keeps its walk-produced name as-is:
+            // `taken` already holds its current name (seeded from
+            // `active_project_names`), so running it through `disambiguate`
+            // would see it collide with itself and needlessly qualify it —
+            // "api" would come back suggesting "<parent>/api" on every rescan.
+            if candidate.already_tracked {
+                continue;
+            }
+
             let parent = Path::new(&candidate.directory)
                 .parent()
                 .and_then(|p| p.to_str())
@@ -347,6 +356,31 @@ mod tests {
         let report = scan.scan(&request(&root)).unwrap();
 
         assert!(report.candidates.iter().all(|c| c.already_tracked));
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// An already-tracked candidate must keep its plain name. Its own name is
+    /// already in the `taken` set (seeded from `active_project_names`), so
+    /// running it through `disambiguate` would see it collide with itself and
+    /// needlessly parent-qualify it — "api" would come back suggesting
+    /// "<parent>/api" on every rescan, which is not a real collision.
+    #[test]
+    fn rescanning_an_already_tracked_directory_keeps_its_plain_name() {
+        let root = temp_tree("rescan-name");
+        let api = repo_at(&root, "api");
+        let (_, scan) = services();
+
+        scan.import(&[ImportSelection {
+            directory: api,
+            name: "api".into(),
+        }])
+        .unwrap();
+        let report = scan.scan(&request(&root)).unwrap();
+
+        assert_eq!(report.candidates.len(), 1);
+        assert!(report.candidates[0].already_tracked);
+        assert_eq!(report.candidates[0].suggested_name, "api");
 
         std::fs::remove_dir_all(&root).ok();
     }
