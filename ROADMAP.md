@@ -190,10 +190,22 @@ exactly when the manual path is most painful.
 
 The mechanics that need deciding:
 
-- **Where to stop.** A depth limit, and pruning of directories that are never
-  projects but are always enormous — `node_modules`, `target`, `.venv`, `build`.
-  Also: stop descending once a directory *is* a project. A repository inside a
-  repository is usually vendored or a submodule, not a separate thing to track.
+- ~~**Where to stop.**~~ **Settled 2026-09-07: two scans, and a depth the user
+  picks.** A **quick scan** looks only one level below the chosen directory —
+  the `~/code` case, where every child is a project and nothing deeper needs
+  visiting. A **deep scan** descends to *n* levels, with *n* chosen by the user
+  rather than hardcoded, because the right depth is a property of how somebody
+  organises their disk and no default is right for everyone.
+
+  Directories that are conventionally gitignored — `node_modules`, `target`,
+  `.venv`, `build`, `dist` — are skipped by default, with a checkbox to include
+  them. Default-on because those trees are enormous and never projects;
+  overridable because "never" is not quite true and the person scanning knows
+  their own disk better than the pruning list does.
+
+  Still holds regardless of mode: stop descending once a directory *is* a
+  project. A repository inside a repository is usually vendored or a submodule,
+  not a separate thing to track.
 - **Review before committing.** A scan that silently registers two hundred
   entries is hostile. Find, present, let the user deselect, then add. Registering
   a project is a durable act; a bulk one should be a deliberate one.
@@ -205,6 +217,28 @@ The mechanics that need deciding:
 - **Rescanning.** A remembered root that can be re-scanned to pick up what is new
   since last time, rather than a one-shot import. Watching it live is a further
   step and probably not the first one.
+- **An autorunner — open, and not yet agreed.** The idea: run the detectors on a
+  loop, traversing for projects continuously rather than when asked. The appeal
+  is obvious; three things have to be answered before it is worth building.
+
+  What it does on a find. Auto-registering contradicts the review step directly
+  below — a bulk registration is meant to be a deliberate act — so realistically
+  it queues finds and badges them for review, which is *rescan on a timer plus a
+  notification*, a much smaller feature wearing a bigger name.
+
+  What it costs. A loop walking the filesystem is the classic background-indexer
+  complaint, and it is paid on battery. Filesystem watching (`notify`) is far
+  cheaper than polling, but it is a background task with its own failure modes —
+  the same objection that settled theme reloading as restart-to-apply, at
+  considerably larger scale.
+
+  Where it looks. It needs remembered roots; scanning the disk is not an option.
+  Which means it is gated on rescanning above, not a parallel feature.
+
+  The cheap version worth building first: rescan remembered roots on demand and
+  optionally at startup, surfacing "12 new projects found" as a review queue.
+  That is most of the value with none of the loop, and it is the honest thing to
+  try before deciding continuous scanning is needed.
 
 Two seams already exist for this. `find_by_directory` plus the indexed
 `directory_normalized` column make "do we already track this?" cheap enough to
