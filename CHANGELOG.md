@@ -32,7 +32,8 @@ project is built, tested and worked on live in
   project, and search them with `name: value` (e.g. `client: acme`). A bare
   `name:` finds every project that has that property. The search bar lists the
   names already in use.
-- **A colour picker for projects**, alongside the eight palette colours.
+- **A colour picker for projects and groups**, alongside the eight palette
+  colours.
 - **A content security policy.** The app shipped with `"csp": null`, which was
   survivable only because every script, font and icon is bundled. There is now a
   real policy: SvelteKit emits the strict half (its inline boot script is hashed

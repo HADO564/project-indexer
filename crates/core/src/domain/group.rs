@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::domain::palette::is_known_swatch;
+use crate::domain::palette::is_valid_color;
 use crate::domain::update_group::UpdateGroup;
 use crate::error::ProjectError;
 
@@ -36,7 +36,7 @@ impl Group {
     }
 
     fn validate_color(color: &str) -> Result<(), ProjectError> {
-        if !is_known_swatch(color) {
+        if !is_valid_color(color) {
             return Err(ProjectError::UnknownSwatch(color.to_string()));
         }
         Ok(())
@@ -139,8 +139,34 @@ mod tests {
 
     #[test]
     fn rejects_an_unknown_colour() {
-        let result = Group::new("Personal".into(), "#ff0000".into(), "briefcase".into(), 0);
+        let result = Group::new(
+            "Personal".into(),
+            "chartreuse".into(),
+            "briefcase".into(),
+            0,
+        );
         assert!(matches!(result, Err(ProjectError::UnknownSwatch(_))));
+
+        // Not a normalisation gap either: everything but the exact six-digit
+        // form is refused, because the value reaches a `style` attribute.
+        for bad in ["#ff0", "#gggggg", "red", "#ff0000; background: url(x)"] {
+            let result = Group::new("Personal".into(), bad.into(), "briefcase".into(), 0);
+            assert!(
+                matches!(result, Err(ProjectError::UnknownSwatch(_))),
+                "{bad} should not be a valid group colour"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_a_hex_literal_from_the_colour_picker() {
+        // Groups take a picked colour like projects do. A palette name is
+        // still the better answer — it is what lets a future theme recolour
+        // everything coherently — but that is a reason to offer the palette
+        // first, not to refuse a colour someone actually wants.
+        let group = Group::new("Personal".into(), "#ff0000".into(), "briefcase".into(), 0)
+            .expect("a hex literal is a valid group colour");
+        assert_eq!(group.color, "#ff0000");
     }
 
     #[test]

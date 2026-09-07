@@ -2,8 +2,9 @@
   import { createGroup, deleteGroup, reorderGroups, updateGroup } from "$lib/api/groups";
   import type { Group } from "$lib/api/types";
   import { ICON_NAMES } from "$lib/icons";
-  import { SWATCHES, swatchVar } from "$lib/palette";
+  import { SWATCHES, isHexColor, swatchVar } from "$lib/palette";
   import BundledIcon from "./BundledIcon.svelte";
+  import IconPicker from "./IconPicker.svelte";
   import SwatchPicker from "./SwatchPicker.svelte";
   import {
     buttonClass,
@@ -16,11 +17,15 @@
 
   let {
     groups,
+    customIcons,
     onChanged,
     onClose,
     onerror,
   }: {
     groups: Group[];
+    // Only so IconPicker can render; groups never take a custom icon, since
+    // an <img> cannot be tinted to the group's colour.
+    customIcons: Map<string, string>;
     onChanged: () => void | Promise<void>;
     onClose: () => void;
     onerror?: (message: string) => void;
@@ -34,6 +39,9 @@
   // but it is still irreversible, so it takes a second click rather than a
   // dialog stacked on a dialog, matching the Bin's purge.
   let confirmDeleteId = $state<string | null>(null);
+  // At most one group's icon grid is open at a time — 25 glyphs per group,
+  // permanently expanded, made this dialog unreadable past two groups.
+  let iconOpenFor = $state<string | null>(null);
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") onClose();
@@ -135,28 +143,8 @@
         New group
         <input bind:value={newName} placeholder="Client work" required class={inputClass} />
       </label>
-      <SwatchPicker bind:value={newColor} />
-      <div class={labelClass}>
-        Icon
-        <div class="flex flex-wrap items-center gap-1">
-          {#each ICON_NAMES as name}
-            <button
-              type="button"
-              onclick={() => (newIcon = name)}
-              title={name}
-              aria-label={name}
-              aria-pressed={newIcon === name}
-              class={`inline-flex h-10 w-10 items-center justify-center rounded-sm border-2 ${
-                newIcon === name
-                  ? "border-phos text-phos"
-                  : "border-transparent text-phos-dim hover:text-phos"
-              }`}
-            >
-              <BundledIcon {name} class={iconMd} />
-            </button>
-          {/each}
-        </div>
-      </div>
+      <SwatchPicker bind:value={newColor} allowCustom />
+      <IconPicker bind:value={newIcon} {customIcons} bundledOnly allowNone={false} />
       <button type="submit" disabled={busy} class={`self-start ${primaryButtonClass}`}>
         {busy ? "Working…" : "Add group"}
       </button>
@@ -224,26 +212,62 @@
                   style={`background: ${swatchVar(swatch)}`}
                 ></button>
               {/each}
-            </div>
-            <div class="mt-1 flex flex-wrap items-center gap-1">
-              {#each ICON_NAMES as name}
-                <button
-                  type="button"
+
+              <!-- onchange, not oninput: a colour input fires continuously
+                   while the picker is dragged, and every change here is a
+                   backend write. onchange fires once, on commit. -->
+              <label
+                class="relative inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2"
+                style={`border-color: ${isHexColor(group.color) ? "var(--color-phos)" : "transparent"}; background: ${swatchVar(group.color)}`}
+                title="Custom colour"
+              >
+                <input
+                  type="color"
+                  value={isHexColor(group.color) ? group.color : "#8899aa"}
                   disabled={busy}
-                  onclick={() => handleReicon(group, name)}
-                  title={name}
-                  aria-label={`${name} icon for ${group.name}`}
-                  aria-pressed={group.icon === name}
-                  class={`inline-flex h-10 w-10 items-center justify-center rounded-sm border-2 ${
-                    group.icon === name
-                      ? "border-phos text-phos"
-                      : "border-transparent text-phos-dim hover:text-phos"
-                  }`}
+                  onchange={(e) => handleRecolour(group, e.currentTarget.value)}
+                  class="absolute inset-0 cursor-pointer opacity-0"
+                  aria-label={`Custom colour for ${group.name}`}
+                />
+                <span
+                  class="pointer-events-none font-display text-[12px] leading-none text-void mix-blend-difference"
+                  aria-hidden="true">+</span
                 >
-                  <BundledIcon {name} class={iconMd} />
-                </button>
-              {/each}
+              </label>
             </div>
+            <button
+              type="button"
+              onclick={() => (iconOpenFor = iconOpenFor === group.id ? null : group.id)}
+              class={`mt-2 ${buttonClass}`}
+              aria-expanded={iconOpenFor === group.id}
+            >
+              {iconOpenFor === group.id ? "Done" : "Change icon"}
+            </button>
+
+            {#if iconOpenFor === group.id}
+              <div class="mt-1 flex flex-wrap items-center gap-1 rounded-sm border border-line p-2">
+                {#each ICON_NAMES as name}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onclick={() => {
+                      handleReicon(group, name);
+                      iconOpenFor = null;
+                    }}
+                    title={name}
+                    aria-label={`${name} icon for ${group.name}`}
+                    aria-pressed={group.icon === name}
+                    class={`inline-flex h-10 w-10 items-center justify-center rounded-sm border-2 ${
+                      group.icon === name
+                        ? "border-phos text-phos"
+                        : "border-transparent text-phos-dim hover:text-phos"
+                    }`}
+                  >
+                    <BundledIcon {name} class={iconMd} />
+                  </button>
+                {/each}
+              </div>
+            {/if}
           </li>
         {/each}
       </ul>
