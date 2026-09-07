@@ -269,3 +269,5 @@ stays hidden.
 PI-005 was found on the same machine on 2026-09-04, by which point it ran kernel
 7.2.2, Node 26.8.1 / pnpm 11.21.0, and `libayatana-appindicator` 0.6.0-2 (absent
 until that pass — which is what exposed the defect).
+
+<!-- CLA workflow smoke test — this branch and PR are throwaway. -->
