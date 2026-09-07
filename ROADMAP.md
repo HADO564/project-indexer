@@ -318,6 +318,28 @@ The backend seam exists: `Detector` is a two-method trait and
 API, though, and what "installing" a Rust plugin means is a distribution problem
 before it is a technical one — see [Trust](#trust--it-sorts-by-kind-not-evenly).
 
+**How a third-party detector is distributed: as WebAssembly, compiled by CI at
+publish time.** An author writes Rust against a published API crate and submits
+source; the registry compiles it to `wasm32-wasip1` and hosts the artifact; the
+app downloads it and instantiates it with Wasmtime. The user installs a file and
+needs no toolchain. This is the model [Zed](https://zed.dev/blog/zed-decoded-extensions)
+and [Lapce](https://lapce.dev) use.
+
+The alternative — ship source and recompile on the user's machine — was
+considered and rejected. It demands a full Rust toolchain and a multi-gigabyte
+build tree per user, cannot overwrite a running executable, is wiped by every
+official update, and breaks the macOS app signature on rebuild, which would
+permanently foreclose ever signing a release.
+
+WASI is what makes this fit rather than merely work. A module reaches exactly
+the directories preopened for it, read-only if `dir_perms` says so — the same
+shape as the detector contract itself (`docs/architecture.md` → *Detector, or
+backend feature?*): one directory, read-only, no side effects. Two
+prerequisites, both already on the list: `Tracker` stops being a closed enum,
+and `Detector::kind()` returns `&str` rather than `&'static str`. Neither the
+runner nor first-party detectors change — the git detector needs libgit2 and
+stays native, so the end state is a hybrid behind one trait.
+
 ### Version control beyond git is a utility plugin, not a roadmap item
 
 Git is first-party and stays that way. **Mercurial, Subversion, Jujutsu,
@@ -438,8 +460,18 @@ for each is in [`docs/architecture.md`](docs/architecture.md).
   plugins folder and having the app load it at startup. Native code in-process
   has the user's full privileges and cannot be sandboxed, so this would hand
   every plugin author arbitrary code execution on every user's machine in
-  exchange for a nicer install step. Rust plugins are distributed as source and
-  compiled in; see [Plugins → Trust](#trust--it-sorts-by-kind-not-evenly).
+  exchange for a nicer install step. This declines *native* loading only —
+  downloading a **WebAssembly** detector is the settled distribution model and
+  is not the same decision, because a wasm module is sandboxed by construction
+  and a `.dll` is not.
+- **Recompiling the app on the user's machine to install a plugin.** A small
+  package manager that fetches plugin source, rebuilds, and swaps the
+  executable. It keeps plugins as full-power native Rust and needs no new API,
+  which is genuinely attractive, but it charges every user a Rust toolchain and
+  a multi-gigabyte build tree, cannot replace a running `.exe`, is undone by
+  every official update, and breaks the macOS app signature on rebuild —
+  foreclosing signed releases permanently. Compiling in CI at publish time buys
+  the same outcome and none of that.
 
 ## Related work
 
