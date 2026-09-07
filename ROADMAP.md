@@ -233,9 +233,12 @@ The mechanics that need deciding:
   nothing: a detector that does not match costs a couple of `stat` calls and no
   allocation.
 
-  **This is a scan, not a daemon.** It is user-triggered, bounded and finite.
-  The continuous-loop version is the open question under *Rescanning* below,
-  and it is a different feature; do not let the two merge under one name.
+  **Vocabulary.** "Autorunner" and "looping detector" both mean *this* — the
+  user-triggered bulk import — and neither implies a background process. The
+  word **background** is reserved for work that actually runs unprompted, and
+  the only such idea here is *background rescanning* under *Rescanning* below.
+  They are different features and must not merge under one name: this one is
+  user-triggered, bounded and finite.
 - **Review before committing.** A scan that silently registers two hundred
   entries is hostile. Find, present, let the user deselect, then add. Registering
   a project is a durable act; a bulk one should be a deliberate one.
@@ -247,9 +250,11 @@ The mechanics that need deciding:
 - **Rescanning.** A remembered root that can be re-scanned to pick up what is new
   since last time, rather than a one-shot import. Watching it live is a further
   step and probably not the first one.
-- **An autorunner — open, and not yet agreed.** The idea: run the detectors on a
-  loop, traversing for projects continuously rather than when asked. The appeal
-  is obvious; three things have to be answered before it is worth building.
+- **Background rescanning — open, and not yet agreed.** The idea: traverse for
+  projects unprompted rather than when asked. (Filed here as "an autorunner"
+  before that word was pinned to the bulk scan above; it is *not* that feature.)
+  The appeal is obvious; three things have to be answered before it is worth
+  building.
 
   What it does on a find. Auto-registering contradicts the review step directly
   below — a bulk registration is meant to be a deliberate act — so realistically
