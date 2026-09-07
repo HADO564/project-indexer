@@ -9,7 +9,7 @@
   } from "$lib/api/projects";
   import type { Group, Project, SortBy, SortDirection } from "$lib/api/types";
   import { customIconSrc } from "$lib/icons";
-  import { primaryButtonClass } from "$lib/components/styles";
+  import { buttonClass, primaryButtonClass } from "$lib/components/styles";
   import CreateProjectModal from "$lib/components/CreateProjectModal.svelte";
   import DeleteModal from "$lib/components/DeleteModal.svelte";
   import EditProjectModal from "$lib/components/EditProjectModal.svelte";
@@ -17,6 +17,7 @@
   import GroupManagerModal from "$lib/components/GroupManagerModal.svelte";
   import OpenWithMissingModal from "$lib/components/OpenWithMissingModal.svelte";
   import ProjectList from "$lib/components/ProjectList.svelte";
+  import ScanFolderModal from "$lib/components/ScanFolderModal.svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import SortControls from "$lib/components/SortControls.svelte";
   import ViewControls from "$lib/components/ViewControls.svelte";
@@ -35,6 +36,7 @@
   let editingId = $state<string | null>(null);
   let groupManagerOpen = $state(false);
   let createOpen = $state(false);
+  let scanOpen = $state(false);
   let deleteTarget = $state<Project | null>(null);
   let openWithMissingTarget = $state<Project | null>(null);
   let missingDirs = $state<Set<string>>(new Set());
@@ -247,16 +249,28 @@
     <h1 class="text-2xl tracking-wide text-phos">
       <span class="text-accent">&#9612;</span> PROJECT INDEXER
     </h1>
-    <button
-      type="button"
-      onclick={() => {
-        createOpen = true;
-        error = "";
-      }}
-      class={primaryButtonClass}
-    >
-      + New project
-    </button>
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        onclick={() => {
+          scanOpen = true;
+          error = "";
+        }}
+        class={buttonClass}
+      >
+        Scan folder
+      </button>
+      <button
+        type="button"
+        onclick={() => {
+          createOpen = true;
+          error = "";
+        }}
+        class={primaryButtonClass}
+      >
+        + New project
+      </button>
+    </div>
   </div>
 
   <ErrorBanner message={error} />
@@ -329,6 +343,14 @@
     onGroupsStale={loadGroups}
     onCreated={handleCreated}
     onClose={() => (createOpen = false)}
+    onerror={handleError}
+  />
+{/if}
+
+{#if scanOpen}
+  <ScanFolderModal
+    onImported={handleCreated}
+    onClose={() => (scanOpen = false)}
     onerror={handleError}
   />
 {/if}
