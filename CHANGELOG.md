@@ -10,6 +10,17 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+### Added
+
+- **A plugin exception to the licence.** The app has no runtime plugin loader by
+  design, so a plugin only runs in a build that includes it — and under the bare
+  licence, distributing that build would have counted as competing, leaving a
+  plugin author able to publish a crate but nothing anyone could install. A
+  build differing from a release only by added plugins may now be distributed
+  freely, provided it is not presented as an official release. Plugins remain
+  their authors' own work under their authors' own licences. See the Additional
+  Permission in [`LICENSE`](LICENSE).
+
 ## [0.2.0] — 2026-09-07
 
 ### Added
