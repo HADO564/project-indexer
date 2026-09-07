@@ -30,7 +30,7 @@ jobs:
           # not add commits to main. Create it once:
           #   git switch --orphan cla-signatures && git commit --allow-empty \n          #     -m 'chore: branch for CLA signatures' && git push -u origin cla-signatures
           branch: cla-signatures
-          allowlist: HADO564,dependabot[bot]
+          allowlist: dependabot[bot]
           custom-notsigned-prcomment: >
             Thanks for the pull request. Project Indexer needs every contributor
             to agree to its [Contributor License Agreement](https://github.com/HADO564/project-indexer/blob/main/CLA.md)
