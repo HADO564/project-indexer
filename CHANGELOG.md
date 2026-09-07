@@ -10,16 +10,7 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
-### Changed
-
-- **Relicensed from MIT to the Functional Source License** (`FSL-1.1-ALv2`).
-  Project Indexer stays free for everyone — personal use, use inside a company,
-  education and research all cost nothing and have no seat limit — and the
-  source stays readable and modifiable. What is no longer permitted is shipping
-  it, or a close substitute for it, as a commercial product competing with this
-  one. Every version converts to the Apache License 2.0 two years after it is
-  published. Every version up to and including 0.2.0 was released under MIT
-  and remains MIT.
+## [0.2.0] — 2026-09-07
 
 ### Added
 
@@ -27,11 +18,6 @@ project is built, tested and worked on live in
   work and grant the project permission to relicense it, which is what makes the
   two-year Apache 2.0 conversion possible to honour. A bot asks for agreement on
   a first pull request; see [`CLA.md`](CLA.md).
-
-## [0.2.0] — 2026-09-07
-
-### Added
-
 - **Project views, colour, icons and groups.** The project list becomes
   something you scan rather than read. Two view modes — list and grid — and a
   sidebar replacing the flat single column: All, Favourites, your groups,
@@ -64,6 +50,13 @@ project is built, tested and worked on live in
 
 ### Changed
 
+- **Relicensed from MIT to the Functional Source License** (`FSL-1.1-ALv2`).
+  Project Indexer stays free for everyone — personal use, use inside a company,
+  education and research all cost nothing and have no seat limit — and the
+  source stays readable and modifiable. What is no longer permitted is shipping
+  it, or a close substitute for it, as a commercial product competing with this
+  one. Every version converts to the Apache License 2.0 two years after it is
+  published. Versions 0.1.0 and 0.1.1 were released under MIT and remain MIT.
 - **The `client` field is gone**, replaced by custom properties. Any client you
   had recorded is moved to a `client` property automatically on first launch.
 - Creating and editing a project now happen in a dialog rather than inline

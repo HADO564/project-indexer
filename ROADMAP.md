@@ -10,8 +10,7 @@ the non-feature quality backlog see
 
 ## Where things stand
 
-**v0.2.0** is the current version — tagged and pushed, though its GitHub
-release is still a draft, so v0.1.1 is what people can actually download. The
+**v0.2.0** is the current release, and the first under the new licence. The
 app tracks projects, detects git and
 Unreal Engine trackers, opens projects in your installed applications, and runs
 in the background from the system tray. A project carries a colour, an icon and
@@ -32,15 +31,16 @@ workflow but is not yet functionally complete (see below).
 
 ## Licensing
 
-The [Functional Source License](LICENSE) (`FSL-1.1-ALv2`) replaced MIT *after*
-v0.2.0 was tagged, so it governs the next release onward rather than any
-existing one. Use is free for everyone, companies included, and every version
-converts to Apache 2.0 on its second anniversary. The one prohibited use is
-shipping a competing commercial substitute.
+Released under the [Functional Source License](LICENSE) (`FSL-1.1-ALv2`), with
+**v0.2.0 the first release to carry it**. Use is free for everyone, companies
+included, and every version converts to Apache 2.0 on its second anniversary.
+The one prohibited use is shipping a competing commercial substitute.
 
-Everything up to and including **v0.2.0 stays MIT**. An MIT grant cannot be
-withdrawn, and those commits sit in the public history with the old `LICENSE`
-beside them, so that is a permanent fork point no later decision can close.
+**v0.1.0 and v0.1.1 stay MIT**, as does every commit made before the relicense:
+an MIT grant cannot be withdrawn, and those commits sit in the public history
+with the old `LICENSE` beside them. That is a permanent fork point no later
+decision can close, and it is the reason the restriction only starts protecting
+anything from v0.2.0 on.
 
 Contributions are gated on the [CLA](CLA.md) — one comment on a first pull
 request — because the two-year conversion cannot be honoured for code the
