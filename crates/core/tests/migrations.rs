@@ -50,7 +50,7 @@ const V1_PROJECT: &str = r#"{
     "favorite": false,
     "open_with": null,
     "notes": null,
-    "client": null,
+    "client": "Acme Corp",
     "trackers": []
 }"#;
 
@@ -196,7 +196,10 @@ fn v2_adds_groups_and_the_project_group_column() {
 
     let _repo = SqliteRepository::open(&path).expect("open");
 
-    assert_eq!(user_version(&path), 2);
+    // Opening migrates all the way to current, so this asserts the constant
+    // rather than the literal 2 — what this test is about is that the v2 step
+    // ran, which the table and the column below are the evidence for.
+    assert_eq!(user_version(&path), CURRENT_SCHEMA_VERSION);
     assert!(table_exists(&path, "groups"));
     assert!(column_exists(&path, "projects", "group_id"));
 }
@@ -226,5 +229,62 @@ fn v2_leaves_existing_projects_ungrouped() {
     assert!(
         column.is_none(),
         "the mirrored column must agree with the blob"
+    );
+}
+
+#[test]
+fn v3_lifts_the_retired_client_field_into_properties() {
+    // `client` stopped being a field and became one possible key in the
+    // open-ended `properties` map. Serde would silently ignore the old key and
+    // the value would vanish on the record's next save, so the migration has
+    // to move it across rather than let it strand.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("projects.db");
+    seed_v1(&path);
+
+    let repo = SqliteRepository::open(&path).expect("open");
+    let project = repo.get("seeded-1").expect("read").expect("still there");
+
+    assert_eq!(
+        project.properties.get("client").map(String::as_str),
+        Some("Acme Corp"),
+        "the seeded client value must survive as properties[\"client\"]"
+    );
+
+    // And the key is gone from the blob, not just shadowed by the new map.
+    let data: String = Connection::open(&path)
+        .expect("reopen")
+        .query_row("SELECT data FROM projects WHERE id = 'seeded-1'", [], |r| {
+            r.get(0)
+        })
+        .expect("read blob");
+    let blob: serde_json::Value = serde_json::from_str(&data).expect("blob parses");
+    assert!(
+        blob.get("client").is_none(),
+        "the retired field must be removed from the blob, not left beside its replacement"
+    );
+}
+
+#[test]
+fn v3_leaves_a_project_without_a_client_with_no_properties() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("projects.db");
+    seed_v1(&path);
+
+    // Overwrite the seeded row with one whose client is null, the common case.
+    {
+        let conn = Connection::open(&path).expect("reopen");
+        conn.execute(
+            "UPDATE projects SET data = ?1 WHERE id = 'seeded-1'",
+            [V1_PROJECT.replace(r#""client": "Acme Corp""#, r#""client": null"#)],
+        )
+        .expect("seed a clientless project");
+    }
+
+    let repo = SqliteRepository::open(&path).expect("open");
+    let project = repo.get("seeded-1").expect("read").expect("still there");
+    assert!(
+        project.properties.is_empty(),
+        "a null client must not become an empty-string property"
     );
 }

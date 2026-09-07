@@ -13,6 +13,7 @@
   let {
     project,
     groups,
+    knownPropertyKeys = [],
     customIcons,
     onIconsChanged,
     onGroupsStale,
@@ -22,6 +23,7 @@
   }: {
     project: Project;
     groups: Group[];
+    knownPropertyKeys?: string[];
     customIcons: Map<string, string>;
     onIconsChanged?: () => void | Promise<void>;
     onGroupsStale?: () => void | Promise<void>;

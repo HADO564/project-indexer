@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Group, Project } from "./api/types";
 import {
+  isPropertyQuery,
   matchesQuery,
+  propertyKeys,
   parseViewKey,
   resolveView,
   viewCounts,
@@ -23,7 +25,7 @@ const project = (over: Partial<Project> = {}): Project => ({
   favorite: false,
   open_with: null,
   notes: null,
-  client: null,
+  properties: {},
   trackers: [],
   group_id: null,
   color: null,
@@ -149,6 +151,84 @@ describe("matchesQuery", () => {
   it("treats an empty or whitespace query as matching everything", () => {
     expect(matchesQuery(p, "")).toBe(true);
     expect(matchesQuery(p, "   ")).toBe(true);
+  });
+  it("matches a property value in free text too", () => {
+    const withProps = project({ properties: { client: "Acme Corp" } });
+    expect(matchesQuery(withProps, "acme")).toBe(true);
+  });
+});
+
+describe("matchesQuery — the name: value syntax", () => {
+  const acme = project({ id: "acme", name: "Alpha", properties: { client: "Acme Corp" } });
+  const globex = project({ id: "globex", name: "Bravo", properties: { client: "Globex" } });
+  const none = project({ id: "none", name: "Acme lookalike" });
+
+  it("matches on the named property only", () => {
+    expect(matchesQuery(acme, "client: Acme")).toBe(true);
+    expect(matchesQuery(globex, "client: Acme")).toBe(false);
+  });
+  it("does not match a project lacking the property, even if the text appears elsewhere", () => {
+    // The whole point of the syntax: "client: acme" is a question about the
+    // client property, not a free-text search that happens to spell acme.
+    expect(matchesQuery(none, "client: acme")).toBe(false);
+    expect(matchesQuery(none, "acme")).toBe(true);
+  });
+  it("is case-insensitive in both the key and the value", () => {
+    expect(matchesQuery(acme, "CLIENT: acme")).toBe(true);
+    expect(matchesQuery(acme, "client: ACME")).toBe(true);
+  });
+  it("tolerates space on either side of the colon, or none", () => {
+    for (const q of ["client:Acme", "client : Acme", "  client:  Acme  "]) {
+      expect(matchesQuery(acme, q)).toBe(true);
+    }
+  });
+  it("matches every project that has the property when no value is given", () => {
+    expect(matchesQuery(acme, "client:")).toBe(true);
+    expect(matchesQuery(globex, "client:")).toBe(true);
+    expect(matchesQuery(none, "client:")).toBe(false);
+  });
+  it("matches a substring of the value, like free text does", () => {
+    expect(matchesQuery(acme, "client: corp")).toBe(true);
+  });
+  it("falls back to free text when nothing precedes the colon", () => {
+    // ":30" is not a property query — there is no name — so it searches text.
+    const timed = project({ name: "build at 12:30" });
+    expect(matchesQuery(timed, ":30")).toBe(true);
+  });
+  it("treats a Windows drive letter as free text, not a property", () => {
+    // "D:" would otherwise be read as the property "D", and every path search
+    // on Windows starts this way.
+    const onDrive = project({ directory: "D:\Games\fe" });
+    expect(matchesQuery(onDrive, "D:\Games")).toBe(true);
+  });
+});
+
+describe("isPropertyQuery", () => {
+  it("recognises a name: value query", () => {
+    expect(isPropertyQuery("client: acme")).toBe(true);
+    expect(isPropertyQuery("client:")).toBe(true);
+  });
+  it("rejects free text, a drive letter, and a bare colon", () => {
+    expect(isPropertyQuery("acme")).toBe(false);
+    expect(isPropertyQuery("D:\Games")).toBe(false);
+    expect(isPropertyQuery(":30")).toBe(false);
+    expect(isPropertyQuery("")).toBe(false);
+  });
+});
+
+describe("propertyKeys", () => {
+  it("lists the distinct keys across the given projects, sorted", () => {
+    const one = project({ id: "1", properties: { client: "Acme", engine: "Unreal" } });
+    const two = project({ id: "2", properties: { client: "Globex", priority: "high" } });
+    expect(propertyKeys([one, two])).toEqual(["client", "engine", "priority"]);
+  });
+  it("is empty when no project has any", () => {
+    expect(propertyKeys([project()])).toEqual([]);
+  });
+  it("folds keys differing only in case, so the hint does not list both", () => {
+    const one = project({ id: "1", properties: { Client: "Acme" } });
+    const two = project({ id: "2", properties: { client: "Globex" } });
+    expect(propertyKeys([one, two])).toEqual(["client"]);
   });
 });
 

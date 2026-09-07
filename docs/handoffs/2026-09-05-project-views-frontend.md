@@ -264,7 +264,8 @@ tightening this, and this feature is a good opportunity to not make it worse.
 drifts silently — nothing checks it. Update it in the same commit as anything it
 mirrors.
 
-**`pnpm run check` has a known baseline:** 0 errors and 8
+**`pnpm run check` has a known baseline:** 0 errors and 8 *(now 7 — the
+`client` field it counted was retired; see `KNOWN-ISSUES.md` PI-003)*
 `state_referenced_locally` warnings, all in `EditProjectForm.svelte`. That is
 `PI-003`, a documented false positive. Do not "fix" them; do not add a ninth.
 

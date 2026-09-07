@@ -14,7 +14,7 @@ is the host distribution's problem rather than the app's.
 |----|-------|----------|--------|
 | PI-001 | Sort dropdown unreadable on Linux | Medium — user-visible | **Fixed** |
 | PI-002 | Stale `filesystem.ts` 404 in dev log | Trivial — cosmetic | No action needed |
-| PI-003 | `state_referenced_locally` warnings ×8 | None — false positive | Not a defect |
+| PI-003 | `state_referenced_locally` warnings ×7 | None — false positive | Not a defect |
 | PI-005 | Missing appindicator library kills startup | High — blocks launch | **Fixed** |
 | PI-006 | AppImage bundling fails on Arch | Low — local packaging only | Environmental |
 
@@ -93,9 +93,11 @@ itself once that cache is evicted.
 
 ## PI-003 — `state_referenced_locally` warnings in EditProjectForm
 
-**Severity:** None (linter false positive) · **Status:** Not a defect · **Location:** `EditProjectForm.svelte:20-27`
+**Severity:** None (linter false positive) · **Status:** Not a defect · **Location:** `EditProjectForm.svelte:38-46`
 
-Eight warnings of the form:
+**Seven** warnings of the form (it was eight until the `client` field was
+retired in favour of the open-ended `properties` map; the count tracks the
+number of plainly-seeded fields and carries no other meaning):
 
 ```
 This reference only captures the initial value of `project`.
@@ -107,6 +109,13 @@ raised against the field seeds:
 ```js
 let name = $state(project.name);
 ```
+
+The three fields added later — `color`, `icon`, `group_id`, and now
+`properties` — seed through `untrack(() => project.x)` instead. That says the
+same thing the plain form says, but deliberately, and does not raise a
+warning. The seven below are left alone rather than converted: they are not
+wrong, and rewriting working code to satisfy a linter it is already known to
+be wrong about is churn.
 
 Svelte flags this in case `$derived` was intended. For a form the one-time seed
 is correct — fields must not snap back while someone is typing. Three things

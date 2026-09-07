@@ -6,12 +6,14 @@
   import AppPicker from "./AppPicker.svelte";
   import DirectoryField from "./DirectoryField.svelte";
   import IconPicker from "./IconPicker.svelte";
+  import PropertyEditor from "./PropertyEditor.svelte";
   import SwatchPicker from "./SwatchPicker.svelte";
   import { buttonClass, inputClass, labelClass, primaryButtonClass } from "./styles";
 
   let {
     project,
     groups,
+    knownPropertyKeys = [],
     customIcons,
     onIconsChanged,
     onGroupsStale,
@@ -21,6 +23,9 @@
   }: {
     project: Project;
     groups: Group[];
+    // Property names already used elsewhere, so a second project reuses
+    // "client" rather than inventing "Client" beside it.
+    knownPropertyKeys?: string[];
     customIcons: Map<string, string>;
     onIconsChanged?: () => void | Promise<void>;
     // Called when the backend rejects the write because the selected group no
@@ -37,7 +42,7 @@
   let tags = $state(project.tags.join(", "));
   let favorite = $state(project.favorite);
   let notes = $state(project.notes ?? "");
-  let client = $state(project.client ?? "");
+  let properties = $state<Record<string, string>>(untrack(() => ({ ...project.properties })));
   let openWith = $state(project.open_with ?? "");
   // Read through untrack: these capture the initial value on purpose, exactly
   // as the eight above do, but saying so explicitly keeps svelte-check's
@@ -66,7 +71,7 @@
         tags: parseTags(tags),
         favorite,
         notes: notes || null,
-        client: client || null,
+        properties,
         open_with: openWith || null,
         group_id: groupId,
         color,
@@ -114,10 +119,6 @@
     Favorite
   </label>
   <label class={labelClass}>
-    Client
-    <input bind:value={client} class={inputClass} />
-  </label>
-  <label class={labelClass}>
     Notes
     <input bind:value={notes} class={inputClass} />
   </label>
@@ -131,8 +132,9 @@
       {/each}
     </select>
   </label>
-  <SwatchPicker bind:value={color} allowNone />
+  <SwatchPicker bind:value={color} allowNone allowCustom />
   <IconPicker bind:value={icon} {customIcons} {onIconsChanged} onerror={(m) => onerror?.(m)} />
+  <PropertyEditor bind:value={properties} knownKeys={knownPropertyKeys} />
   <div class="flex gap-2">
     <button type="submit" disabled={saving} class={primaryButtonClass}>
       {saving ? "Saving…" : "Save"}

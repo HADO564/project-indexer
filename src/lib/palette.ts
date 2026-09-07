@@ -26,12 +26,31 @@ export function isSwatch(name: unknown): name is Swatch {
   return typeof name === "string" && (SWATCHES as readonly string[]).includes(name);
 }
 
-// Returns a CSS value, not a colour literal. The return is always one of a
-// fixed set of `var(--color-*)` strings, which is what makes it safe to
-// interpolate into a `style` attribute — a stored colour name can never
-// smuggle arbitrary CSS through it.
+// Exactly "#" plus six hex digits — nothing else. Mirrors is_hex_literal in
+// crates/core/src/domain/palette.rs.
+//
+// The strictness is the security boundary, not pedantry: this value is
+// interpolated straight into a `style` attribute and `style-src` still carries
+// `unsafe-inline`, so the shape of what is allowed through is the only thing
+// stopping a stored colour carrying arbitrary CSS. Shorthand, named colours
+// and rgb() are refused rather than normalised.
+const HEX = /^#[0-9a-f]{6}$/i;
+
+export function isHexColor(name: unknown): boolean {
+  return typeof name === "string" && HEX.test(name);
+}
+
+// Returns a CSS value. Either one of a fixed set of `var(--color-*)` strings,
+// or a hex literal that has passed the exact-six-digit test above — so a
+// stored colour still cannot smuggle arbitrary CSS into a `style` attribute,
+// which is what makes this safe to interpolate.
+//
+// A project may store either; a *group* is palette-only, matching
+// is_known_swatch / is_valid_project_color in core.
 export function swatchVar(name: string | null | undefined): string {
-  return isSwatch(name) ? `var(--color-swatch-${name})` : NEUTRAL;
+  if (isSwatch(name)) return `var(--color-swatch-${name})`;
+  if (isHexColor(name)) return name as string;
+  return NEUTRAL;
 }
 
 // The colour a project's mark takes: its own, else its group's, else neutral.

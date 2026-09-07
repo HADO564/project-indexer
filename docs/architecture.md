@@ -159,14 +159,22 @@ if it regresses.
     `refuses_a_newer_database`. This is what makes shipping auto-updates safe —
     a downgraded binary fails loud instead of corrupting the store.
 
-12. **A stored colour is a palette name, and a custom icon is never inlined.**
-    `Project.color` and `Group.color` hold one of the eight names in
+12. **A stored colour is a palette name or an exact hex literal, and a custom
+    icon is never inlined.** `Group.color` holds one of the eight names in
     `core::domain::palette` (mirrored, hand-maintained, in `src/lib/palette.ts`),
-    resolved to a `var(--color-swatch-*)` token at render — never a literal — so
-    a theme override recolours every project and group coherently. An unknown
-    name falls back to neutral rather than failing, and an unknown *icon* name
-    falls back to a default glyph, because `core` owns neither the icon list nor
-    the render. A **custom** icon renders only as
+    resolved to a `var(--color-swatch-*)` token at render, so a theme override
+    recolours every group coherently — a group's colour drives sidebar entries
+    and card edges, where staying inside the theme matters most.
+    `Project.color` additionally accepts a colour-picker literal, validated by
+    `is_hex_literal` as **exactly** `#` plus six hex digits. That strictness is
+    the security boundary, not pedantry: the value is interpolated into a
+    `style` attribute and `style-src` still carries `unsafe-inline`, so the
+    shape of what is admitted is the only thing stopping a stored colour
+    carrying arbitrary CSS. Shorthand, named colours and `rgb()` are refused
+    rather than normalised, and `swatchVar` can only ever return a token or a
+    literal matching that same pattern. An unknown name falls back to neutral
+    rather than failing, and an unknown *icon* name falls back to a default
+    glyph, because `core` owns neither the icon list nor the render. A **custom** icon renders only as
     `<img src="data:image/svg+xml;…">`: the sanitizer in `core::icons` is the
     first security layer and the `<img>` is the second, inert regardless of what
     the first one missed. `{@html}` on a stored SVG collapses two independent
