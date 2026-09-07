@@ -163,3 +163,56 @@ export interface StoredIcon {
   name: string;
   svg: string;
 }
+
+// Mirrors crates/core/src/domain/scan.rs and
+// crates/core/src/application/scan_service.rs.
+//
+// ScanMode is #[serde(tag = "mode", rename_all = "lowercase")] and is
+// #[serde(flatten)]ed into ScanRequest, so the wire shape is a flat object:
+// { scan_root, mode: "quick", detectors, include_ignored } or
+// { scan_root, mode: "deep", depth: 3, detectors, include_ignored }.
+export type ScanRequest =
+  | {
+      scan_root: string;
+      mode: "quick";
+      detectors: string[];
+      include_ignored: boolean;
+    }
+  | {
+      scan_root: string;
+      mode: "deep";
+      depth: number;
+      detectors: string[];
+      include_ignored: boolean;
+    };
+
+export interface Candidate {
+  directory: string;
+  suggested_name: string;
+  matched_kinds: string[];
+  already_tracked: boolean;
+}
+
+export interface ScanReport {
+  candidates: Candidate[];
+  visited: number;
+  // True when MAX_DIRECTORIES (50,000) was reached, so the results are
+  // incomplete rather than the disk holding no more.
+  stopped_early: boolean;
+}
+
+export interface ImportSelection {
+  directory: string;
+  name: string;
+}
+
+export interface ImportFailure {
+  directory: string;
+  message: string;
+}
+
+export interface ImportReport {
+  imported: Project[];
+  skipped: number;
+  failures: ImportFailure[];
+}
