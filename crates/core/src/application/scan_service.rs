@@ -81,9 +81,14 @@ impl ScanService {
 
         let mut taken = taken_names_from(self.projects.active_project_names()?);
         for candidate in &mut report.candidates {
+            // A soft-deleted (binned) row is not "tracked" — `create`'s own
+            // duplicate check already ignores those, and a scan that disagreed
+            // would show the directory as tracked, grey out its checkbox, and
+            // leave a re-cloned repo impossible to re-import.
             candidate.already_tracked = self
                 .projects
                 .find_by_directory(&candidate.directory)?
+                .filter(|p| !p.is_deleted)
                 .is_some();
 
             // An already-tracked directory keeps its walk-produced name as-is:
@@ -100,6 +105,7 @@ impl ScanService {
                 .and_then(|p| p.to_str())
                 .unwrap_or("");
             let name = disambiguate(&candidate.suggested_name, parent, &taken);
+            candidate.disambiguated = name != candidate.suggested_name;
             // Reserve it, so two candidates in one report cannot collide with
             // each other — the case `~/code/api` and `~/work/api` hits on the
             // very first scan.
@@ -123,8 +129,11 @@ impl ScanService {
         let mut failures = Vec::new();
 
         for selection in selections {
+            // Same rule as `scan`: a soft-deleted row must not count as
+            // tracked, or a re-cloned, re-scanned directory would be silently
+            // counted as skipped instead of imported.
             let already_tracked = match self.projects.find_by_directory(&selection.directory) {
-                Ok(existing) => existing.is_some(),
+                Ok(existing) => existing.filter(|p| !p.is_deleted).is_some(),
                 Err(e) => {
                     failures.push(ImportFailure {
                         directory: selection.directory.clone(),
@@ -259,6 +268,76 @@ mod tests {
 
         assert_eq!(report.candidates.len(), 1);
         assert!(report.candidates[0].already_tracked);
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// The badge the review UI hangs off of: a candidate whose name collided
+    /// and got auto-qualified must say so, distinguishably from one the user
+    /// edited by hand.
+    #[test]
+    fn scan_flags_a_candidate_whose_name_was_disambiguated() {
+        let root = temp_tree("disambiguated");
+        repo_at(&root, "work/api");
+        repo_at(&root, "code/api");
+        let (_, scan) = services();
+
+        let report = scan
+            .scan(&ScanRequest {
+                mode: ScanMode::Deep { depth: 2 },
+                ..request(&root)
+            })
+            .unwrap();
+
+        let mut by_name: Vec<(&str, bool)> = report
+            .candidates
+            .iter()
+            .map(|c| (c.suggested_name.as_str(), c.disambiguated))
+            .collect();
+        by_name.sort();
+        // `walk` hands candidates back sorted by directory path, so
+        // "code/api" is assigned before "work/api" and keeps "api"
+        // untouched; "work/api" collides and is qualified using its own
+        // parent, which is `disambiguated: true`.
+        assert_eq!(by_name, vec![("api", false), ("work/api", true)]);
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// Binning keeps a project's metadata but the directory is no longer
+    /// "tracked" in any sense a fresh scan should honor — re-cloning into the
+    /// same path must scan and import like any other new directory, not stay
+    /// stuck behind the old, now-hidden row.
+    #[test]
+    fn a_binned_then_recreated_directory_is_not_already_tracked() {
+        let root = temp_tree("binned");
+        let api = repo_at(&root, "api");
+        let (projects, scan) = services();
+
+        let original = projects.ensure_project(&api).unwrap();
+        // Bin it while keeping its metadata (soft delete: `delete_metadata:
+        // false`), then simulate a re-clone into the same path.
+        projects.delete_directory(&original.id, false).unwrap();
+        std::fs::create_dir_all(&api).expect("recreate the directory");
+        git2::Repository::init(&api).expect("re-clone should init a fresh repo");
+
+        let report = scan.scan(&request(&root)).unwrap();
+        assert_eq!(report.candidates.len(), 1);
+        assert!(
+            !report.candidates[0].already_tracked,
+            "a binned directory must not show as already tracked"
+        );
+
+        let import_report = scan
+            .import(&[ImportSelection {
+                directory: api.clone(),
+                name: "api".into(),
+            }])
+            .unwrap();
+        assert_eq!(import_report.skipped, 0);
+        assert_eq!(import_report.imported.len(), 1);
+        assert!(!import_report.imported[0].is_deleted);
+        assert_ne!(import_report.imported[0].id, original.id);
 
         std::fs::remove_dir_all(&root).ok();
     }
