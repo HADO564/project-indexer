@@ -344,6 +344,10 @@ Add to the `mod tests` block in `crates/core/src/application/service.rs`. The ex
     /// The bug this fixes: two `api` directories under different parents both
     /// have to register. Before `disambiguate`, the second returned
     /// `DuplicateName` and the observer CLI simply failed on it.
+    /// Note the expectation is derived, not hardcoded: `tmpdir` prefixes its
+    /// argument (`pi-svc-collide-work`), and that prefix is the parent folder
+    /// name `disambiguate` qualifies with. Spelling the prefix into the
+    /// assertion would couple this test to the helper's naming.
     #[test]
     fn ensure_project_disambiguates_a_colliding_name() {
         let svc = service(Arc::new(FakeLauncher::default()));
@@ -357,8 +361,13 @@ Add to the `mod tests` block in `crates/core/src/application/service.rs`. The ex
         let first = svc.ensure_project(a.to_str().unwrap()).unwrap();
         let second = svc.ensure_project(b.to_str().unwrap()).unwrap();
 
+        let work_folder = std::path::Path::new(&work)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
         assert_eq!(first.name, "api");
-        assert_eq!(second.name, "collide-work/api");
+        assert_eq!(second.name, format!("{work_folder}/api"));
         assert_ne!(first.id, second.id);
     }
 
@@ -401,7 +410,14 @@ Add to the `mod tests` block in `crates/core/src/application/service.rs`. The ex
             .ensure_project_named(second_dir.to_str().unwrap(), "api")
             .unwrap();
 
-        assert_eq!(second.name, "clients/api");
+        // Derived, not hardcoded — `tmpdir` prefixes its argument, and that
+        // prefixed folder name is what the qualifier uses.
+        let parent_folder = std::path::Path::new(&parent)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(second.name, format!("{parent_folder}/api"));
     }
 ```
 
@@ -1004,6 +1020,7 @@ Orchestration: run the walk, flag what is already tracked, assign collision-free
 
 **Files:**
 - Create: `crates/core/src/application/scan_service.rs`
+- Modify: `crates/core/src/detectors/runner.rs` (add `kinds()`)
 - Modify: `crates/core/src/application/mod.rs`, `crates/core/src/lib.rs` (re-exports)
 
 **Interfaces:**
