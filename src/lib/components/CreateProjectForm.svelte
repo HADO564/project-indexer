@@ -5,7 +5,7 @@
   import DirectoryField from "./DirectoryField.svelte";
   import IconPicker from "./IconPicker.svelte";
   import SwatchPicker from "./SwatchPicker.svelte";
-  import { cardClass, inputClass, labelClass, primaryButtonClass } from "./styles";
+  import { inputClass, labelClass, primaryButtonClass } from "./styles";
 
   let {
     groups,
@@ -95,40 +95,37 @@
   }
 </script>
 
-<section class={`mb-6 ${cardClass}`}>
-  <h2 class="mb-3 font-display text-[14px] uppercase tracking-wide text-phos-dim"><span class="text-gold">//</span> new project</h2>
-  <form onsubmit={handleSubmit} class="flex flex-col gap-3">
-    <label class={labelClass}>
-      Name
-      <input bind:value={name} required placeholder="My project" class={inputClass} />
-    </label>
-    <DirectoryField
-      bind:value={directory}
-      required
-      onerror={(m) => onerror?.(m)}
-      onPicked={handleDirectoryPicked}
-    />
-    <label class={labelClass}>
-      Description
-      <input bind:value={description} placeholder="Optional description" class={inputClass} />
-    </label>
-    <label class={labelClass}>
-      Tags (comma separated)
-      <input bind:value={tags} placeholder="rust, tauri" class={inputClass} />
-    </label>
-    <label class={labelClass}>
-      Group
-      <select bind:value={groupId} class={inputClass}>
-        <option value={null}>Ungrouped</option>
-        {#each groups as group (group.id)}
-          <option value={group.id}>{group.name}</option>
-        {/each}
-      </select>
-    </label>
-    <SwatchPicker bind:value={color} allowNone />
-    <IconPicker bind:value={icon} {customIcons} {onIconsChanged} onerror={(m) => onerror?.(m)} />
-    <button type="submit" disabled={creating} class={`self-start ${primaryButtonClass}`}>
-      {creating ? "Creating…" : "Create project"}
-    </button>
-  </form>
-</section>
+<form onsubmit={handleSubmit} class="flex flex-col gap-3">
+  <label class={labelClass}>
+    Name
+    <input bind:value={name} required placeholder="My project" class={inputClass} />
+  </label>
+  <DirectoryField
+    bind:value={directory}
+    required
+    onerror={(m) => onerror?.(m)}
+    onPicked={handleDirectoryPicked}
+  />
+  <label class={labelClass}>
+    Description
+    <input bind:value={description} placeholder="Optional description" class={inputClass} />
+  </label>
+  <label class={labelClass}>
+    Tags (comma separated)
+    <input bind:value={tags} placeholder="rust, tauri" class={inputClass} />
+  </label>
+  <label class={labelClass}>
+    Group
+    <select bind:value={groupId} class={inputClass}>
+      <option value={null}>Ungrouped</option>
+      {#each groups as group (group.id)}
+        <option value={group.id}>{group.name}</option>
+      {/each}
+    </select>
+  </label>
+  <SwatchPicker bind:value={color} allowNone />
+  <IconPicker bind:value={icon} {customIcons} {onIconsChanged} onerror={(m) => onerror?.(m)} />
+  <button type="submit" disabled={creating} class={`self-start ${primaryButtonClass}`}>
+    {creating ? "Creating…" : "Create project"}
+  </button>
+</form>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SWATCHES, isSwatch, swatchVar } from "./palette";
+import { SWATCHES, isSwatch, markVar, swatchVar } from "./palette";
 
 describe("SWATCHES", () => {
   it("mirrors crates/core/src/domain/palette.rs exactly, in order", () => {
@@ -48,5 +48,22 @@ describe("swatchVar", () => {
     for (const input of ["#fff", "red", "url(x)", "gold; background: red"]) {
       expect(swatchVar(input)).toMatch(/^var\(--color-[a-z-]+\)$/);
     }
+  });
+});
+
+describe("markVar", () => {
+  it("prefers the project's own colour", () => {
+    expect(markVar("gold", "cyan")).toBe("var(--color-swatch-gold)");
+  });
+  it("falls back to the group's colour, so a project in a coloured group is not grey", () => {
+    expect(markVar(null, "cyan")).toBe("var(--color-swatch-cyan)");
+    expect(markVar(undefined, "cyan")).toBe("var(--color-swatch-cyan)");
+  });
+  it("falls back to neutral when neither has one", () => {
+    expect(markVar(null, null)).toBe("var(--color-phos-faint)");
+  });
+  it("falls back to neutral for an unknown name at either level", () => {
+    expect(markVar("chartreuse", null)).toBe("var(--color-phos-faint)");
+    expect(markVar(null, "chartreuse")).toBe("var(--color-phos-faint)");
   });
 });

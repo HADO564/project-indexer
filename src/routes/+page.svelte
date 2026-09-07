@@ -9,8 +9,10 @@
   } from "$lib/api/projects";
   import type { Group, Project, SortBy, SortDirection } from "$lib/api/types";
   import { customIconSrc } from "$lib/icons";
-  import CreateProjectForm from "$lib/components/CreateProjectForm.svelte";
+  import { primaryButtonClass } from "$lib/components/styles";
+  import CreateProjectModal from "$lib/components/CreateProjectModal.svelte";
   import DeleteModal from "$lib/components/DeleteModal.svelte";
+  import EditProjectModal from "$lib/components/EditProjectModal.svelte";
   import ErrorBanner from "$lib/components/ErrorBanner.svelte";
   import GroupManagerModal from "$lib/components/GroupManagerModal.svelte";
   import OpenWithMissingModal from "$lib/components/OpenWithMissingModal.svelte";
@@ -32,6 +34,7 @@
   let error = $state("");
   let editingId = $state<string | null>(null);
   let groupManagerOpen = $state(false);
+  let createOpen = $state(false);
   let deleteTarget = $state<Project | null>(null);
   let openWithMissingTarget = $state<Project | null>(null);
   let missingDirs = $state<Set<string>>(new Set());
@@ -57,6 +60,10 @@
   let query = $state("");
 
   const counts = $derived(viewCounts(projects, deletedProjects, groups));
+  // Resolved from the live list rather than held as a snapshot, so an edit
+  // opened before a refetch edits the refetched project. If it disappears —
+  // deleted from another window — the modal closes rather than editing a ghost.
+  const editingProject = $derived(projects.find((p) => p.id === editingId) ?? null);
   const visibleProjects = $derived(resolveView(selectedView, projects, deletedProjects, query));
 
   function handleSelectView(view: View) {
@@ -237,6 +244,16 @@
     <h1 class="text-2xl tracking-wide text-phos">
       <span class="text-accent">&#9612;</span> PROJECT INDEXER
     </h1>
+    <button
+      type="button"
+      onclick={() => {
+        createOpen = true;
+        error = "";
+      }}
+      class={primaryButtonClass}
+    >
+      + New project
+    </button>
   </div>
 
   <ErrorBanner message={error} />
@@ -253,15 +270,6 @@
     />
 
     <main class="min-w-0 flex-1">
-      <CreateProjectForm
-        {groups}
-        {customIcons}
-        onIconsChanged={loadCustomIcons}
-        onGroupsStale={loadGroups}
-        onCreated={handleCreated}
-        onerror={handleError}
-      />
-
       <div class="mb-3 flex items-center gap-2">
         <div class="min-w-0 flex-1">
           <ViewControls bind:mode={viewMode} bind:query />
@@ -275,11 +283,8 @@
         {customIcons}
         mode={viewMode}
         {loading}
-        {editingId}
         {missingDirs}
         onEdit={handleEdit}
-        onCancelEdit={handleCancelEdit}
-        onSaved={handleSaved}
         onRequestDelete={handleRequestDelete}
         onOpened={handleOpened}
         onTrackersRefreshed={handleTrackersRefreshed}
@@ -292,13 +297,36 @@
             : "No projects yet."}
         binMode={selectedView.kind === "bin"}
         onBinChanged={handleBinChanged}
-        onIconsChanged={loadCustomIcons}
-        onGroupsStale={loadGroups}
         onerror={handleError}
       />
     </main>
   </div>
 </div>
+
+{#if editingProject}
+  <EditProjectModal
+    project={editingProject}
+    {groups}
+    {customIcons}
+    onIconsChanged={loadCustomIcons}
+    onGroupsStale={loadGroups}
+    onSaved={handleSaved}
+    onClose={handleCancelEdit}
+    onerror={handleError}
+  />
+{/if}
+
+{#if createOpen}
+  <CreateProjectModal
+    {groups}
+    {customIcons}
+    onIconsChanged={loadCustomIcons}
+    onGroupsStale={loadGroups}
+    onCreated={handleCreated}
+    onClose={() => (createOpen = false)}
+    onerror={handleError}
+  />
+{/if}
 
 {#if groupManagerOpen}
   <GroupManagerModal

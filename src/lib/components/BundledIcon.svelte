@@ -1,12 +1,13 @@
 <script lang="ts">
   import { iconPaths } from "$lib/icons";
+  import { iconMd } from "./styles";
 
   // Renders one glyph from the bundled set, stroked in currentColor so the
   // container decides the colour. An unknown name draws the fallback glyph
   // rather than nothing — a record from a newer build must still render.
   let {
     name,
-    class: klass = "h-4 w-4",
+    class: klass = iconMd,
   }: {
     name: string | null | undefined;
     class?: string;

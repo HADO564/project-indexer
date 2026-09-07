@@ -27,7 +27,7 @@
         title="No colour"
         aria-label="No colour"
         aria-pressed={value === null}
-        class={`h-6 w-6 rounded-full border text-[11px] text-phos-faint ${
+        class={`h-8 w-8 rounded-full border text-[13px] text-phos-faint ${
           value === null ? "border-phos" : "border-line"
         }`}
       >
@@ -41,7 +41,7 @@
         title={swatch}
         aria-label={swatch}
         aria-pressed={value === swatch}
-        class={`h-6 w-6 rounded-full border-2 ${
+        class={`h-8 w-8 rounded-full border-2 ${
           value === swatch ? "border-phos" : "border-transparent"
         }`}
         style={`background: ${swatchVar(swatch)}`}

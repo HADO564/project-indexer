@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Project } from "$lib/api/types";
   import type { Snippet } from "svelte";
-  import { swatchVar } from "$lib/palette";
   import ProjectMark from "./ProjectMark.svelte";
   import TrackerBadges from "./TrackerBadges.svelte";
 
@@ -24,12 +23,9 @@
   } = $props();
 </script>
 
-<div
-  class="flex h-full flex-col gap-2 border-l-2 pl-3"
-  style={`border-color: ${groupColor ? swatchVar(groupColor) : "transparent"}`}
->
+<div class="flex h-full flex-col gap-2">
   <div class="flex items-start justify-between gap-2">
-    <ProjectMark {project} {customIcons} size="lg" />
+    <ProjectMark {project} {customIcons} {groupColor} size="lg" />
     {@render actions()}
   </div>
   <div class="flex min-w-0 items-center gap-1.5">
@@ -59,7 +55,7 @@
           stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
-          class="h-4 w-4"
+          class="h-5 w-5"
         >
           <path d="M3 6h18" />
           <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />

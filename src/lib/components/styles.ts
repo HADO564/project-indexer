@@ -20,3 +20,12 @@ export const dangerButtonClass =
   "rounded-sm border border-rust px-3 py-1.5 font-display text-[14px] text-rust hover:bg-rust hover:text-void disabled:cursor-default disabled:opacity-50";
 
 export const cardClass = "rounded-sm border border-line bg-panel p-4";
+
+// Icon sizing. "The icons are too small" is a whole-app judgement, not a
+// per-component one, so every glyph resolves through these three rather than
+// hardcoding a size at ~20 call sites — tune the scale here.
+//
+// Sized for a low-DPI desktop panel: a 27" 1080p monitor is ~82 PPI, where a
+// 16px glyph is small enough to have to look for.
+export const iconMd = "h-6 w-6"; // default — sidebar, pickers, row marks
+export const iconLg = "h-8 w-8"; // emphasis — the grid tile's project mark

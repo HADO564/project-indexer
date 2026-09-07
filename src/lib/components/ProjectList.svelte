@@ -1,9 +1,8 @@
 <script lang="ts">
   import type { Group, Project } from "$lib/api/types";
-  import { swatchVar } from "$lib/palette";
+  import { markVar } from "$lib/palette";
   import type { ViewMode } from "$lib/viewState";
   import BinActions from "./BinActions.svelte";
-  import EditProjectForm from "./EditProjectForm.svelte";
   import ProjectActionsMenu from "./ProjectActionsMenu.svelte";
   import ProjectCompactRow from "./ProjectCompactRow.svelte";
   import ProjectRow from "./ProjectRow.svelte";
@@ -16,11 +15,8 @@
     customIcons,
     mode,
     loading,
-    editingId,
     missingDirs,
     onEdit,
-    onCancelEdit,
-    onSaved,
     onRequestDelete,
     onOpened,
     onTrackersRefreshed,
@@ -29,8 +25,6 @@
     emptyMessage = "No projects yet.",
     binMode = false,
     onBinChanged,
-    onIconsChanged,
-    onGroupsStale,
     onerror,
   }: {
     projects: Project[];
@@ -38,11 +32,8 @@
     customIcons: Map<string, string>;
     mode: ViewMode;
     loading: boolean;
-    editingId: string | null;
     missingDirs: Set<string>;
     onEdit: (project: Project) => void;
-    onCancelEdit: () => void;
-    onSaved: () => void | Promise<void>;
     onRequestDelete: (project: Project) => void;
     onOpened: () => void | Promise<void>;
     onTrackersRefreshed: () => void | Promise<void>;
@@ -57,8 +48,6 @@
     // and must not open the edit form either.
     binMode?: boolean;
     onBinChanged?: () => void | Promise<void>;
-    onIconsChanged?: () => void | Promise<void>;
-    onGroupsStale?: () => void | Promise<void>;
     onerror: (message: string) => void;
   } = $props();
 
@@ -127,26 +116,24 @@
       {#each projects as project (project.id)}
         {@const groupColor = groupColorOf(project)}
         {@const missing = missingDirs.has(project.id)}
+        <!-- The card's border takes the same cascaded colour as the mark —
+             the project's own, else its group's — so a project is findable by
+             colour from its outline, not just its icon. The left edge stays
+             thicker, which is what still distinguishes group membership when
+             several groups sit together in All or Favourites. -->
+        {@const edge = markVar(project.color, groupColor)}
+        {@const coloured = Boolean(project.color ?? groupColor)}
         <li
           class={mode === "compact"
-            ? "border-b border-line px-1 py-1.5 last:border-b-0"
+            ? "border-b border-line px-2 py-1.5 last:border-b-0"
             : "rounded-sm border border-line p-3"}
-          style={mode === "list" && groupColor
-            ? `border-left: 2px solid ${swatchVar(groupColor)}`
-            : undefined}
+          style={mode === "compact"
+            ? `border-left: 2px solid ${coloured ? edge : "transparent"}`
+            : coloured
+              ? `border-color: ${edge}; border-left-width: 3px`
+              : undefined}
         >
-          {#if editingId === project.id && !binMode}
-            <EditProjectForm
-              {project}
-              {groups}
-              {customIcons}
-              {onIconsChanged}
-              {onGroupsStale}
-              {onSaved}
-              onCancel={onCancelEdit}
-              {onerror}
-            />
-          {:else if mode === "grid"}
+          {#if mode === "grid"}
             <ProjectTile
               {project}
               directoryMissing={missing}

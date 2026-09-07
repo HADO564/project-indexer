@@ -8,6 +8,7 @@
   import {
     buttonClass,
     dangerButtonClass,
+    iconMd,
     inputClass,
     labelClass,
     primaryButtonClass,
@@ -145,13 +146,13 @@
               title={name}
               aria-label={name}
               aria-pressed={newIcon === name}
-              class={`inline-flex h-7 w-7 items-center justify-center rounded-sm border-2 ${
+              class={`inline-flex h-10 w-10 items-center justify-center rounded-sm border-2 ${
                 newIcon === name
                   ? "border-phos text-phos"
                   : "border-transparent text-phos-dim hover:text-phos"
               }`}
             >
-              <BundledIcon {name} class="h-4 w-4" />
+              <BundledIcon {name} class={iconMd} />
             </button>
           {/each}
         </div>
@@ -169,7 +170,7 @@
           <li class="rounded-sm border border-line p-3">
             <div class="flex flex-wrap items-center gap-2">
               <span class="shrink-0" style={`color: ${swatchVar(group.color)}`}>
-                <BundledIcon name={group.icon} class="h-4 w-4" />
+                <BundledIcon name={group.icon} class={iconMd} />
               </span>
               <input
                 value={group.name}
@@ -217,7 +218,7 @@
                   title={swatch}
                   aria-label={`${swatch} for ${group.name}`}
                   aria-pressed={group.color === swatch}
-                  class={`h-5 w-5 rounded-full border-2 ${
+                  class={`h-7 w-7 rounded-full border-2 ${
                     group.color === swatch ? "border-phos" : "border-transparent"
                   }`}
                   style={`background: ${swatchVar(swatch)}`}
@@ -233,13 +234,13 @@
                   title={name}
                   aria-label={`${name} icon for ${group.name}`}
                   aria-pressed={group.icon === name}
-                  class={`inline-flex h-7 w-7 items-center justify-center rounded-sm border-2 ${
+                  class={`inline-flex h-10 w-10 items-center justify-center rounded-sm border-2 ${
                     group.icon === name
                       ? "border-phos text-phos"
                       : "border-transparent text-phos-dim hover:text-phos"
                   }`}
                 >
-                  <BundledIcon {name} class="h-4 w-4" />
+                  <BundledIcon {name} class={iconMd} />
                 </button>
               {/each}
             </div>
