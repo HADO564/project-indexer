@@ -130,6 +130,17 @@ files. `vite.config.ts` runs them in the `node` environment.
 
 ## Open (features)
 
+- [ ] **NEXT — re-detect sweep when the detector set gains a kind.** Detection
+  results are persisted, so a project registered before a detector existed
+  carries an incomplete tracker set forever and nothing says so. This lands the
+  day the **Unity detector** ships, not the day plugins do: every existing
+  project would silently lack its Unity tracker until manually refreshed. Run
+  the one new detector across existing projects —
+  `DetectorRunner::inspect(path, only)` is already that primitive. Best-effort
+  (`trackers()` + logged errors, **never** `into_result()`, which is
+  all-or-nothing and correct only for a single project). Small, and a
+  prerequisite for shipping any new detector rather than an initiative of its
+  own. See `architecture.md` → *Detection semantics*.
 - [ ] `GitInfo.contributors` (see above)
 - [ ] Unity detector — add `Tracker::Unity` + a `UnityDetector` together (register in `detectors/registry.rs`)
 - [ ] Blender detector — add `Tracker::Blender` + a `BlenderDetector` together

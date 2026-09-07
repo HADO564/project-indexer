@@ -263,6 +263,31 @@ because they edit a first-party struct. A dedicated commit-graph panel is a
 *frontend feature*, and gated on the containment decision. Ask which of the
 three a proposal is before arguing about how to build it.
 
+**Stored trackers go stale when the detector set changes.** Detection results
+are persisted, not computed on read — `create` and `refresh_trackers` both
+write `project.trackers` into the record. So a project detected before a
+detector existed carries an incomplete tracker set, permanently, and nothing
+surfaces that. A directory that is both git and Unity, registered when only the
+git detector existed, still reads git-only after a Unity detector ships.
+
+This arrives with the **next first-party detector**, not with plugins. The day
+Unity ships, every already-registered project silently lacks its Unity tracker
+until somebody refreshes each one by hand.
+
+The fix is a **re-detect sweep**: when the registered set gains a kind, run
+*that one detector* across existing projects. `DetectorRunner::inspect(path,
+only: Option<&str>)` is already the primitive — it exists for per-tracker
+re-detect in the project view, and one detector across a few hundred projects
+is the same operation batched. No bookkeeping field is needed; storing which
+kinds have run against each project would avoid redundant work, but the work
+being avoided is milliseconds.
+
+Two notes for whoever builds it. It must be best-effort — `create`'s
+`trackers()`-plus-logged-errors pattern, never `into_result()`, whose
+all-or-nothing contract is right for one project and wrong across hundreds.
+And it wants the **single-kind** filter, not the detector *set* a scan-with-
+selection needs; both filter shapes are real and neither replaces the other.
+
 **Detectors stay stateless, and ideally zero-sized.** Both existing ones are
 unit structs, so the registered set costs 16 bytes per detector and `Box::new`
 never reaches the allocator — twenty of them is 320 bytes at rest, and one that

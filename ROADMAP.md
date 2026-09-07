@@ -147,6 +147,14 @@ generically. See [`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-detector).
 - **Unity** — the next detector, and the one the generic path was built for.
 - **Blender** — same shape.
 
+**Ship the re-detect sweep first.** Detection results are persisted, so adding a
+detector does nothing for projects already registered — a git+Unity directory
+added today stays git-only after a Unity detector ships, with nothing to say it
+is incomplete. Shipping Unity without the sweep ships a silent gap in every
+existing install. The sweep runs one new detector across existing projects and
+is small; `architecture.md` → *Detection semantics* has the shape and the two
+traps.
+
 Version-control systems beyond git are deliberately not first-party work — they
 belong to [Plugins](#plugins). This section is about what *kind of project* a
 directory holds.
