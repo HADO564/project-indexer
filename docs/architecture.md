@@ -201,6 +201,16 @@ comment on `DetectorOutcome`. The states:
 outcomes back out for best-effort callers; `into_result()` is the
 all-or-nothing view.
 
+The runner has two selection shapes, and both are real. `inspect(path,
+only: Option<&str>)` is the single-kind form the re-detect sweep uses — one
+detector, across many projects. `inspect_kinds(path, only: Option<&[&str]>)`
+is the set form folder scanning added, and `inspect` is now implemented over
+it rather than kept as a separate code path. Neither is about what gets
+recorded: the selection decides *whether a directory is kept at all*, and a
+kept directory still runs every installed detector and stores every tracker
+that matched. A tick in the scan UI is a filter on which directories get
+imported, not a filter on which detectors run against the ones that do.
+
 The load-bearing distinction: **"malformed `.uproject`" and "not an Unreal
 project" are not the same outcome** and must never collapse into one. A
 detector returns `Ok(None)` for "not mine" and `Err` for "mine but broken".

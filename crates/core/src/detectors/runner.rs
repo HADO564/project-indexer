@@ -113,11 +113,35 @@ impl DetectorRunner {
     /// `Some(kind)` only the detector whose [`Detector::kind`] equals `kind`
     /// runs (for per-tracker re-detect). An unknown `kind` matches nothing
     /// and yields an empty [`Detection`].
+    ///
+    /// Kept alongside [`inspect_kinds`](Self::inspect_kinds) because the
+    /// re-detect sweep genuinely wants exactly one detector, and expressing
+    /// that as a one-element slice at every call site reads worse.
     pub fn inspect(&self, path: &Path, only: Option<&str>) -> Detection {
+        match only {
+            Some(kind) => self.inspect_kinds(path, Some(&[kind])),
+            None => self.inspect_kinds(path, None),
+        }
+    }
+
+    /// Runs the detectors whose [`Detector::kind`] appears in `only`, or every
+    /// registered detector when `only` is `None`.
+    ///
+    /// This is the folder scanner's entry point. The distinction it encodes:
+    /// the selection decides **whether a directory is worth registering**, not
+    /// what gets recorded about it — a directory that survives the scan is
+    /// registered through `create`, which runs every installed detector and
+    /// stores every tracker that matched.
+    ///
+    /// `Some(&[])` runs nothing, which is deliberate: a scan with no detectors
+    /// ticked finds nothing rather than everything. An unrecognized kind
+    /// matches nothing rather than erroring, so remembered settings naming a
+    /// detector that has since been removed degrade to finding less.
+    pub fn inspect_kinds(&self, path: &Path, only: Option<&[&str]>) -> Detection {
         let mut outcomes = Vec::new();
         for detector in &self.detectors {
             let kind = detector.kind();
-            if only.is_some_and(|k| k != kind) {
+            if only.is_some_and(|kinds| !kinds.contains(&kind)) {
                 continue;
             }
             outcomes.push(match detector.detect(path) {
@@ -127,6 +151,16 @@ impl DetectorRunner {
             });
         }
         Detection { outcomes }
+    }
+
+    /// The [`Detector::kind`] of every registered detector, in registration
+    /// order. Lets a caller present the detector set without knowing which
+    /// concrete detectors were compiled in.
+    pub fn kinds(&self) -> Vec<String> {
+        self.detectors
+            .iter()
+            .map(|d| d.kind().to_string())
+            .collect()
     }
 }
 
@@ -287,5 +321,66 @@ mod tests {
         };
 
         assert!(detection.into_result().is_err());
+    }
+
+    #[test]
+    fn inspect_kinds_runs_only_the_named_detectors() {
+        let dir = temp_dir("kinds");
+        git2::Repository::init(&dir).expect("should init a git repo");
+
+        let runner = DetectorRunner::new(vec![Box::new(Gitector), Box::new(Boom)]);
+
+        assert_eq!(runner.inspect_kinds(&dir, Some(&["git"])).outcomes.len(), 1);
+        assert_eq!(
+            runner
+                .inspect_kinds(&dir, Some(&["git", "boom"]))
+                .outcomes
+                .len(),
+            2
+        );
+        assert_eq!(runner.inspect_kinds(&dir, None).outcomes.len(), 2);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// An empty selection is "no detectors", not "all detectors" — the walk
+    /// relies on this to treat a scan with nothing ticked as finding nothing,
+    /// rather than importing the entire disk.
+    #[test]
+    fn inspect_kinds_with_an_empty_selection_runs_nothing() {
+        let dir = temp_dir("kinds-empty");
+        git2::Repository::init(&dir).expect("should init a git repo");
+
+        let runner = DetectorRunner::new(vec![Box::new(Gitector)]);
+        assert_eq!(runner.inspect_kinds(&dir, Some(&[])).outcomes.len(), 0);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Remembered settings can name a detector that no longer exists. That must
+    /// degrade to finding less, never to an error.
+    #[test]
+    fn inspect_kinds_ignores_unknown_kinds() {
+        let dir = temp_dir("kinds-unknown");
+        git2::Repository::init(&dir).expect("should init a git repo");
+
+        let runner = DetectorRunner::new(vec![Box::new(Gitector)]);
+
+        assert_eq!(
+            runner
+                .inspect_kinds(&dir, Some(&["nonsense"]))
+                .outcomes
+                .len(),
+            0
+        );
+        assert_eq!(
+            runner
+                .inspect_kinds(&dir, Some(&["nonsense", "git"]))
+                .outcomes
+                .len(),
+            1
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

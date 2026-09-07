@@ -18,7 +18,10 @@ any number of user-defined key/value properties, belongs to at most one group,
 and is reached through a sidebar — All, Favourites, each group, Ungrouped, Bin —
 rather than one flat column. Search covers name, path, tags and property values,
 with `client: acme` looking inside one property and a bare `client:` finding
-every project that has it.
+every project that has it. Projects need not be added one at a time: pointing
+the app at a folder walks it for existing work and imports what it finds in one
+pass, with name collisions resolved automatically and the last scan's settings
+remembered for the next one.
 
 The Rust backend has been restructured so that all logic lives in
 `indexer-core`, a library crate the compiler forbids from importing Tauri —
@@ -194,12 +197,12 @@ and it should stay behind it.
 
 ## Scanning a folder for projects
 
-**This is the next thing built.** Point the app at `~/code` and let it find
-everything inside, instead of adding projects one directory at a time. This is the single biggest usability gap for
-anyone adopting the app with an existing disk full of work — and adoption is
-exactly when the manual path is most painful.
+**Shipped.** Point the app at `~/code` and it finds everything inside, instead
+of adding projects one directory at a time. This closed the single biggest
+usability gap for anyone adopting the app with an existing disk full of
+work — and adoption is exactly when the manual path was most painful.
 
-The mechanics that need deciding:
+The mechanics that had to be decided:
 
 - ~~**Where to stop.**~~ **Settled 2026-09-07: two scans, and a depth the user
   picks.** A **quick scan** looks only one level below the chosen directory —
@@ -242,14 +245,49 @@ The mechanics that need deciding:
 - **Review before committing.** A scan that silently registers two hundred
   entries is hostile. Find, present, let the user deselect, then add. Registering
   a project is a durable act; a bulk one should be a deliberate one.
-- **Name collisions.** Projects must have unique names, so scanning `~/code` and
-  `~/work` when both contain an `api` folder hits this on the first run. This is
-  the *same* unresolved question the CLI's `ensure_project` has — disambiguate,
-  prompt, or qualify by parent — and solving it once serves both. Neither should
-  invent its own answer.
-- **Rescanning.** A remembered root that can be re-scanned to pick up what is new
-  since last time, rather than a one-shot import. Watching it live is a further
-  step and probably not the first one.
+- ~~**Name collisions.**~~ **Settled 2026-09-07: qualify by parent, editable in
+  review, one function shared with `ensure_project`.** `domain::naming::
+  disambiguate(preferred, parent_dir, taken)` returns `api` if free, else
+  `work/api`, else `work/api (2)` as the terminating fallback. `taken` holds
+  existing project names *plus* the names already assigned earlier in the same
+  scan, which is what stops two rows of one report colliding with each other.
+  Rows whose name was changed are flagged in the review list and editable.
+
+  `ensure_project` uses the same function, which is the "solve it once" the
+  question asked for — and fixes a real bug, since it currently hands an
+  underived name to `create` and fails with `DuplicateName` the second time the
+  observer CLI meets an `api` folder.
+- ~~**Rescanning.**~~ **Settled 2026-09-07: a pre-filled form, not a stored
+  entity.** The last scan's settings — root, mode, depth, detectors, pruning —
+  persist in `localStorage` and pre-fill the scan form, written on commit rather
+  than on scan. Rescanning is then: open the modal, press Scan. Already-tracked
+  directories are filtered out, so what comes back is only what is new.
+
+  **A `scan_roots` table was designed and cut.** The reasoning is worth keeping,
+  because it is the argument that killed it: the *path* was never the friction —
+  anybody scanning `~/projects` knows where `~/projects` is, so a remembered
+  root does not save them anything a text field would not. And a rescan cannot
+  skip the disk regardless, since a project that appeared yesterday is
+  discoverable only by looking. What is actually worth remembering is the
+  **settings**, because a rescan that quietly ran depth 2 instead of depth 4
+  gives a different answer with nothing on screen saying why — and a pre-filled
+  form solves exactly that for none of the cost of a table, two ports, root CRUD
+  and a schema migration. It also keeps a list of one user's scan folders out of
+  `projects.db`, which the devmon cross-app contract prefers.
+
+  **What brings the table back:** several distinct scan locations —
+  `~/projects`, `~/work`, `D:\clients` — each wanting its own settings and its
+  own rescan. One set of defaults cannot serve three roots; a list can. Until
+  somebody has that disk it is speculative, and nothing blocks adding it later,
+  since the settings are already one serialisable struct — the migration would
+  move where it is stored, not invent its shape.
+
+  An mtime cache that skips unchanged subtrees was considered and declined
+  separately: up to 50,000 stored rows to optimise a walk that is already
+  milliseconds, when the expensive part is detection, which only runs on
+  directories that survive pruning.
+
+  Watching a root live is a further step and still not the first one.
 - **Background rescanning — open, and not yet agreed.** The idea: traverse for
   projects unprompted rather than when asked. (Filed here as "an autorunner"
   before that word was pinned to the bulk scan above; it is *not* that feature.)
@@ -280,7 +318,8 @@ Two seams already exist for this. `find_by_directory` plus the indexed
 ask once per candidate, and detection is already resilient — one detector failing
 on one directory does not abort a sweep.
 
-Four things the implementation will meet, all cheap to know in advance:
+Four things the implementation met, all known in advance because they were
+written down here first:
 
 - **`ensure_project(directory)` is the scanner's entry point**, not `create`.
   `create` calls `check_for_duplicate_name_or_dir` and returns
@@ -303,10 +342,18 @@ Four things the implementation will meet, all cheap to know in advance:
   `~/code/api` and `~/work/api` collide on the first run. Same unresolved
   question as `ensure_project`'s, and it should be answered once for both.
 
-The performance shape is worth getting right early: walking is I/O bound and
-cheap, running full detection on every directory is not. Detection should be
-gated behind a cheap marker test — does a `.git` or `.uproject` even exist here —
+The performance shape was worth getting right early: walking is I/O bound and
+cheap, running full detection on every directory is not. Detection is gated
+behind a cheap marker test — does a `.git` or `.uproject` even exist here —
 which is the fast-versus-deep split again, arriving from a second direction.
+
+**All four held.** `ScanService::scan` and `ScanService::import` sit over
+`ProjectService::ensure_project`; the set filter shipped as
+`DetectorRunner::inspect_kinds(path, Option<&[&str]>)`, with the single-kind
+`inspect` reimplemented over it rather than retired; `import` collects
+per-row failures instead of calling `refresh_trackers` or `into_result()`; and
+`domain::naming::disambiguate` is what resolves `~/code/api` against
+`~/work/api`, shared with `ensure_project` as predicted.
 
 ## Project linking
 

@@ -9,7 +9,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
 
-use indexer_core::application::{GroupService, ProjectService};
+use indexer_core::application::{GroupService, ProjectService, ScanService};
 use indexer_core::detectors::DetectorRunner;
 use indexer_core::infra::{IconStore, SqliteRepository};
 
@@ -205,13 +205,15 @@ pub fn run() {
             // One repository, two services. `Arc<SqliteRepository>` coerces to
             // each port, so both views share a single connection and its lock.
             let repo = Arc::new(repo);
-            let service = ProjectService::new(
+            let detectors = Arc::new(DetectorRunner::default());
+            let service = Arc::new(ProjectService::new(
                 repo.clone(),
                 Arc::new(OpenerLauncher),
-                Arc::new(DetectorRunner::default()),
+                detectors.clone(),
                 repo.clone(),
-            );
-            app.manage(Arc::new(service));
+            ));
+            app.manage(Arc::new(ScanService::new(service.clone(), detectors)));
+            app.manage(service);
             app.manage(Arc::new(GroupService::new(repo)));
 
             let icons = match icon_store(app) {
@@ -256,6 +258,9 @@ pub fn run() {
             commands::projects::detect_project_trackers,
             commands::projects::suggest_project_name,
             commands::inspect::inspect_project,
+            commands::scan::scan_folder,
+            commands::scan::import_scanned,
+            commands::scan::list_detector_kinds,
             commands::groups::list_groups,
             commands::groups::create_group,
             commands::groups::update_group,

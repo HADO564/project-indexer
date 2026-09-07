@@ -8,6 +8,7 @@ install it, see the [README](../README.md); for how to work on it, see
 
 - [The main window](#the-main-window)
 - [Adding a project](#adding-a-project)
+- [Scanning a folder for projects](#scanning-a-folder-for-projects)
 - [What gets detected](#what-gets-detected)
 - [The project view](#the-project-view)
 - [Opening a project](#opening-a-project)
@@ -40,6 +41,50 @@ will not overwrite something you typed.
 
 Detection runs when the project is created. If a detector fails, the project is
 still created — the failure is reported rather than silently swallowed.
+
+## Scanning a folder for projects
+
+**Scan folder**, beside **+ New project**, registers many projects in one
+pass instead of adding them one directory at a time. Point it at something
+like `~/projects` and it walks the disk for you.
+
+The dialog has three steps: configure, review, then a result summary.
+
+- **Quick scan** looks only at the folders directly inside the one you
+  picked. **Deep scan** goes further, to a depth you choose — useful when
+  projects live a level or two below where you point it (`~/work/clientA/api`
+  rather than `~/work/api`).
+- **Detectors** are ticked individually — Git, Unreal, and whatever else is
+  installed. The tick controls *which folders get imported*, not what gets
+  recorded about them: pointing the scan at a mixed folder with only Git
+  ticked imports the repositories and leaves everything else alone, but a
+  folder that is kept because it matched Git and also happens to be an
+  Unreal project is still imported with both trackers. Unticking Unreal never
+  produces a half-detected project.
+- **Include ignored folders** is off by default. Conventionally-ignored
+  directories — `node_modules`, `target`, `.venv`, `build`, `dist`, and
+  dotfolders — are skipped without asking, because they are enormous and
+  never projects. Tick the box if your disk genuinely keeps something worth
+  scanning under one of those names. `.git`, `.svn` and `.hg` themselves are
+  never descended into regardless of this setting — a walk that reached
+  `.git/modules` would offer to import every submodule as its own project.
+- **A folder that is itself a project is not descended into.** Once something
+  inside the walk matches a detector, that branch stops there — a repository
+  nested inside another repository is almost always vendored code or a
+  submodule, not a second project to track.
+- **Review before importing.** The scan never registers anything by itself.
+  It shows you what it found, with a suggested name for each — a name that
+  collides with one you already have becomes `parent/name` (`work/api`), and
+  you can edit any name before committing. Deselect anything you don't want
+  and press **Import** to add the rest in one pass. Importing is best-effort:
+  if one directory turns out to be a corrupt repository, that row fails and
+  every other row still imports.
+- **Settings are remembered.** The folder, mode, depth, ticked detectors and
+  the ignored-folders checkbox are all filled in from your last scan the next
+  time you open the dialog, so rescanning a folder to pick up what's new is
+  just reopening it and pressing Scan. Directories you already track are
+  included in the results, not left out — they're hidden by default behind a
+  "Show N already tracked" toggle, and appear as disabled rows once revealed.
 
 ## What gets detected
 
