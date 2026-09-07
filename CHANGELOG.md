@@ -12,6 +12,13 @@ project is built, tested and worked on live in
 
 ### Added
 
+- Scan a folder for projects: point the app at a directory, tick the detectors
+  to scan for, choose a quick scan of the folders directly inside or a deep
+  scan to a depth you pick, then review what was found and import it in one
+  pass. Names that collide are qualified by their parent folder (`work/api`)
+  and can be edited before importing. The last scan's settings are remembered,
+  so rescanning to pick up what is new is a matter of reopening the dialog and
+  pressing Scan.
 - **A plugin exception to the licence.** The app has no runtime plugin loader by
   design, so a plugin only runs in a build that includes it — and under the bare
   licence, distributing that build would have counted as competing, leaving a
