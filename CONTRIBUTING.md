@@ -13,6 +13,7 @@ structural rules the codebase enforces on purpose.
 - [Rules the codebase enforces](#rules-the-codebase-enforces)
 - [Adding a detector](#adding-a-detector)
 - [Commits and pull requests](#commits-and-pull-requests)
+- [Licensing and the CLA](#licensing-and-the-cla)
 - [Where the documentation lives](#where-the-documentation-lives)
 
 ## Getting set up
@@ -159,6 +160,24 @@ for Unity and Blender existed once and were removed for that reason.
 - **Update the docs in the same PR.** `docs/checklist.md` for feature status,
   `docs/accomplishments.md` for what landed, `CHANGELOG.md` under `[Unreleased]`
   for anything user-visible.
+
+## Licensing and the CLA
+
+Project Indexer is licensed under the [Functional Source License](LICENSE)
+(`FSL-1.1-ALv2`). Anyone may use it for free — personally, inside a company, for
+teaching or for research — and every version converts to the Apache License 2.0
+two years after it is published. The only prohibited use is shipping it, or a
+close substitute for it, as a commercial product that competes with this one.
+
+That two-year conversion is a promise the project can only keep if it is able to
+relicense all of its code. Copyright is automatic and stays with whoever wrote
+the lines, so without an agreement in place every contributor would hold a veto
+over the licence, forever. The [CLA](CLA.md) is what avoids that. You keep the
+copyright in your work; you grant the project permission to relicense it.
+
+**You do not have to do anything up front.** Open your pull request as normal.
+A bot will comment on it asking you to reply with one sentence agreeing to the
+CLA, record that against your GitHub account, and never ask you again.
 
 ## Where the documentation lives
 

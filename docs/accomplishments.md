@@ -286,7 +286,7 @@ the project given the scaffolding a published release needs.
   workaround engages on the proprietary driver, single-instance restore works,
   and the tray registers on the StatusNotifier watcher.
 
-- **Community documentation added.** `LICENSE` (MIT — declared in the README and
+- **Community documentation added.** `LICENSE` (MIT at the time; relicensed to FSL-1.1-ALv2 on 2026-09-07 — declared in the README and
   `package.json` since the start, but the file was missing), `CONTRIBUTING.md`,
   `CODE_OF_CONDUCT.md`, `SECURITY.md`, `ROADMAP.md`, `docs/USAGE.md`, and GitHub
   issue / pull-request templates.
