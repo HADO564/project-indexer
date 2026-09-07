@@ -24,6 +24,10 @@
   // review step only makes sense as the middle of this flow.
   let step = $state<"configure" | "review" | "result">("configure");
   let kinds = $state<string[]>([]);
+  // Distinct from `kinds.length === 0`: that's also true before the very
+  // first response arrives. Only once this is true does an empty `kinds`
+  // mean "nothing came back" rather than "still loading".
+  let kindsSettled = $state(false);
   let settings = $state<ScanSettings>(loadScanSettings([]));
   let scanning = $state(false);
   let importing = $state(false);
@@ -36,18 +40,56 @@
   // The tick-list is built from what the binary registers, never a hardcoded
   // array — invariant 1, "a new detector is implement + register, zero
   // frontend code".
-  $effect(() => {
+  function loadKinds() {
+    kindsSettled = false;
     listDetectorKinds()
       .then((available) => {
         kinds = available;
-        settings = loadScanSettings(available);
+        const restored = loadScanSettings(available);
+        // Merge rather than replace: the folder field has no dependency on
+        // `kinds` and is usable the instant the dialog opens, so this promise
+        // can settle after the user has already typed into it. A wholesale
+        // replace would silently throw that away.
+        settings = { ...restored, scanRoot: settings.scanRoot || restored.scanRoot };
       })
-      .catch((err: Error) => onerror(err.message));
+      .catch((err: Error) => onerror(err.message))
+      .finally(() => {
+        kindsSettled = true;
+      });
+  }
+
+  $effect(() => {
+    loadKinds();
   });
 
   const untracked = $derived(report?.candidates.filter((c) => !c.already_tracked) ?? []);
   const tracked = $derived(report?.candidates.filter((c) => c.already_tracked) ?? []);
   const visible = $derived(showTracked ? (report?.candidates ?? []) : untracked);
+
+  // Case-insensitive, matching taken_names_from's rule (naming.rs) — the same
+  // comparison the backend will make at commit time. A purely client-side
+  // guard over rows already on screen: catching a collision here means the
+  // user learns about it before pressing Import, not from a silent
+  // disambiguation afterward.
+  const duplicateNames = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const directory of selected) {
+      const name = (names[directory] ?? "").trim().toLowerCase();
+      if (!name) continue;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    return new Set([...counts].filter(([, count]) => count > 1).map(([name]) => name));
+  });
+
+  function nameProblem(directory: string): "empty" | "duplicate" | null {
+    if (!selected.has(directory)) return null;
+    const name = (names[directory] ?? "").trim();
+    if (!name) return "empty";
+    if (duplicateNames.has(name.toLowerCase())) return "duplicate";
+    return null;
+  }
+
+  const hasNamingProblem = $derived([...selected].some((directory) => nameProblem(directory) !== null));
 
   function toggleDetector(kind: string) {
     settings.detectors = settings.detectors.includes(kind)
@@ -171,6 +213,13 @@
               {kind}
             </label>
           {/each}
+          {#if kindsSettled && kinds.length === 0}
+            <p class="rounded-sm border border-amber/50 bg-panel px-3 py-2 text-sm text-amber">
+              No detectors came back, so there is nothing to tick and Scan stays
+              disabled.
+              <button type="button" class="underline" onclick={loadKinds}>Retry</button>
+            </p>
+          {/if}
           <p class="text-sm text-phos-dim">
             This decides which folders are worth importing. Whatever you import is
             checked against every detector, so a folder that is both lands once
@@ -232,9 +281,21 @@
           </button>
         </div>
 
+        {#if hasNamingProblem}
+          <p class="rounded-sm border border-amber/50 bg-panel px-3 py-2 text-sm text-amber">
+            Fix the highlighted names below — a blank name, or two selected rows
+            sharing one, before Import unlocks.
+          </p>
+        {/if}
+
         <ul class="flex flex-col gap-2">
           {#each visible as candidate (candidate.directory)}
-            <li class="flex items-center gap-2 border border-line p-2">
+            {@const problem = nameProblem(candidate.directory)}
+            <li
+              class="flex items-center gap-2 border p-2"
+              class:border-line={!problem}
+              class:border-amber={!!problem}
+            >
               <input
                 type="checkbox"
                 checked={selected.has(candidate.directory)}
@@ -252,8 +313,16 @@
               <span class="text-xs text-phos-dim">{candidate.matched_kinds.join(", ")}</span>
               {#if candidate.already_tracked}
                 <span class="text-xs text-phos-dim">already tracked</span>
+              {:else if problem === "empty"}
+                <span class="text-xs text-amber">name required</span>
+              {:else if problem === "duplicate"}
+                <span class="text-xs text-amber">duplicate name</span>
+              {:else if candidate.disambiguated}
+                <span class="text-xs text-phos-dim" title="Renamed automatically to avoid a collision">
+                  renamed to avoid a collision
+                </span>
               {:else if names[candidate.directory] !== candidate.suggested_name}
-                <span class="text-xs text-phos-dim">renamed</span>
+                <span class="text-xs text-phos-dim">edited</span>
               {/if}
             </li>
           {/each}
@@ -266,7 +335,7 @@
           <button
             type="button"
             class={primaryButtonClass}
-            disabled={importing || selected.size === 0}
+            disabled={importing || selected.size === 0 || hasNamingProblem}
             onclick={runImport}
           >
             {importing ? "Importing…" : `Import ${selected.size}`}
