@@ -31,6 +31,21 @@
   --color-amber: #e2903a; /* warnings, directory-unavailable */
   --color-rust: #e2605a; /* errors, destructive actions */
 
+  /* Project and group swatches. A stored colour is one of these eight *names*
+     (see src/lib/palette.ts and crates/core/src/domain/palette.rs), resolved
+     to the token at render — never a stored literal — so a theme override
+     recolours every project and group coherently. All eight sit at the same
+     light L / moderate S so they read on the dark ground the way
+     trackerColor() already guarantees for tracker hues. */
+  --color-swatch-cyan: #56c8c4;
+  --color-swatch-gold: #e7b64e;
+  --color-swatch-amber: #e2903a;
+  --color-swatch-rust: #e2605a;
+  --color-swatch-violet: #a98cf0;
+  --color-swatch-green: #7fc98a;
+  --color-swatch-blue: #6fa8e6;
+  --color-swatch-pink: #e58bbd;
+
   --font-display: "VT323", ui-monospace, "Cascadia Code", Consolas, monospace;
   --font-mono: "Cascadia Code", ui-monospace, Consolas, "Courier New", monospace;
 

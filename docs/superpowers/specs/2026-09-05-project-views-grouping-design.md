@@ -250,14 +250,12 @@ compiler enforces this). Allow-list, never deny-list:
   `y1`, `x2`, `y2`, `width`, `height`, `points`, `transform`, `fill`, `stroke`,
   `stroke-width`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`,
   `stroke-dashoffset`, `stroke-miterlimit`, `fill-rule`, `fill-opacity`,
-  `stroke-opacity`, `clip-rule`, `opacity`. The implementation shipped by the
-  backend half omits the three `stroke-*` and two `*-opacity` additions above
-  — a gap in this list, not a slip in the code, which matches what this list
-  said at the time. Widening `ALLOWED_ATTRS` to this corrected list is gated
-  before the bundled icon set in the frontend handoff (task 19), because
-  sanitizing is on import only and the store keeps just the sanitized form —
-  an icon imported before the widening has already lost those attributes for
-  good.
+  `stroke-opacity`, `clip-rule`, `opacity`. `ALLOWED_ATTRS` matches this list
+  exactly as of the frontend half's Task 1; the gap the backend half shipped
+  with — the three `stroke-*` and two `*-opacity` entries — is closed. It was
+  gated to land before anything could import an icon, because sanitizing
+  happens on import only and the store keeps just the sanitized form, so an
+  icon imported before the widening would have lost those attributes for good.
 - **Stripped unconditionally:** `script`, `style`, `foreignObject`, `use`,
   `image`, `animate*`, every `on*` handler, `href` / `xlink:href`, and any
   attribute whose value contains a `url(` or a `javascript:` scheme.
@@ -336,7 +334,7 @@ type View =
 | View | Source | Row actions |
 |------|--------|-------------|
 | All | `getAllProjects` | standard `⋯` menu |
-| Favourites | `getFavoriteProjects` | standard `⋯` menu |
+| Favourites | `getAllProjects`, filtered to `favorite` — identical to what `get_favorite_projects` returns, since every comparator ends in the unique `id` so the sort is a total order and filter-then-sort equals sort-then-filter | standard `⋯` menu |
 | Group | `getAllProjects`, filtered by `group_id` | standard `⋯` menu |
 | Ungrouped | `getAllProjects`, filtered to `group_id == null` | standard `⋯` menu |
 | Bin | `getDeletedProjects` | Restore / Delete permanently |
@@ -379,8 +377,15 @@ keeps one set of row layouts serving both.
 
 Two pure modules, so the logic is testable without mounting components:
 
-- `src/lib/views.ts` — `(projects, groups, view, sort, query) → Project[]`, plus
-  the per-view sidebar counts.
+- `src/lib/views.ts` — `(view, live, deleted, query) → Project[]`, plus the
+  per-view sidebar counts. It deliberately does **not** sort, which is a
+  deviation from this spec's original signature, settled during the frontend
+  half: the three list commands already sort in `core::domain::sorting`,
+  tie-broken by the unique `id`, so filtering an already-sorted list preserves
+  that order and a TypeScript comparator would be a second unchecked
+  cross-language mirror — the drift hazard `api/types.ts` is already flagged
+  for. Sort still applies uniformly across every view, which is what this
+  requirement was protecting.
 - `src/lib/palette.ts` — colour name → CSS custom property, with fallback.
 
 `src/lib/viewState.ts` persists the selected view and the view mode in
@@ -477,32 +482,32 @@ restore and purge from the Bin view, since that behaviour moved.
 
 Ordered so each step is independently verifiable.
 
-1. `Group` domain type + `UpdateGroup`, with validation tests.
-2. Three new `Project` fields + `UpdateProject` double-options; extend the
+1. [x] `Group` domain type + `UpdateGroup`, with validation tests.
+2. [x] Three new `Project` fields + `UpdateProject` double-options; extend the
    absorption test; mirror all of it into `src/lib/api/types.ts`, which is a
    hand-maintained mirror of the Rust models and drifts silently otherwise.
-3. Migration fixtures scaffold, against the current v1 schema.
-4. `CURRENT_SCHEMA_VERSION = 2` + the migration step; fixtures go green.
-5. `GroupReader` / `GroupRepository` ports + `SqliteRepository` implementation,
+3. [x] Migration fixtures scaffold, against the current v1 schema.
+4. [x] `CURRENT_SCHEMA_VERSION = 2` + the migration step; fixtures go green.
+5. [x] `GroupReader` / `GroupRepository` ports + `SqliteRepository` implementation,
    including the transactional delete.
-6. `GroupService`.
-7. `commands/groups.rs` + registration in `lib.rs`.
-8. SVG sanitizer in core, with its full suite.
-9. `IconStore` + the three icon commands + config-dir wiring.
-10. Swatch palette in `app.css`; `palette.ts`.
-11. `views.ts` + its tests.
-12. Component split: `ProjectActionsMenu`, `ProjectMark`, then the three
+6. [x] `GroupService`.
+7. [x] `commands/groups.rs` + registration in `lib.rs`.
+8. [x] SVG sanitizer in core, with its full suite.
+9. [x] `IconStore` + the three icon commands + config-dir wiring.
+10. [x] Swatch palette in `app.css`; `palette.ts`.
+11. [x] `views.ts` + its tests.
+12. [x] Component split: `ProjectActionsMenu`, `ProjectMark`, then the three
     presentations. No behaviour change at this step — list mode must look as it
     does today.
-13. `Sidebar` + `SidebarEntry`, with All / groups / Ungrouped only.
-14. `ViewControls` (mode + search) + `viewState.ts`.
-15. Fold Favourites into the sidebar; delete `FavoritesModal.svelte`.
-16. Fold Bin into the sidebar with `BinActions`; delete `BinModal.svelte`.
+13. [x] `Sidebar` + `SidebarEntry`, with All / groups / Ungrouped only.
+14. [x] `ViewControls` (mode + search) + `viewState.ts`.
+15. [x] Fold Favourites into the sidebar; delete `FavoritesModal.svelte`.
+16. [x] Fold Bin into the sidebar with `BinActions`; delete `BinModal.svelte`.
     Verify restore and purge, including the two-click confirm.
-17. `GroupManagerModal`.
-18. Colour, icon and group pickers in the create/edit forms.
-19. Bundled icon set.
-20. Docs: `checklist.md`, `CHANGELOG.md`, and `architecture.md` where the schema
+17. [x] `GroupManagerModal`.
+18. [x] Colour, icon and group pickers in the create/edit forms.
+19. [x] Bundled icon set.
+20. [x] Docs: `checklist.md`, `CHANGELOG.md`, and `architecture.md` where the schema
     is described.
 
 ## Risks and mitigations

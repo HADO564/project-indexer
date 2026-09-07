@@ -110,6 +110,8 @@ pub fn sort_alphabetically(projects: &mut [Project]) {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
     use chrono::{Duration, Utc};
 
@@ -128,7 +130,7 @@ mod tests {
             favorite,
             open_with: None,
             notes: None,
-            client: None,
+            properties: BTreeMap::new(),
             trackers: Vec::new(),
             group_id: None,
             color: None,

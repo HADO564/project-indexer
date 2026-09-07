@@ -53,6 +53,9 @@ pub enum ProjectError {
     #[error("Group with id '{0}' not found")]
     GroupNotFound(String),
 
+    #[error("{0}")]
+    InvalidPropertyKey(String),
+
     #[error("Icon problem: {0}")]
     Icon(String),
 }

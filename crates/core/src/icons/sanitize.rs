@@ -40,7 +40,12 @@ const ALLOWED_ATTRS: &[&str] = &[
     "stroke-width",
     "stroke-linecap",
     "stroke-linejoin",
+    "stroke-dasharray",
+    "stroke-dashoffset",
+    "stroke-miterlimit",
     "fill-rule",
+    "fill-opacity",
+    "stroke-opacity",
     "clip-rule",
     "opacity",
 ];
@@ -590,5 +595,36 @@ mod tests {
         </svg>"#;
         let out = sanitize_svg(input).expect("a clean icon must survive");
         assert_reparses_as_well_formed_xml(&out);
+    }
+
+    #[test]
+    fn keeps_inert_presentation_attributes() {
+        let input = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M1 1 L2 2" stroke-dasharray="4 2" stroke-dashoffset="1"
+                  stroke-miterlimit="2" fill-opacity="0.5" stroke-opacity="0.25"/>
+        </svg>"#;
+        let out = sanitize_svg(input).expect("well-formed icon should survive");
+        for attr in [
+            "stroke-dasharray",
+            "stroke-dashoffset",
+            "stroke-miterlimit",
+            "fill-opacity",
+            "stroke-opacity",
+        ] {
+            assert!(out.contains(attr), "sanitizer dropped {attr}: {out}");
+        }
+        assert_reparses_as_well_formed_xml(&out);
+    }
+
+    #[test]
+    fn still_rejects_url_values_in_the_newly_allowed_attributes() {
+        let input = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M1 1 L2 2" fill-opacity="url(#evil)"/>
+        </svg>"#;
+        let out = sanitize_svg(input).expect("should sanitize rather than fail");
+        assert!(
+            !out.contains("url("),
+            "url() survived in an allowed attribute: {out}"
+        );
     }
 }

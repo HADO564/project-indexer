@@ -159,6 +159,30 @@ if it regresses.
     `refuses_a_newer_database`. This is what makes shipping auto-updates safe —
     a downgraded binary fails loud instead of corrupting the store.
 
+12. **A stored colour is a palette name or an exact hex literal, and a custom
+    icon is never inlined.** `Project.color` and `Group.color` both accept
+    either: one of the eight names in `core::domain::palette` (mirrored,
+    hand-maintained, in `src/lib/palette.ts`), resolved to a
+    `var(--color-swatch-*)` token at render so a theme override recolours
+    everything coherently — or a colour-picker literal, validated by
+    `is_hex_literal` as **exactly** `#` plus six hex digits. A palette name is
+    the better answer, which is a reason for the pickers to offer the palette
+    first, not a reason to refuse a colour someone wants. That strictness is
+    the security boundary, not pedantry: the value is interpolated into a
+    `style` attribute and `style-src` still carries `unsafe-inline`, so the
+    shape of what is admitted is the only thing stopping a stored colour
+    carrying arbitrary CSS. Shorthand, named colours and `rgb()` are refused
+    rather than normalised, and `swatchVar` can only ever return a token or a
+    literal matching that same pattern. An unknown name falls back to neutral
+    rather than failing, and an unknown *icon* name falls back to a default
+    glyph, because `core` owns neither the icon list nor the render. A **custom** icon renders only as
+    `<img src="data:image/svg+xml;…">`: the sanitizer in `core::icons` is the
+    first security layer and the `<img>` is the second, inert regardless of what
+    the first one missed. `{@html}` on a stored SVG collapses two independent
+    layers into one and must never appear. `swatchVar()` returning one of a
+    fixed set of `var(--color-*)` strings is what keeps a stored colour name out
+    of the `style` attribute as arbitrary CSS.
+
 ## Detection semantics
 
 The runner returns `Detection { outcomes }` — one `DetectorOutcome` per
@@ -383,8 +407,15 @@ Curated and reordered from a broader architectural review. Prioritized by
   *as* the macOS work — that's when a third impl makes the seam pay.
 - **Structured detection logging** (`detector · duration · result`). Low value
   at 2–6 detectors; revisit if detection gets slow enough to debug.
-- **Frontend page-state extraction** (`lib/stores/*`). `+page.svelte` is
-  ~250 lines — watch it, don't pre-split.
+- **Frontend page-state extraction** (`lib/stores/*`). `+page.svelte` is now
+  ~330 lines and holds the projects, the deleted projects, the groups, the
+  custom-icon map, the selected view, the view mode and the query. The pure
+  logic is already out — `views.ts`, `viewState.ts`, `palette.ts`, `icons.ts`,
+  all tested without mounting anything — so what remains is fetch-and-refetch
+  orchestration plus the prop drilling of `groups` / `customIcons` down to
+  `ProjectMark`. `/project/[id]` now fetches the same two lists for its copy of
+  the edit form, which is the first real duplication. Still watch it rather than
+  pre-splitting; the trigger is a third consumer of that state.
 
 ### Considered and declined
 
