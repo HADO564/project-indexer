@@ -9,9 +9,11 @@ import {
 } from "./icons";
 
 describe("ICON_NAMES", () => {
-  it("has 24 unique names", () => {
-    expect(ICON_NAMES.length).toBe(24);
-    expect(new Set(ICON_NAMES).size).toBe(24);
+  it("has 25 unique names", () => {
+    // An exact count, so losing a glyph is a test failure rather than a
+    // silently emptier picker. Adding one deliberately updates this line.
+    expect(ICON_NAMES.length).toBe(25);
+    expect(new Set(ICON_NAMES).size).toBe(25);
   });
   it("includes the fallback", () => {
     expect(ICON_NAMES).toContain(FALLBACK_ICON);

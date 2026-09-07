@@ -96,7 +96,7 @@
   {#if showBin}
     <div class="mt-3">
       <SidebarEntry
-        icon="folder"
+        icon="trash"
         label="Bin"
         count={counts.bin}
         selected={key === "bin"}
