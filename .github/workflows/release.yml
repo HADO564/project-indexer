@@ -67,5 +67,9 @@ jobs:
             Builds are unsigned, so Windows SmartScreen and macOS Gatekeeper will
             warn on first launch.
           releaseDraft: true
-          prerelease: false
+          # A tag carrying a semver prerelease identifier — v0.3.0-beta.1 — is
+          # a prerelease; v0.3.0 is not. Derived from the tag rather than set
+          # by hand so cutting a beta cannot silently publish as stable, which
+          # is what would have happened while this was hardcoded to false.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
