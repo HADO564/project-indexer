@@ -263,6 +263,22 @@ because they edit a first-party struct. A dedicated commit-graph panel is a
 *frontend feature*, and gated on the containment decision. Ask which of the
 three a proposal is before arguing about how to build it.
 
+**Detectors stay stateless, and ideally zero-sized.** Both existing ones are
+unit structs, so the registered set costs 16 bytes per detector and `Box::new`
+never reaches the allocator — twenty of them is 320 bytes at rest, and one that
+does not match allocates nothing, since the parse sits behind a marker check
+that returns `Ok(None)`. The compiled code lives in the binary's text segment,
+demand-paged, so a detector that never matches is never faulted in.
+
+This is worth stating as a rule because it is what makes registering another
+detector genuinely free, and because nothing in the signature enforces it. A
+detector that caches a compiled regex or a parsed schema pays that cost once
+per registered detector, and the "just add another" property quietly stops
+being true. Anything worth caching belongs in the caller or behind the
+fast-vs-deep split. The real cost of scaling detectors is syscalls per
+directory during a sweep, not memory — and that is what the marker split
+exists to fix.
+
 **The contract is also what makes sandboxed third-party detectors viable.**
 WASI is capability-based: a module reaches exactly the directories preopened
 for it, read-only when `dir_perms` says so. That is the four properties above,
