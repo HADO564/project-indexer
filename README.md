@@ -47,9 +47,11 @@ everything is and how to open it.
 
 ## Features
 
-**Tracking** — register a directory with a name, description, tags, notes, and a
-client. Names are suggested automatically from the git remote (or the folder
-name) when you browse to a directory.
+**Tracking** — register a directory with a name, description, tags and notes,
+plus any number of your own key/value properties — `client`, `engine`,
+`priority`, whatever this particular set of projects needs. Names are suggested
+automatically from the git remote (or the folder name) when you browse to a
+directory.
 
 **Detection** — project type is detected on add and can be re-run at any time.
 Each detected tracker gets its own tab in the project view with its full details.
@@ -58,8 +60,21 @@ Each detected tracker gets its own tab in the project view with its full details
 explorer. The app picker is populated from your installed applications: Start
 Menu shortcuts and registry App Paths on Windows, `.desktop` entries on Linux.
 
-**Organising** — favourites, tags, and sorting by name or last-opened, in either
-direction.
+**Organising** — a sidebar of groups: All, Favourites, each group you create,
+Ungrouped and Bin, each with a count. A project belongs to one group at a time,
+so it appears under exactly one entry; tags stay the non-exclusive mechanism.
+Sorting by name or last-opened in either direction, and a list or a grid view.
+
+**Colour and icons** — a colour and an icon per project and per group. Eight
+palette colours resolved through the theme, so a theme swap recolours everything
+coherently, or any hex colour from the picker. Icons come from a bundled set of
+25 or from your own SVGs, which are put through an allow-list sanitizer on
+import.
+
+**Search** — across name, path, tags and property values, applied within
+whichever view is selected. `name: value` searches one property (`client: acme`)
+and a bare `name:` finds every project that has it. **Ctrl+;** focuses the search
+bar (**Cmd+;** on macOS).
 
 **Housekeeping** — a recycle bin with restore, "untrack" to forget a project
 without touching its files, and a marker on any project whose directory has been
@@ -113,6 +128,9 @@ directory:
 | macOS | `~/Library/Application Support/com.shaer.project-indexer/` |
 | Linux | `~/.config/com.shaer.project-indexer/` |
 
+Custom icons you import live beside it in an `icons/` subdirectory, one
+sanitized `.svg` per icon.
+
 Writes are synchronous and transactional — nothing is buffered and lost if the
 app is killed. Your project directories themselves are never modified except by
 the explicit "delete directory" action.
@@ -139,12 +157,13 @@ one:
          crates/core  «indexer-core»
          no tauri dependency — enforced by the crate graph
 
-         application/  ProjectService — all orchestration
-         ports/        ProjectRepository · AppLauncher
-         domain/       Project · Tracker · naming · sorting
+         application/  ProjectService · GroupService · inspection
+         ports/        ProjectRepository · GroupRepository · AppLauncher
+         domain/       Project · Group · Tracker · palette · naming · sorting
          detectors/    Detector · DetectorRunner · registry
          platform/     filesystem · installed-app discovery
-         infra/        SqliteRepository
+         icons/        SVG sanitizer (allow-list)
+         infra/        SqliteRepository · IconStore
                        │
                        ▼
               projects.db (SQLite, WAL)
@@ -154,6 +173,11 @@ one:
 and cannot import Tauri — the compiler enforces it. The Tauri layer is a thin
 adapter: each command is a few lines that call a service method. A command-line
 frontend can therefore be added without changing the backend at all.
+
+Each repository port is split into a read half and a write half —
+`ProjectReader` / `ProjectRepository`, `GroupReader` / `GroupRepository` — so a
+separate tool can be given read access to the database without the write
+surface coming with it.
 
 See [`docs/architecture.md`](docs/architecture.md) for the invariants this
 protects and the reasoning behind them.
