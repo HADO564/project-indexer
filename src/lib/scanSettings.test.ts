@@ -67,8 +67,10 @@ describe("restoreScanSettings", () => {
 });
 
 describe("toScanRequest", () => {
-  // ScanMode is an internally-tagged enum flattened into ScanRequest, so quick
-  // must not carry a depth field at all — serde would reject the unknown key.
+  // ScanMode is an internally-tagged enum flattened into ScanRequest. A quick
+  // scan omits the depth field simply because that is the honest shape of a
+  // quick scan for the type it deserializes into — not because a stray key
+  // would be rejected (it would not: nothing here denies unknown fields).
   it("omits depth for a quick scan", () => {
     const request = toScanRequest({ ...stored, mode: "quick" });
     expect(request).toEqual({
@@ -88,5 +90,34 @@ describe("toScanRequest", () => {
       detectors: ["git"],
       include_ignored: true,
     });
+  });
+
+  // The modal binds depth to a bare <input type="number"> outside form
+  // validation, so these are all reachable at submit time, not just
+  // hypothetical. Rust's `ScanMode::Deep { depth: u32 }` rejects every one of
+  // them with a raw serde error, so clamping has to happen on the way out.
+  it("clamps a cleared depth (null) to the default for a deep scan", () => {
+    const settings = { ...stored, mode: "deep" as const, depth: null as unknown as number };
+    expect(toScanRequest(settings)).toMatchObject({ mode: "deep", depth: DEFAULT_SCAN_SETTINGS.depth });
+  });
+
+  it("clamps a NaN depth to the default for a deep scan", () => {
+    const settings = { ...stored, mode: "deep" as const, depth: NaN };
+    expect(toScanRequest(settings)).toMatchObject({ mode: "deep", depth: DEFAULT_SCAN_SETTINGS.depth });
+  });
+
+  it("truncates a fractional depth for a deep scan", () => {
+    const settings = { ...stored, mode: "deep" as const, depth: 2.5 };
+    expect(toScanRequest(settings)).toMatchObject({ mode: "deep", depth: 2 });
+  });
+
+  it("clamps a zero depth up to the minimum for a deep scan", () => {
+    const settings = { ...stored, mode: "deep" as const, depth: 0 };
+    expect(toScanRequest(settings)).toMatchObject({ mode: "deep", depth: 1 });
+  });
+
+  it("clamps an over-max depth down to the ceiling for a deep scan", () => {
+    const settings = { ...stored, mode: "deep" as const, depth: 500 };
+    expect(toScanRequest(settings)).toMatchObject({ mode: "deep", depth: 10 });
   });
 });

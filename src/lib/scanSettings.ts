@@ -78,9 +78,18 @@ export function restoreScanSettings(raw: string | null, availableKinds: string[]
   };
 }
 
-// Pure. ScanMode is an internally-tagged serde enum flattened into
-// ScanRequest, so a quick scan must carry no `depth` key at all — serde
-// rejects unknown fields on the deny-unknown side of a flattened enum.
+// Pure. `depth` only exists on ScanMode's `Deep` variant (see scan.rs), so a
+// quick scan omits the key rather than sending it as, say, `null` — not
+// because serde would reject a stray field (it would not: `{mode:"quick",
+// depth:3}` deserializes cleanly, since nothing here denies unknown fields —
+// it would just be silently ignored), but because this is simply the honest
+// shape of what a quick scan is.
+//
+// `clampDepth` runs here too, not just in `restoreScanSettings`: the depth
+// field is a bare `<input type="number">` outside form validation, so it can
+// reach here as `null` (cleared), a fraction, or anything typed — and Rust's
+// `ScanMode::Deep { depth: u32 }` rejects all of those with a raw serde
+// error rather than a usable message.
 export function toScanRequest(settings: ScanSettings): ScanRequest {
   const base = {
     scan_root: settings.scanRoot,
@@ -88,7 +97,7 @@ export function toScanRequest(settings: ScanSettings): ScanRequest {
     include_ignored: settings.includeIgnored,
   };
   return settings.mode === "deep"
-    ? { ...base, mode: "deep", depth: settings.depth }
+    ? { ...base, mode: "deep", depth: clampDepth(settings.depth) }
     : { ...base, mode: "quick" };
 }
 

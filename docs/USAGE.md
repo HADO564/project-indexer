@@ -82,8 +82,9 @@ The dialog has three steps: configure, review, then a result summary.
 - **Settings are remembered.** The folder, mode, depth, ticked detectors and
   the ignored-folders checkbox are all filled in from your last scan the next
   time you open the dialog, so rescanning a folder to pick up what's new is
-  just reopening it and pressing Scan. Directories you already track are left
-  out of the results.
+  just reopening it and pressing Scan. Directories you already track are
+  included in the results, not left out — they're hidden by default behind a
+  "Show N already tracked" toggle, and appear as disabled rows once revealed.
 
 ## What gets detected
 
