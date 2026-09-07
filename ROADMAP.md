@@ -254,22 +254,35 @@ The mechanics that need deciding:
   question asked for — and fixes a real bug, since it currently hands an
   underived name to `create` and fails with `DuplicateName` the second time the
   observer CLI meets an `api` folder.
-- ~~**Rescanning.**~~ **In scope, settled 2026-09-07: remembered roots plus
-  rescan on demand.** A `scan_roots` table at `user_version` 4 stores the root
-  together with the settings it was scanned with — mode, depth, detectors,
-  pruning — because rescan means "run *this* scan again", and one that quietly
-  used different detectors would be a different feature wearing the same button.
-  A root is remembered **on commit, not on scan**: scanning is exploratory,
-  importing is the commitment, and an abandoned review leaves nothing behind.
-  Rescan hides already-tracked directories, so it reports only what is new.
+- ~~**Rescanning.**~~ **Settled 2026-09-07: a pre-filled form, not a stored
+  entity.** The last scan's settings — root, mode, depth, detectors, pruning —
+  persist in `localStorage` and pre-fill the scan form, written on commit rather
+  than on scan. Rescanning is then: open the modal, press Scan. Already-tracked
+  directories are filtered out, so what comes back is only what is new.
 
-  **A rescan still walks the disk, and no design can avoid that** — a project
-  that appeared yesterday is discoverable only by looking. What remembering a
-  root saves is the setup: the folder picker and the re-ticking of settings that
-  might differ slightly from last time. An mtime cache that skips unchanged
-  subtrees was considered and declined: up to 50,000 rows per root to optimise a
-  walk that is already milliseconds, when the expensive part is detection, which
-  only runs on directories that survive pruning.
+  **A `scan_roots` table was designed and cut.** The reasoning is worth keeping,
+  because it is the argument that killed it: the *path* was never the friction —
+  anybody scanning `~/projects` knows where `~/projects` is, so a remembered
+  root does not save them anything a text field would not. And a rescan cannot
+  skip the disk regardless, since a project that appeared yesterday is
+  discoverable only by looking. What is actually worth remembering is the
+  **settings**, because a rescan that quietly ran depth 2 instead of depth 4
+  gives a different answer with nothing on screen saying why — and a pre-filled
+  form solves exactly that for none of the cost of a table, two ports, root CRUD
+  and a schema migration. It also keeps a list of one user's scan folders out of
+  `projects.db`, which the devmon cross-app contract prefers.
+
+  **What brings the table back:** several distinct scan locations —
+  `~/projects`, `~/work`, `D:\clients` — each wanting its own settings and its
+  own rescan. One set of defaults cannot serve three roots; a list can. Until
+  somebody has that disk it is speculative, and nothing blocks adding it later,
+  since the settings are already one serialisable struct — the migration would
+  move where it is stored, not invent its shape.
+
+  An mtime cache that skips unchanged subtrees was considered and declined
+  separately: up to 50,000 stored rows to optimise a walk that is already
+  milliseconds, when the expensive part is detection, which only runs on
+  directories that survive pruning.
 
   Watching a root live is a further step and still not the first one.
 - **Background rescanning — open, and not yet agreed.** The idea: traverse for

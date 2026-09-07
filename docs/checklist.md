@@ -156,10 +156,15 @@ files. `vite.config.ts` runs them in the `node` environment.
   it meets. **Detector selection** gets the predicted set filter,
   `DetectorRunner::inspect_kinds(path, Option<&[&str]>)`, with the single-kind
   `inspect` kept and reimplemented over it because the re-detect sweep still
-  needs it. **Remembered roots and rescan-on-demand are in scope**, carrying
-  `user_version` 4 and a `scan_roots` table — a real row, not a `data` blob,
-  since `ScanRoot` has no sum-type payload to dodge; a root is remembered on
-  commit, not on scan. Startup rescan and anything background stay out.
+  needs it. **Rescan-on-demand is in scope and stores nothing in the database**:
+  the last scan's settings persist in `localStorage` and pre-fill the form, so
+  rescanning is "open the modal, press Scan", with already-tracked directories
+  filtered out. A `scan_roots` table at `user_version` 4 was designed and cut —
+  the path was never the friction (anybody scanning `~/projects` knows where it
+  is) and a rescan cannot skip the disk anyway, so the only thing worth
+  remembering is the settings, which a pre-filled form handles for none of the
+  cost. **This feature ships no migration**; `user_version` stays at 3. Startup
+  rescan and anything background stay out.
   **No progress events**: the walk is a blocking async command bounded by a
   50,000-directory cap rather than the codebase's first event channel. Also
   settled there and worth knowing before reading the walk: `.git`/`.svn`/`.hg`
