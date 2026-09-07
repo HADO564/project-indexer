@@ -10,15 +10,46 @@ the non-feature quality backlog see
 
 ## Where things stand
 
-**v0.1.1** is the current release. The app tracks projects, detects git and
+**v0.2.0** is the current version — tagged and pushed, though its GitHub
+release is still a draft, so v0.1.1 is what people can actually download. The
+app tracks projects, detects git and
 Unreal Engine trackers, opens projects in your installed applications, and runs
-in the background from the system tray. The Rust backend has been restructured so
-that all logic lives in `indexer-core`, a library crate the compiler forbids from
-importing Tauri — which is what makes everything in the next section possible
-without touching the backend.
+in the background from the system tray. A project carries a colour, an icon and
+any number of user-defined key/value properties, belongs to at most one group,
+and is reached through a sidebar — All, Favourites, each group, Ungrouped, Bin —
+rather than one flat column. Search covers name, path, tags and property values,
+with `client: acme` looking inside one property and a bare `client:` finding
+every project that has it.
+
+The Rust backend has been restructured so that all logic lives in
+`indexer-core`, a library crate the compiler forbids from importing Tauri —
+which is what makes everything in the next section possible without touching the
+backend. Storage is SQLite behind numbered `user_version` migrations, currently
+at version 3.
 
 Windows and Linux are both built and tested in CI. macOS builds in the release
 workflow but is not yet functionally complete (see below).
+
+## Licensing
+
+The [Functional Source License](LICENSE) (`FSL-1.1-ALv2`) replaced MIT *after*
+v0.2.0 was tagged, so it governs the next release onward rather than any
+existing one. Use is free for everyone, companies included, and every version
+converts to Apache 2.0 on its second anniversary. The one prohibited use is
+shipping a competing commercial substitute.
+
+Everything up to and including **v0.2.0 stays MIT**. An MIT grant cannot be
+withdrawn, and those commits sit in the public history with the old `LICENSE`
+beside them, so that is a permanent fork point no later decision can close.
+
+Contributions are gated on the [CLA](CLA.md) — one comment on a first pull
+request — because the two-year conversion cannot be honoured for code the
+project has no right to relicense.
+
+This leaves one question that should be answered *before* any plugin API is
+published, not after: what licence a third-party plugin carries, and whether a
+plugin compiled into the app is a derivative under the licence's Redistribution
+clause. It costs a paragraph now and a migration later.
 
 ## Next — the `indexer` command-line tool
 
@@ -214,7 +245,8 @@ is done.
 
 The machinery mostly exists. `src/app.css` already declares the whole visual
 system as tokens in a `@theme` block — `--color-void`, `--color-panel`,
-`--color-phos`, `--color-accent`, the state hues, `--font-display` and
+`--color-phos`, `--color-accent`, the state hues, the eight `--color-swatch-*`
+entries every project and group colour resolves through, `--font-display` and
 `--font-mono`, and the single 2px `--radius-*`. **A theme is an override set for
 those tokens**, read from the app's config directory next to `projects.db` and
 applied as custom properties.
@@ -361,8 +393,8 @@ These are not "someday". Each has a specific condition that should start it.
   parsing.
 - **Structured detection logging.** Low value at two to six detectors. Trigger:
   detection getting slow enough to need debugging.
-- **Frontend page-state extraction.** `+page.svelte` is around 250 lines. Watch
-  it; don't pre-split it.
+- **Frontend page-state extraction.** `+page.svelte` was around 250 lines before
+  the views work and is 362 now. Watch it; don't pre-split it.
 
 ## Considered and declined
 
