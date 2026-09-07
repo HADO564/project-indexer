@@ -76,6 +76,11 @@ pub struct Candidate {
     /// by `ScanService` before the report reaches the UI. Kept on `Candidate`
     /// rather than in a parallel list so the review table has one row type.
     pub already_tracked: bool,
+    /// Always `false` as [`walk`] emits it — the walk has no `taken` set to
+    /// collide against. Set `true` by `ScanService::scan` when disambiguation
+    /// changed `suggested_name` from what the walk proposed, so the review UI
+    /// can flag an auto-rename as distinct from one the user typed themselves.
+    pub disambiguated: bool,
 }
 
 /// What one scan found.
@@ -203,6 +208,7 @@ pub fn walk_limited(
                 suggested_name,
                 matched_kinds,
                 already_tracked: false,
+                disambiguated: false,
             });
             // A project is a boundary — do not descend into it.
             continue;
@@ -385,6 +391,7 @@ mod tests {
         assert_eq!(candidate.suggested_name, "api");
         assert_eq!(candidate.matched_kinds, vec!["git".to_string()]);
         assert!(!candidate.already_tracked);
+        assert!(!candidate.disambiguated);
 
         std::fs::remove_dir_all(&root).ok();
     }

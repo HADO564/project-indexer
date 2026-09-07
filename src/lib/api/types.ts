@@ -191,6 +191,10 @@ export interface Candidate {
   suggested_name: string;
   matched_kinds: string[];
   already_tracked: boolean;
+  // True when ScanService::scan changed suggested_name to resolve a
+  // collision — distinct from the user editing the name themselves, which
+  // the frontend tracks separately by comparing against this field.
+  disambiguated: boolean;
 }
 
 export interface ScanReport {

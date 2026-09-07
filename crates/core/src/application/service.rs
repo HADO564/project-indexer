@@ -338,7 +338,11 @@ impl ProjectService {
         directory: &str,
         name: &str,
     ) -> Result<Project, ProjectError> {
-        if let Some(existing) = self.find_by_directory(directory)? {
+        // A soft-deleted match is not "already tracked" — `create`'s own
+        // duplicate check agrees (it filters `is_deleted` too, below) — so a
+        // binned-then-recreated directory falls through to a fresh `create`
+        // rather than resurrecting the old, still-hidden row.
+        if let Some(existing) = self.find_by_directory(directory)?.filter(|p| !p.is_deleted) {
             return Ok(existing);
         }
         let taken = taken_names_from(self.active_project_names()?);
