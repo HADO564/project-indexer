@@ -212,6 +212,57 @@ outcome — `● git · ○ unreal — not detected · ▲ unity — <error>` �
 detector that fails is no longer indistinguishable from one that found
 nothing.
 
+### Detector, or backend feature?
+
+The `Detector` signature already decides this; it had just never been written
+down, and "plugin" is a word broad enough to hide the question. Four properties
+fall out of `fn detect(&self, path: &Path) -> Result<Option<Tracker>, DetectorError>`,
+and **all four have to hold** for something to be a detector:
+
+1. **Its only input is a directory path.** Not the `Project`, not user settings,
+   not credentials, not other projects, not app state. The signature gives a
+   detector a `&Path` and nothing else, deliberately.
+2. **Its output is worth storing.** Trackers are persisted verbatim into the
+   project record. If the answer should not be written down — because it is a
+   live value, or session-scoped, or user-specific — it is not a tracker.
+3. **It observes; it never acts.** It runs on add, on refresh, and once per
+   candidate directory when folder scanning lands. Anything with a side effect
+   fires repeatedly and at times nobody asked for.
+4. **It is cheap.** Refs and config reads, manifest files, a directory listing.
+   Anything wanting a full history walk, a dependency resolve, or a network call
+   belongs behind the deferred fast-vs-deep split rather than in the default
+   path.
+
+In one sentence: **a detector answers "what is this directory?" by looking at
+the directory, cheaply, and returns something worth writing down.** Anything
+else is a backend feature, and belongs in a service, a port, or `platform/`.
+
+| The question it answers | Where it belongs |
+|---|---|
+| What kind of project is this directory? | Detector |
+| What stack does it use? (`package.json`, `Cargo.toml`, `go.mod`) | Detector — manifest reads are cheap and path-only |
+| What is this repo's branch, remote, HEAD state? | Detector |
+| How far ahead of upstream am I? | Detector for the stored snapshot; a live query if it must be current when read |
+| Who has contributed to this repo? | Deep tier — needs a `revwalk`; already deferred, and the trigger for the split |
+| Which applications can open this? | `platform::app_discovery` — a question about the machine, not the directory |
+| Open this project in X | Action: `ProjectService` over the `AppLauncher` port |
+| Which projects match this search? | Service over stored `Project`s; there is no path involved |
+| What themes are installed? | UI plugin machinery — not project data at all |
+| Sync this project with its remote | Neither. The app is an index, not a VCS client |
+
+**Two detectors reporting on one directory is correct, not a conflict.**
+Detectors are independent and unordered, so a stack detector and the git
+detector both matching the same directory is the designed outcome — each gets
+its own tab.
+
+**"A richer git experience" is three classifications wearing one name**, which
+is exactly why this section exists. Stack detection from manifests is a *new
+detector* running alongside git. Ahead/behind, last commit and stash count are
+*enrichments of `GitInfo`* inside the existing git detector — first-party work,
+because they edit a first-party struct. A dedicated commit-graph panel is a
+*frontend feature*, and gated on the containment decision. Ask which of the
+three a proposal is before arguing about how to build it.
+
 ## Recorded decisions
 
 Choices that could plausibly have gone the other way, settled on purpose so
