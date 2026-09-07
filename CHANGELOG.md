@@ -10,6 +10,16 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+## [0.3.0-1] — 2026-09-07
+
+**The first 0.3.0 beta.** The version is spelled `0.3.0-1` rather than
+`0.3.0-beta.1` because the Windows MSI bundler requires a semver pre-release
+identifier to be numeric only; later betas increment that number.
+
+The folder scanner below is new code, and its dialog has had no hands-on
+testing yet — everything underneath it is covered by tests, the dialog itself
+is not. Point it at a copy of your work before you point it at the only copy.
+
 ### Added
 
 - Scan a folder for projects: point the app at a directory, tick the detectors
@@ -199,7 +209,8 @@ The feature set below is what 0.1.1 ships.
 - Projects are stored in SQLite at `projects.db` in the platform config
   directory, with synchronous transactional writes.
 
-[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.0-1...HEAD
+[0.3.0-1]: https://github.com/HADO564/project-indexer/compare/v0.2.0...v0.3.0-1
 [0.2.0]: https://github.com/HADO564/project-indexer/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/HADO564/project-indexer/releases/tag/v0.1.1
 [0.1.0]: https://github.com/HADO564/project-indexer/tree/v0.1.0

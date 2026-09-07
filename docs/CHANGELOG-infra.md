@@ -17,6 +17,29 @@ version is tagged. Newest first.
 
 ---
 
+## 2026-09-07
+
+### Changed
+
+- **The release workflow derives `prerelease` from the tag** instead of
+  hardcoding `false`. A tag carrying a semver pre-release identifier —
+  anything with a `-` in it — now publishes as a prerelease; `v0.3.0` still
+  publishes as a normal release. While it was hardcoded, tagging a beta would
+  have produced a release GitHub presented as stable. Releases remain drafts
+  either way, so publishing is still a deliberate click.
+
+### Notes
+
+- **A pre-release version must be numeric-only, because of the MSI bundler.**
+  `0.3.0-beta.1` compiles and passes `cargo check`, then fails at bundling
+  with *"optional pre-release identifier in app version must be numeric-only
+  and cannot be greater than 65535 for msi target"*. Only the Windows job hits
+  it, and only after the full compile — so in CI it looks like a
+  three-platforms-green, one-red release. Spell betas `0.3.0-1`, `0.3.0-2`,
+  and carry the human-readable name in the changelog and the release title.
+  Worth checking with a local `pnpm tauri build` before tagging, since the tag
+  is what triggers the four-platform run.
+
 ## 2026-09-05
 
 ### Changed
