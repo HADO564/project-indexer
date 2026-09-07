@@ -6,7 +6,7 @@
   import { inspectProject, refreshProjectTrackers } from "$lib/api/projects";
   import type { Group, ProjectInspection } from "$lib/api/types";
   import { customIconSrc } from "$lib/icons";
-  import EditProjectForm from "$lib/components/EditProjectForm.svelte";
+  import EditProjectModal from "$lib/components/EditProjectModal.svelte";
   import ErrorBanner from "$lib/components/ErrorBanner.svelte";
   import ProjectIdentity from "$lib/components/ProjectIdentity.svelte";
   import TrackerPanel from "$lib/components/TrackerPanel.svelte";
@@ -128,11 +128,6 @@
   }
 </script>
 
-<svelte:window
-  onkeydown={(e) => {
-    if (editing && e.key === "Escape") editing = false;
-  }}
-/>
 
 <main class="mx-auto max-w-3xl px-4 py-8">
   <a href="/" class="font-display text-[14px] uppercase tracking-wide text-accent hover:underline">&larr; all projects</a>
@@ -241,34 +236,14 @@
 </main>
 
 {#if editing && inspection}
-  <div
-    class="fixed inset-0 z-[100] flex items-center justify-center bg-void/85 p-4"
-    role="presentation"
-    onclick={() => (editing = false)}
-  >
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- click only stops the backdrop's close-on-click-outside; Escape is
-         handled globally by <svelte:window>, so there's no keyboard pair -->
-    <div
-      class="w-11/12 max-w-lg rounded-sm border border-line bg-panel p-4"
-      role="dialog"
-      aria-modal="true"
-      tabindex="-1"
-      onclick={(e) => e.stopPropagation()}
-    >
-      <h2 class="mb-3 text-sm text-phos">
-        <span class="text-accent">&gt;</span>&nbsp;edit {inspection.project.name}
-      </h2>
-      <EditProjectForm
-        project={inspection.project}
-        {groups}
-        {customIcons}
-        onIconsChanged={loadCustomIcons}
-        onGroupsStale={loadGroups}
-        onSaved={handleSaved}
-        onCancel={() => (editing = false)}
-        onerror={(m) => (banner = m)}
-      />
-    </div>
-  </div>
+  <EditProjectModal
+    project={inspection.project}
+    {groups}
+    {customIcons}
+    onIconsChanged={loadCustomIcons}
+    onGroupsStale={loadGroups}
+    onSaved={handleSaved}
+    onClose={() => (editing = false)}
+    onerror={(m) => (banner = m)}
+  />
 {/if}

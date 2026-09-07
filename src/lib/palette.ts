@@ -33,3 +33,17 @@ export function isSwatch(name: unknown): name is Swatch {
 export function swatchVar(name: string | null | undefined): string {
   return isSwatch(name) ? `var(--color-swatch-${name})` : NEUTRAL;
 }
+
+// The colour a project's mark takes: its own, else its group's, else neutral.
+//
+// Inheriting the group's colour is what makes a project in a coloured group
+// read as belonging to it at a glance, rather than sitting grey next to a
+// coloured sidebar entry. The *pip* deliberately does not inherit — it is the
+// secondary level, and if it did, "this project has its own colour" would be
+// indistinguishable from "it inherits its group's".
+export function markVar(
+  projectColor: string | null | undefined,
+  groupColor: string | null | undefined,
+): string {
+  return swatchVar(projectColor ?? groupColor);
+}

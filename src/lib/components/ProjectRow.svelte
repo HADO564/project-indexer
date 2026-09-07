@@ -33,9 +33,7 @@
 <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
   <div class="min-w-0 flex-1">
     <div class="flex min-w-0 items-center gap-2">
-      {#if project.icon || project.color}
-        <ProjectMark {project} {customIcons} />
-      {/if}
+      <ProjectMark {project} {customIcons} {groupColor} />
       <strong class="min-w-0 truncate font-display text-[15px] text-phos">
         <span class="text-accent">&gt;</span>&nbsp;{project.name}
       </strong>
@@ -64,7 +62,7 @@
             stroke-width="2"
             stroke-linecap="round"
             stroke-linejoin="round"
-            class="h-4 w-4"
+            class="h-5 w-5"
           >
             <path d="M3 6h18" />
             <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />

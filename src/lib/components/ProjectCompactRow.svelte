@@ -24,7 +24,7 @@
 </script>
 
 <div class="flex min-w-0 items-center gap-2">
-  <ProjectMark {project} {customIcons} />
+  <ProjectMark {project} {customIcons} {groupColor} />
   <strong class="shrink-0 truncate font-display text-[14px] text-phos">{project.name}</strong>
   {#if project.favorite}
     {#if onToggleFavorite}

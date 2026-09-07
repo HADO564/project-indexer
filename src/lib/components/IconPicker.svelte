@@ -3,7 +3,7 @@
   import { deleteCustomIcon, importCustomIcon } from "$lib/api/icons";
   import { ICON_NAMES } from "$lib/icons";
   import BundledIcon from "./BundledIcon.svelte";
-  import { buttonClass, labelClass } from "./styles";
+  import { buttonClass, iconMd, labelClass } from "./styles";
 
   let {
     value = $bindable<string | null>(null),
@@ -24,7 +24,7 @@
 
   let importing = $state(false);
 
-  const cell = "inline-flex h-8 w-8 items-center justify-center rounded-sm border-2";
+  const cell = "inline-flex h-10 w-10 items-center justify-center rounded-sm border-2";
 
   async function handleImport() {
     importing = true;
@@ -85,7 +85,7 @@
           value === name ? "border-phos text-phos" : "border-transparent text-phos-dim hover:text-phos"
         }`}
       >
-        <BundledIcon {name} class="h-4 w-4" />
+        <BundledIcon {name} class={iconMd} />
       </button>
     {/each}
   </div>
@@ -104,7 +104,7 @@
           >
             <!-- A custom icon renders only through <img> with a data: URI —
                  inert regardless of what the sanitizer missed. Never {@html}. -->
-            <img {src} alt="" class="h-4 w-4" />
+            <img {src} alt="" class={iconMd} />
           </button>
           <button
             type="button"

@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { Project } from "$lib/api/types";
   import { customIconName, customIconSrc, isCustomIcon } from "$lib/icons";
-  import { swatchVar } from "$lib/palette";
+  import { markVar, swatchVar } from "$lib/palette";
   import BundledIcon from "./BundledIcon.svelte";
+  import { iconLg, iconMd } from "./styles";
 
   // A project's identity mark: its icon, plus a colour pip.
   //
@@ -13,17 +14,27 @@
   let {
     project,
     customIcons,
+    groupColor = null,
     size = "sm",
   }: {
     project: Project;
     customIcons: Map<string, string>;
+    // The project's group's palette name, so the mark can inherit it when the
+    // project has no colour of its own.
+    groupColor?: string | null;
     size?: "sm" | "lg";
   } = $props();
 
-  const color = $derived(swatchVar(project.color));
-  const box = $derived(size === "lg" ? "h-7 w-7" : "h-5 w-5");
-  const glyph = $derived(size === "lg" ? "h-5 w-5" : "h-4 w-4");
-  const pip = $derived(size === "lg" ? "h-2 w-2" : "h-1.5 w-1.5");
+  // Icon tint cascades project -> group -> neutral, so a project in a coloured
+  // group reads as belonging to it rather than sitting grey beside a coloured
+  // sidebar entry.
+  const color = $derived(markVar(project.color, groupColor));
+  // The box is exactly the glyph, so the mark carries no padding of its own —
+  // spacing is the row's `gap` and nothing else. Previously the box was larger
+  // than the glyph by 2px at sm and 4px at lg, which read as uneven and did
+  // not scale between the two sizes.
+  const glyph = $derived(size === "lg" ? iconLg : iconMd);
+  const pip = $derived(size === "lg" ? "h-3 w-3" : "h-2 w-2");
   // A custom icon whose file has since been deleted resolves to undefined and
   // falls through to the bundled fallback glyph rather than rendering nothing.
   const custom = $derived(
@@ -33,7 +44,7 @@
   );
 </script>
 
-<span class={`relative inline-flex shrink-0 items-center justify-center ${box}`}>
+<span class={`relative inline-flex shrink-0 items-center justify-center ${glyph}`}>
   {#if custom}
     <!-- A custom icon renders only through an <img> with a data: URI. It is
          inert regardless of what the sanitizer missed, which is the second of
@@ -45,9 +56,13 @@
     </span>
   {/if}
   {#if project.color}
+    <!-- The pip carries the project's *own* colour only. It never inherits the
+         group's, or "has its own colour" and "inherits its group's" would look
+         identical. It is also the only way colour reads on a custom icon,
+         which is an <img> and cannot be tinted. -->
     <span
       class={`absolute -right-0.5 -bottom-0.5 rounded-full ${pip}`}
-      style={`background: ${color}`}
+      style={`background: ${swatchVar(project.color)}`}
       title={project.color}
     ></span>
   {/if}
