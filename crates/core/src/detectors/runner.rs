@@ -152,6 +152,16 @@ impl DetectorRunner {
         }
         Detection { outcomes }
     }
+
+    /// The [`Detector::kind`] of every registered detector, in registration
+    /// order. Lets a caller present the detector set without knowing which
+    /// concrete detectors were compiled in.
+    pub fn kinds(&self) -> Vec<String> {
+        self.detectors
+            .iter()
+            .map(|d| d.kind().to_string())
+            .collect()
+    }
 }
 
 impl Default for DetectorRunner {
