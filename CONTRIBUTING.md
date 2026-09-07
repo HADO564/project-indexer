@@ -130,6 +130,13 @@ review.
 
 ## Adding a detector
 
+**First, check it is a detector.** All four have to be true: its only input is a
+directory path, its output is worth storing, it observes rather than acts, and
+it is cheap — refs and manifests, not history walks or network calls. If any one
+fails, what you have is a backend feature and it belongs in a service, a port,
+or `platform/`. `docs/architecture.md` → *Detector, or backend feature?* has the
+table and the worked examples.
+
 The generic path exists so that a new tracker needs no frontend code at all:
 
 1. Add the info model to `core::domain`, and a variant to `Tracker`.
