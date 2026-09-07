@@ -242,14 +242,36 @@ The mechanics that need deciding:
 - **Review before committing.** A scan that silently registers two hundred
   entries is hostile. Find, present, let the user deselect, then add. Registering
   a project is a durable act; a bulk one should be a deliberate one.
-- **Name collisions.** Projects must have unique names, so scanning `~/code` and
-  `~/work` when both contain an `api` folder hits this on the first run. This is
-  the *same* unresolved question the CLI's `ensure_project` has — disambiguate,
-  prompt, or qualify by parent — and solving it once serves both. Neither should
-  invent its own answer.
-- **Rescanning.** A remembered root that can be re-scanned to pick up what is new
-  since last time, rather than a one-shot import. Watching it live is a further
-  step and probably not the first one.
+- ~~**Name collisions.**~~ **Settled 2026-09-07: qualify by parent, editable in
+  review, one function shared with `ensure_project`.** `domain::naming::
+  disambiguate(preferred, parent_dir, taken)` returns `api` if free, else
+  `work/api`, else `work/api (2)` as the terminating fallback. `taken` holds
+  existing project names *plus* the names already assigned earlier in the same
+  scan, which is what stops two rows of one report colliding with each other.
+  Rows whose name was changed are flagged in the review list and editable.
+
+  `ensure_project` uses the same function, which is the "solve it once" the
+  question asked for — and fixes a real bug, since it currently hands an
+  underived name to `create` and fails with `DuplicateName` the second time the
+  observer CLI meets an `api` folder.
+- ~~**Rescanning.**~~ **In scope, settled 2026-09-07: remembered roots plus
+  rescan on demand.** A `scan_roots` table at `user_version` 4 stores the root
+  together with the settings it was scanned with — mode, depth, detectors,
+  pruning — because rescan means "run *this* scan again", and one that quietly
+  used different detectors would be a different feature wearing the same button.
+  A root is remembered **on commit, not on scan**: scanning is exploratory,
+  importing is the commitment, and an abandoned review leaves nothing behind.
+  Rescan hides already-tracked directories, so it reports only what is new.
+
+  **A rescan still walks the disk, and no design can avoid that** — a project
+  that appeared yesterday is discoverable only by looking. What remembering a
+  root saves is the setup: the folder picker and the re-ticking of settings that
+  might differ slightly from last time. An mtime cache that skips unchanged
+  subtrees was considered and declined: up to 50,000 rows per root to optimise a
+  walk that is already milliseconds, when the expensive part is detection, which
+  only runs on directories that survive pruning.
+
+  Watching a root live is a further step and still not the first one.
 - **Background rescanning — open, and not yet agreed.** The idea: traverse for
   projects unprompted rather than when asked. (Filed here as "an autorunner"
   before that word was pinned to the bulk scan above; it is *not* that feature.)

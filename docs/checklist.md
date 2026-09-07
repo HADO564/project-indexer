@@ -146,6 +146,26 @@ files. `vite.config.ts` runs them in the `node` environment.
   needing a set filter that does not exist yet, never `refresh_trackers` in the
   bulk path (`into_result()` discards everything on one failure), and name
   collisions becoming real the first time two scanned folders both hold `api`.
+  **Spec written 2026-09-07:**
+  `docs/superpowers/specs/2026-09-07-folder-scanning-design.md`, which closes the
+  four questions the roadmap left open. **Name collisions** resolve by
+  parent-qualifying (`api` → `work/api`, then a numeric suffix as the
+  terminating fallback), editable in the review list, via one
+  `domain::naming::disambiguate` shared with `ensure_project` — which fixes a
+  real bug there, since it currently returns `DuplicateName` on the second `api`
+  it meets. **Detector selection** gets the predicted set filter,
+  `DetectorRunner::inspect_kinds(path, Option<&[&str]>)`, with the single-kind
+  `inspect` kept and reimplemented over it because the re-detect sweep still
+  needs it. **Remembered roots and rescan-on-demand are in scope**, carrying
+  `user_version` 4 and a `scan_roots` table — a real row, not a `data` blob,
+  since `ScanRoot` has no sum-type payload to dodge; a root is remembered on
+  commit, not on scan. Startup rescan and anything background stay out.
+  **No progress events**: the walk is a blocking async command bounded by a
+  50,000-directory cap rather than the codebase's first event channel. Also
+  settled there and worth knowing before reading the walk: `.git`/`.svn`/`.hg`
+  are pruned unconditionally, *not* subject to the include-ignored checkbox,
+  because submodules live in `.git/modules` and a walk reaching them would offer
+  to import every one as its own project.
 - [ ] **Re-detect sweep when the detector set gains a kind.** Detection
   results are persisted, so a project registered before a detector existed
   carries an incomplete tracker set forever and nothing says so. This lands the
