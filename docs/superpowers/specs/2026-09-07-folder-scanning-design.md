@@ -17,13 +17,15 @@ In:
 
 - A one-shot scan: pick a root, choose quick or deep with a user-chosen depth,
   tick detectors, walk, review, commit.
-- Remembered roots, persisted with the settings they were scanned with, so a
-  rescan is one click rather than a re-run of the whole setup dialogue.
-- Rescan on demand, reporting only what is not already tracked.
+- Rescan on demand: the last scan's settings are remembered in `localStorage`
+  and pre-fill the form, and already-tracked directories are filtered out, so a
+  rescan reports only what is new.
 - Name disambiguation, shared with `ensure_project`.
 
 Out, deliberately:
 
+- **A `scan_roots` table.** Specced and cut — see *Remembering the last scan*.
+  No schema migration; this feature leaves `user_version` at 3.
 - Rescan at startup, and any background or timer-driven traversal.
 - Filesystem watching.
 - An mtime cache that lets a rescan skip parts of the walk (considered; see
@@ -32,17 +34,21 @@ Out, deliberately:
 
 ## Architecture
 
-Four units, each independently testable.
+Three units, each independently testable.
 
 | Unit | Location | Responsibility |
 |---|---|---|
 | The walk | `core::domain::scan` | Pure traversal + pruning. Given a request and a detector runner, produce candidates. No database, no store. |
 | Name disambiguation | `core::domain::naming` | `disambiguate` — one deterministic function, two callers. |
-| Orchestration | `core::application::scan_service` | Walk, filter already-tracked, assign names, commit through `ProjectService`, own remembered roots. |
-| Persistence | `core::ports` + `core::infra::sqlite_repository` | `ScanRootReader` / `ScanRootRepository`, `scan_roots` table at `user_version` 4. |
+| Orchestration | `core::application::scan_service` | Walk, filter already-tracked, assign names, commit through `ProjectService`. |
 
 The Tauri layer stays a thin adapter, as everywhere else. `indexer-core` gains
 no dependency on Tauri and no new third-party crate — the walk is `std::fs`.
+
+**There is no persistence unit**, which is the notable thing about this list:
+the feature writes `Project` rows through machinery that already exists and
+stores its own settings in the frontend. No new table, no new port, no
+migration.
 
 ### Why not on `ProjectService`
 
@@ -143,8 +149,8 @@ pub fn inspect_kinds(&self, path: &Path, only: Option<&[&str]>) -> Detection
 ```
 
 `None` means every registered detector. `Some(&[])` matches nothing. An unknown
-kind matches nothing rather than erroring — a stored root naming a detector that
-has since been removed degrades to finding less, not to a failure.
+kind matches nothing rather than erroring — remembered settings naming a
+detector that has since been removed degrade to finding less, not to a failure.
 
 The existing single-kind `inspect(path, Option<&str>)` **stays**: the re-detect
 sweep needs exactly one detector, and both shapes are real. It is reimplemented
@@ -188,82 +194,46 @@ In the review list a disambiguated row is flagged, so the rename is visible
 rather than silent, and the name is editable. Editing re-checks against `taken`
 live.
 
-## Remembered roots
+## Remembering the last scan
 
-```rust
-pub struct ScanRoot {
-    pub id: String,               // UUID, as Project's is
-    pub directory: String,
-    pub mode: ScanMode,
-    pub detectors: Vec<String>,
-    pub include_ignored: bool,
-    pub last_scanned_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-}
+**Nothing is persisted to `projects.db`, and there is no `scan_roots` table.**
+The last-used scan settings live in `localStorage` and pre-fill the form:
+
+```ts
+type StoredScanSettings = {
+  root: string;
+  mode: "quick" | "deep";
+  depth: number;
+  detectors: string[];
+  includeIgnored: boolean;
+};
 ```
 
-`ScanRoot::request()` rebuilds the `ScanRequest` a rescan runs, so the stored
-row and the scan input never drift apart into two shapes that must be kept in
-sync by hand.
+Written on commit, not on scan — scanning is exploratory, importing is the
+commitment, and a scan abandoned at the review screen leaves nothing behind.
 
-`user_version` 3 → 4, additive:
+**Rescanning is therefore not a stored entity, it is a pre-filled form.** Open
+the scan modal and the root, mode, depth and ticks are already as you left them;
+press Scan. `already_tracked` is set from `find_by_directory` and those rows are
+hidden by default, so what you see is only what is new since last time.
 
-```sql
-CREATE TABLE scan_roots (
-  id                   TEXT PRIMARY KEY,
-  directory            TEXT NOT NULL,
-  directory_normalized TEXT NOT NULL UNIQUE,
-  mode                 TEXT NOT NULL,        -- 'quick' | 'deep'
-  depth                INTEGER,              -- NULL when mode = 'quick'
-  detectors            TEXT NOT NULL,        -- JSON array of kinds
-  include_ignored      INTEGER NOT NULL,
-  last_scanned_at      TEXT,
-  created_at           TEXT NOT NULL
-);
-```
+*Why not a table.* A `scan_roots` table with ports, CRUD and `user_version` 4
+was specced and cut. The path itself was never the value — anybody scanning
+`~/projects` knows where `~/projects` is, so the folder picker is not the
+friction. The value is the *settings*: a rescan that quietly ran depth 2 instead
+of depth 4 gives a different answer with nothing on screen saying why. A
+pre-filled form solves exactly that, and localStorage is already where this app
+keeps UI state (`viewState.ts`) — which also keeps it out of `projects.db`, per
+the devmon cross-app contract, where a list of one user's scan folders does not
+belong.
 
-**A real row, not a `data` blob** — the same call `groups` made, for the same
-reason recorded in `architecture.md` → *SQLite as a document store*. The blob
-pattern exists to dodge sum types with per-variant payloads (`Tracker`), so that
-adding a detector costs no migration. `ScanRoot` has no such payload:
-`ScanMode` is a two-variant enum with one optional integer, which flattens to
-`mode` + a nullable `depth` without losing anything. `detectors` is a JSON array
-in a `TEXT` column because it is an unordered set of short strings that nothing
-queries by — the moment something wants "which roots scan for Unity", that
-becomes a `scan_root_detectors` satellite table, exactly as `project_tags` is.
-
-`directory_normalized` reuses `domain::normalize`, matching `projects`, and is
-`UNIQUE` — remembering `~/code` twice is impossible by construction rather than
-by a check that can be forgotten. Note this makes root uniqueness
-**case-sensitive**, per invariant 4: `C:\Code` and `C:\code` are two roots.
-That is consistent with how projects already behave, and consistency matters
-more here than the arguable merits of either answer.
-
-Settings are stored *with* the root because rescan means "run this scan again".
-A rescan that silently used different detectors than the original would be a
-different feature wearing the same button.
-
-Ports mirror the existing split, for the devmon read-without-write contract:
-
-```rust
-pub trait ScanRootReader: Send + Sync {
-    fn list_scan_roots(&self) -> Result<Vec<ScanRoot>, RepositoryError>;
-    fn find_scan_root(&self, normalized_directory: &str) -> Result<Option<ScanRoot>, RepositoryError>;
-}
-
-pub trait ScanRootRepository: ScanRootReader {
-    fn save_scan_root(&self, root: &ScanRoot) -> Result<(), RepositoryError>;
-    fn delete_scan_root(&self, id: &str) -> Result<(), RepositoryError>;
-}
-```
-
-**A root is remembered on commit, not on scan.** Scanning is exploratory;
-importing is the commitment. A scan the user abandons at the review screen
-leaves nothing behind.
-
-**Rescan** reloads the stored request and walks again. `already_tracked` is set
-from `find_by_directory` and those rows are hidden by default, so a rescan of
-`~/code` shows only what is new. `last_scanned_at` is stamped on commit.
+*What would bring the table back.* Several distinct scan locations —
+`~/projects`, `~/work`, `D:\clients` — each wanting its own remembered
+settings and its own Rescan button. One set of pre-filled defaults cannot serve
+three roots; a list can. That is the trigger, and until somebody has that disk
+the table is speculative. Nothing in this design blocks adding it later: the
+settings are already a single serialisable struct, so the migration is to move
+where it is stored, not to invent its shape.
 
 ## Commit
 
@@ -291,13 +261,19 @@ plus logged errors.
 
 ## Command surface
 
+Two commands, plus one that exists so the UI need not hardcode detector names.
+
 | Command | Shape |
 |---|---|
 | `scan_folder` | `ScanRequest -> Result<ScanReport, ProjectError>` |
-| `import_scanned` | `(root: ScanRequest, selections: Vec<ImportSelection>) -> Result<ImportReport, ProjectError>` |
-| `list_scan_roots` | `-> Result<Vec<ScanRoot>, ProjectError>` |
-| `rescan_root` | `(id: String) -> Result<ScanReport, ProjectError>` |
-| `forget_scan_root` | `(id: String) -> Result<(), ProjectError>` |
+| `import_scanned` | `(selections: Vec<ImportSelection>) -> Result<ImportReport, ProjectError>` |
+| `list_detector_kinds` | `-> Vec<String>` |
+
+`list_detector_kinds` returns the registered `Detector::kind()` values so the
+tick-list is built from what the binary actually has. Without it, shipping the
+Unity detector would mean editing a hardcoded array in a Svelte file — which
+would break invariant 1, "a new detector is implement + register, zero frontend
+code".
 
 `scan_folder` is `async` so the walk runs on Tauri's pool and the window stays
 responsive. It is blocking from the frontend's point of view: an indeterminate
@@ -318,12 +294,13 @@ steps within one modal:
    `stopped_early` renders as a banner.
 3. **Result** — counts, and the failure list if non-empty.
 
-Remembered roots appear as a list in the same modal's entry state, each with
-rescan and forget.
+The configure step opens pre-filled from `localStorage`, so a rescan is: open,
+press Scan. There is no separate roots list and no rescan button — rescanning
+*is* re-running a form that already knows your answers.
 
 Nothing here needs per-detector frontend code: the checkbox list is built from
-the kinds the backend reports, and matched trackers render through the existing
-generic badge component.
+`list_detector_kinds`, and matched trackers render through the existing generic
+badge component.
 
 ## Testing
 
@@ -338,14 +315,17 @@ double collision suffixes; two candidates in one scan do not collide with each
 other; case-insensitive matching.
 
 **Service** (in-memory SQLite): already-tracked directories are flagged and not
-re-imported; a failing row does not stop the rest; committing remembers the root
-once and rescanning does not duplicate it; rescan reports only new candidates.
-
-**Migration** (`crates/core/tests/migrations.rs`): a v3 database opens at v4
-with its projects intact and an empty `scan_roots`.
+re-imported; a failing row does not stop the rest; a second scan of the same
+tree after committing reports every candidate as already tracked.
 
 **`ensure_project`**: two `api` directories under different parents both
 register, named `api` and `work/api`.
+
+**Frontend** (Vitest): settings round-trip through `localStorage` and a corrupt
+or absent stored value falls back to defaults rather than throwing; the review
+list's live name re-check.
+
+No migration test, because there is no migration.
 
 ## Decisions
 
@@ -357,14 +337,16 @@ as slow enough to need it.
 
 **An mtime skip cache — declined.** Storing a mtime per visited directory would
 let a rescan skip `read_dir` and detection on unchanged subtrees. It works, but
-it means up to 50,000 rows per root and a second table, to optimise something
-already fast — the expensive part of a scan is detection, which already runs
-only on directories that survive pruning.
+it means up to 50,000 stored rows and a table, to optimise something already
+fast — the expensive part of a scan is detection, which already runs only on
+directories that survive pruning. Doubly moot now that nothing is stored at all.
 
 **Rescan cannot avoid the walk.** New projects are discoverable only by looking
-at the disk. What remembering a root saves is the setup: the folder picker, and
-re-ticking settings that might differ slightly from last time. That is the
-friction, and it is worth removing; the disk read is not the cost.
+at the disk; a rescan that read no filesystem would return exactly what the last
+one did. This is why "remembering" was narrowed all the way down to a pre-filled
+form: the path was never the friction — anybody scanning `~/projects` knows
+where `~/projects` is — and the walk cannot be skipped, so the only thing left
+worth keeping is the settings.
 
 **Run-all-and-intersect — considered, not taken.** Selection could have been
 applied to the result of an unfiltered `detect_project`, needing no new API,
