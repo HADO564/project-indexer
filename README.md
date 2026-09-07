@@ -339,5 +339,13 @@ Every version becomes available under the plain **Apache License 2.0 two years
 after it is published**, automatically and irrevocably. The restriction protects
 the project while it is young; it does not lock the code away forever.
 
+There is one additional permission on top of the licence, for
+[plugins](ROADMAP.md#plugins). The app has no runtime plugin loader, so using a
+plugin means building the app with it included — and without the exception,
+handing anyone that build would count as competing. A build that differs from a
+release only by added plugins may be distributed freely, as long as it is not
+passed off as an official one. Plugins themselves are their authors' own work
+under whatever licence they choose; nothing here reaches them.
+
 Contributions are covered by the [CLA](CLA.md), which is what makes that
 two-year promise possible to keep.

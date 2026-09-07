@@ -103,3 +103,44 @@ Unless required by applicable law or agreed to in writing, software distributed
 under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
+
+---
+
+# Additional Permission — Plugin Builds
+
+This section is granted by the licensor **in addition to** the Terms and
+Conditions above. It only adds permission; it takes nothing away.
+
+Project Indexer has no runtime plugin loader, by design — native code loaded
+into the process cannot be sandboxed. Using a plugin therefore means building
+the Software with that plugin included. Without the permission below,
+distributing such a build would be a Competing Use, and a plugin author could
+not hand anyone a working copy of their own work.
+
+## What this covers
+
+A **Plugin Build** is a copy of the Software that differs from a release we
+publish only by the addition of one or more plugins: configuration consumed by
+the Software's theming and layout mechanisms, or code registered through its
+documented extension points.
+
+A copy that removes, replaces or reimplements functionality of the Software is
+not a Plugin Build, and nothing in this section applies to it.
+
+## The permission
+
+Distributing a Plugin Build, in source or binary form, is a Permitted Purpose
+and is not a Competing Use, provided that:
+
+1. it is not presented as an official release, and is named and described so
+   that it will not be mistaken for one;
+2. it carries these Terms and Conditions, including this section, together with
+   the copyright notices already present in the Software; and
+3. it states which release it is built from and which plugins were added.
+
+## What this does not do
+
+This permission covers distributing the Plugin Build. It does not license the
+plugins themselves. A plugin is its author's own work, carries whatever licence
+its author chooses, and is not made subject to these Terms and Conditions by
+being built into a Plugin Build.

@@ -46,10 +46,34 @@ Contributions are gated on the [CLA](CLA.md) — one comment on a first pull
 request — because the two-year conversion cannot be honoured for code the
 project has no right to relicense.
 
-This leaves one question that should be answered *before* any plugin API is
-published, not after: what licence a third-party plugin carries, and whether a
-plugin compiled into the app is a derivative under the licence's Redistribution
-clause. It costs a paragraph now and a migration later.
+### Plugins and the licence
+
+Settled, because [Plugins](#plugins) is a committed direction rather than a
+speculative one, and settling it after an API is published costs a migration.
+
+A plugin is its author's own work. A theme is a file of token values; a
+frontend plugin is code against a published host API; a backend plugin is a
+crate that depends on `indexer-core` and implements a trait. None of those are
+derivatives of the Software, and FSL has no copyleft clause reaching them — its
+restriction is on Competing Use of the Software, not on what licence a
+dependent work carries. Plugin authors pick their own licence, and a plugin
+living in its own repository is not a contribution, so no CLA applies to it.
+
+The collision was elsewhere, and it was real. Because there is deliberately no
+runtime loader, a backend plugin only runs in a build of the app that includes
+it — and distributing that build is distributing a modified copy of the
+Software, which the bare licence permits only for a non-Competing purpose. A
+build of Project Indexer with an extra detector substitutes for Project
+Indexer, so a plugin author could publish their crate but nothing anyone could
+install. "Somebody else adds the next twenty project types" does not survive
+that.
+
+The **Additional Permission** in [`LICENSE`](LICENSE) resolves it: a build
+differing from a release only by added plugins may be distributed, in source or
+binary, provided it is not passed off as official, carries the licence, and
+says what it was built from. Source distribution stays the norm — this is a
+developer tool and "clone, add the crate, build" is a low bar here — but the
+permission means a plugin author is not forced into it.
 
 ## Next — the `indexer` command-line tool
 
