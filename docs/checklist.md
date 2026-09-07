@@ -130,48 +130,7 @@ files. `vite.config.ts` runs them in the `node` environment.
 
 ## Open (features)
 
-- [ ] **NEXT — scan a folder for projects.** Point the app at `~/projects` and
-  register everything inside, instead of adding directories one at a time. The
-  biggest adoption gap there is: somebody with two hundred projects on disk
-  currently adds them by hand, which is where they stop. Design is settled —
-  `ROADMAP.md` → *Scanning a folder for projects* has all of it: a **quick scan**
-  one level down and a **deep scan** to a user-chosen depth; conventionally
-  gitignored directories skipped by default with a checkbox to include them;
-  **detector selection**, where ticking git imports the repos and leaves the game
-  projects alone, and the tick decides *whether to register*, not what gets
-  recorded — a kept directory runs every installed detector and lands once with
-  every tracker it matched. It is a scan, **not** a daemon: user-triggered,
-  bounded, finite. Four implementation facts are written down there too —
-  `ensure_project` rather than `create` as the entry point, detector selection
-  needing a set filter that does not exist yet, never `refresh_trackers` in the
-  bulk path (`into_result()` discards everything on one failure), and name
-  collisions becoming real the first time two scanned folders both hold `api`.
-  **Spec written 2026-09-07:**
-  `docs/superpowers/specs/2026-09-07-folder-scanning-design.md`, which closes the
-  four questions the roadmap left open. **Name collisions** resolve by
-  parent-qualifying (`api` → `work/api`, then a numeric suffix as the
-  terminating fallback), editable in the review list, via one
-  `domain::naming::disambiguate` shared with `ensure_project` — which fixes a
-  real bug there, since it currently returns `DuplicateName` on the second `api`
-  it meets. **Detector selection** gets the predicted set filter,
-  `DetectorRunner::inspect_kinds(path, Option<&[&str]>)`, with the single-kind
-  `inspect` kept and reimplemented over it because the re-detect sweep still
-  needs it. **Rescan-on-demand is in scope and stores nothing in the database**:
-  the last scan's settings persist in `localStorage` and pre-fill the form, so
-  rescanning is "open the modal, press Scan", with already-tracked directories
-  filtered out. A `scan_roots` table at `user_version` 4 was designed and cut —
-  the path was never the friction (anybody scanning `~/projects` knows where it
-  is) and a rescan cannot skip the disk anyway, so the only thing worth
-  remembering is the settings, which a pre-filled form handles for none of the
-  cost. **This feature ships no migration**; `user_version` stays at 3. Startup
-  rescan and anything background stay out.
-  **No progress events**: the walk is a blocking async command bounded by a
-  50,000-directory cap rather than the codebase's first event channel. Also
-  settled there and worth knowing before reading the walk: `.git`/`.svn`/`.hg`
-  are pruned unconditionally, *not* subject to the include-ignored checkbox,
-  because submodules live in `.git/modules` and a walk reaching them would offer
-  to import every one as its own project.
-- [ ] **Re-detect sweep when the detector set gains a kind.** Detection
+- [ ] **NEXT — re-detect sweep when the detector set gains a kind.** Detection
   results are persisted, so a project registered before a detector existed
   carries an incomplete tracker set forever and nothing says so. This lands the
   day the **Unity detector** ships, not the day plugins do: every existing
@@ -184,6 +143,33 @@ files. `vite.config.ts` runs them in the `node` environment.
   its own — it does not gate the scanner, but the scanner makes it matter more:
   registering two hundred projects before Unity ships turns five stale records
   into two hundred. See `architecture.md` → *Detection semantics*.
+- [x] **Scan a folder for projects.** Point the app at `~/projects`, tick the
+  detectors to scan for, choose a **quick scan** (the folders directly inside)
+  or a **deep scan** to a depth you pick, then review what was found and import
+  it in one pass. The walk is a pure iterative BFS in `core::domain::scan` —
+  `std::fs` only, no new dependency — and `ScanService` orchestrates it over
+  `ProjectService`. **The tick decides whether to register, not what gets
+  recorded:** a kept directory runs every installed detector and lands once
+  carrying every tracker it matched, via the new set filter
+  `DetectorRunner::inspect_kinds(path, Option<&[&str]>)`; the single-kind
+  `inspect` stays for the re-detect sweep and is now implemented over it.
+  A matched directory ends that branch, since a repo inside a repo is vendored
+  or a submodule — and `.git`/`.svn`/`.hg` are pruned **unconditionally**,
+  outside the include-ignored checkbox, because submodules live under
+  `.git/modules` and a walk reaching them would offer to import every one.
+  Name collisions resolve through `domain::naming::disambiguate` — `api`
+  becomes `work/api`, then `work/api (2)` — shared with `ensure_project`,
+  which fixes a real bug there: it previously returned `DuplicateName` on the
+  second `api` it met. Import is best-effort per row, so one corrupt
+  repository costs that row and not the other 199; `refresh_trackers` and
+  `into_result()` are never used in the bulk path. **No schema change** —
+  the last scan's settings live in `localStorage` (`scanSettings.ts`), which
+  is the whole of "remembering": a `scan_roots` table was designed and cut,
+  because the path was never the friction and a rescan cannot skip the disk
+  anyway. The walk is bounded at 50,000 directories and reports
+  `stopped_early` rather than growing progress events and a cancel button.
+  Spec: `docs/superpowers/specs/2026-09-07-folder-scanning-design.md`; plan:
+  `docs/superpowers/plans/2026-09-07-folder-scanning.md`.
 - [ ] `GitInfo.contributors` (see above)
 - [ ] Unity detector — add `Tracker::Unity` + a `UnityDetector` together (register in `detectors/registry.rs`)
 - [ ] Blender detector — add `Tracker::Blender` + a `BlenderDetector` together
