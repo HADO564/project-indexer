@@ -10,13 +10,15 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-07
+
 ### Added
 
 - **Project views, colour, icons and groups.** The project list becomes
-  something you scan rather than read. Three view modes — list, grid and
-  compact — and a sidebar replacing the flat single column: All, Favourites,
-  your groups, Ungrouped and Bin, each with a count. Selecting an entry changes
-  what the list shows.
+  something you scan rather than read. Two view modes — list and grid — and a
+  sidebar replacing the flat single column: All, Favourites, your groups,
+  Ungrouped and Bin, each with a count. Selecting an entry changes what the
+  list shows.
 - **Groups.** Create, rename, recolour, re-icon, reorder and delete them from a
   group manager reached off the sidebar. A project belongs to one group at a
   time; tags stay the non-exclusive mechanism. Deleting a group never deletes a
@@ -55,12 +57,6 @@ project is built, tested and worked on live in
   now opens on "just remove it from this app", the destructive option is second
   rather than first, and the confirm button says which of the two it will do
   instead of always reading "Delete".
-
-### Removed
-
-- **The compact view.** It differed from the list view only by hiding the
-  tracker badges, which is a setting at most, not a third mode. Anyone left in
-  it lands on the list view.
 
 ### Fixed
 
@@ -174,6 +170,7 @@ The feature set below is what 0.1.1 ships.
 - Projects are stored in SQLite at `projects.db` in the platform config
   directory, with synchronous transactional writes.
 
-[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/HADO564/project-indexer/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/HADO564/project-indexer/releases/tag/v0.1.1
 [0.1.0]: https://github.com/HADO564/project-indexer/tree/v0.1.0
