@@ -1,0 +1,45 @@
+name: CLA
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the contributor has signed the CLA
+        if: >
+          (github.event.comment.body == 'I have read the CLA document and I hereby sign the CLA')
+          || github.event_name == 'pull_request_target'
+        uses: contributor-assistant/github-action@v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          path-to-signatures: .github/cla-signatures.json
+          path-to-document: https://github.com/HADO564/project-indexer/blob/main/CLA.md
+          # Signatures are stored on a dedicated, unprotected branch so they do
+          # not add commits to main. Create it once:
+          #   git switch --orphan cla-signatures && git commit --allow-empty \n          #     -m 'chore: branch for CLA signatures' && git push -u origin cla-signatures
+          branch: cla-signatures
+          allowlist: HADO564,dependabot[bot]
+          custom-notsigned-prcomment: >
+            Thanks for the pull request. Project Indexer needs every contributor
+            to agree to its [Contributor License Agreement](https://github.com/HADO564/project-indexer/blob/main/CLA.md)
+            before a change can be merged — it is short, and it exists so the
+            project can keep its promise to release each version under the
+            Apache License 2.0 after two years. You keep the copyright in your
+            own work.
+
+
+            To agree, post a comment on this pull request with exactly:
+          custom-pr-sign-comment: 'I have read the CLA document and I hereby sign the CLA'
+          custom-allsigned-prcomment: 'All contributors have signed the CLA.'

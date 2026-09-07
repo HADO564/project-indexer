@@ -2,6 +2,7 @@
 name = "indexer-core"
 version = "0.2.0"
 edition = "2021"
+license-file = "../../LICENSE"
 
 [lib]
 name = "indexer_core"

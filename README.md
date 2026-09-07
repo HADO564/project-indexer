@@ -295,4 +295,18 @@ Also here: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[Functional Source License, Version 1.1, ALv2 Future License](LICENSE)
+(`FSL-1.1-ALv2`).
+
+In short: **use it freely.** Personal use, internal company use, education and
+research are all fine, at no cost, with no seat count. You may read, modify and
+build on the source. The one thing you may not do is ship it — or something
+substantially like it — as a commercial product or service that competes with
+Project Indexer.
+
+Every version becomes available under the plain **Apache License 2.0 two years
+after it is published**, automatically and irrevocably. The restriction protects
+the project while it is young; it does not lock the code away forever.
+
+Contributions are covered by the [CLA](CLA.md), which is what makes that
+two-year promise possible to keep.

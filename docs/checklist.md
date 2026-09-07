@@ -124,7 +124,7 @@ files. `vite.config.ts` runs them in the `node` environment.
 - [x] CI — `cargo fmt --check` / `clippy` / `test --workspace` on Linux + Windows, plus `pnpm check` / `test` / `build`, on every push and PR
 - [x] Release workflow — `v*` tag builds bundles for Windows, Linux, and both macOS architectures
 - [x] `CHANGELOG.md` (Keep a Changelog) and a published v0.1.1
-- [x] `LICENSE` (MIT), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `ROADMAP.md`, `docs/USAGE.md`, issue + PR templates
+- [x] `LICENSE` (FSL-1.1-ALv2), `CLA.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `ROADMAP.md`, `docs/USAGE.md`, issue + PR templates
 - [ ] Signed bundles and the tag → signed-bundle → GitHub-Release path (see `architecture.md` "Cross-app & updates")
 - [ ] CI never *launches* the app — it compiles and tests the Linux target only. A green run says nothing about whether the window appears; PI-005 is what that gap looks like in practice. A smoke launch under a virtual display would close it.
 
