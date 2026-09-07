@@ -20,7 +20,7 @@
   import Sidebar from "$lib/components/Sidebar.svelte";
   import SortControls from "$lib/components/SortControls.svelte";
   import ViewControls from "$lib/components/ViewControls.svelte";
-  import { resolveView, viewCounts, type View } from "$lib/views";
+  import { propertyKeys, resolveView, viewCounts, type View } from "$lib/views";
   import { loadView, loadViewMode, saveView, saveViewMode, type ViewMode } from "$lib/viewState";
 
   let projects = $state<Project[]>([]);
@@ -64,6 +64,9 @@
   // opened before a refetch edits the refetched project. If it disappears —
   // deleted from another window — the modal closes rather than editing a ghost.
   const editingProject = $derived(projects.find((p) => p.id === editingId) ?? null);
+  // Every property name already in use, for the forms' name suggestions and
+  // the search hint. Derived from the fetched list — no extra query.
+  const knownPropertyKeys = $derived(propertyKeys([...projects, ...deletedProjects]));
   const visibleProjects = $derived(resolveView(selectedView, projects, deletedProjects, query));
 
   function handleSelectView(view: View) {
@@ -272,7 +275,7 @@
     <main class="min-w-0 flex-1">
       <div class="mb-3 flex items-center gap-2">
         <div class="min-w-0 flex-1">
-          <ViewControls bind:mode={viewMode} bind:query />
+          <ViewControls bind:mode={viewMode} bind:query {knownPropertyKeys} />
         </div>
         <SortControls bind:by={sortBy} bind:direction={sortDirection} />
       </div>
@@ -307,6 +310,7 @@
   <EditProjectModal
     project={editingProject}
     {groups}
+    {knownPropertyKeys}
     {customIcons}
     onIconsChanged={loadCustomIcons}
     onGroupsStale={loadGroups}
@@ -319,6 +323,7 @@
 {#if createOpen}
   <CreateProjectModal
     {groups}
+    {knownPropertyKeys}
     {customIcons}
     onIconsChanged={loadCustomIcons}
     onGroupsStale={loadGroups}

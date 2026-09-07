@@ -51,14 +51,55 @@ export function viewLabel(view: View, groups: Group[]): string {
   }
 }
 
-// Name, path and tags — the three things a row shows that identify a project.
+// A "name: value" query, e.g. `client: acme`. The name must be non-empty and
+// hold no whitespace — which is what keeps `D:\Games` and `build at 12:30`
+// as ordinary text searches rather than queries for a property called "D" or
+// "build at 12". A single-character name is likewise rejected, since a bare
+// drive letter is far more common than a one-letter property.
+const PROPERTY_QUERY = /^\s*([^\s:]{2,})\s*:\s*([\s\S]*)$/;
+
+export function isPropertyQuery(query: string): boolean {
+  return PROPERTY_QUERY.test(query);
+}
+
+// Every distinct property name across the given projects, folded to lower case
+// and sorted. Backs the search hint — the syntax is only discoverable if the
+// app says which names are actually in use.
+export function propertyKeys(projects: Project[]): string[] {
+  const seen = new Set<string>();
+  for (const p of projects) {
+    for (const key of Object.keys(p.properties ?? {})) seen.add(key.toLowerCase());
+  }
+  return [...seen].sort();
+}
+
+function matchesProperty(project: Project, name: string, value: string): boolean {
+  const wanted = name.trim().toLowerCase();
+  const needle = value.trim().toLowerCase();
+  for (const [key, stored] of Object.entries(project.properties ?? {})) {
+    if (key.trim().toLowerCase() !== wanted) continue;
+    // An empty value asks "does this project have the property at all?",
+    // which is the natural reading of typing `client:` and pausing.
+    return needle.length === 0 || stored.toLowerCase().includes(needle);
+  }
+  return false;
+}
+
+// Two modes. `name: value` asks about one property and matches nothing else —
+// a project without that property never matches, however its text reads.
+// Anything else is free text over name, path, tags and property values.
+//
 // An empty query matches everything so the caller does not special-case it.
 export function matchesQuery(project: Project, query: string): boolean {
+  const property = PROPERTY_QUERY.exec(query);
+  if (property) return matchesProperty(project, property[1], property[2]);
+
   const q = query.trim().toLowerCase();
   if (q.length === 0) return true;
   if (project.name.toLowerCase().includes(q)) return true;
   if (project.directory.toLowerCase().includes(q)) return true;
-  return project.tags.some((tag) => tag.toLowerCase().includes(q));
+  if (project.tags.some((tag) => tag.toLowerCase().includes(q))) return true;
+  return Object.values(project.properties ?? {}).some((v) => v.toLowerCase().includes(q));
 }
 
 // `live` is get_all_projects (non-deleted, already sorted by the backend) and

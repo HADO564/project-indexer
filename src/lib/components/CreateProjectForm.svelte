@@ -4,11 +4,13 @@
   import type { CreateProjectInput, Group } from "$lib/api/types";
   import DirectoryField from "./DirectoryField.svelte";
   import IconPicker from "./IconPicker.svelte";
+  import PropertyEditor from "./PropertyEditor.svelte";
   import SwatchPicker from "./SwatchPicker.svelte";
   import { inputClass, labelClass, primaryButtonClass } from "./styles";
 
   let {
     groups,
+    knownPropertyKeys = [],
     customIcons,
     onIconsChanged,
     onGroupsStale,
@@ -16,6 +18,7 @@
     onerror,
   }: {
     groups: Group[];
+    knownPropertyKeys?: string[];
     customIcons: Map<string, string>;
     onIconsChanged?: () => void | Promise<void>;
     onGroupsStale?: () => void | Promise<void>;
@@ -30,6 +33,7 @@
   let color = $state<string | null>(null);
   let icon = $state<string | null>(null);
   let groupId = $state<string | null>(null);
+  let properties = $state<Record<string, string>>({});
   let creating = $state(false);
 
   function parseTags(raw: string): string[] {
@@ -65,8 +69,9 @@
       // create_project takes only name/directory/description/tags, so the
       // three new fields are applied straight after. One extra call against a
       // local database, and CreateProjectInput stays unchanged.
-      if (color || icon || groupId) {
-        await updateProject(created.id, { color, icon, group_id: groupId });
+      const hasProperties = Object.keys(properties).length > 0;
+      if (color || icon || groupId || hasProperties) {
+        await updateProject(created.id, { color, icon, group_id: groupId, properties });
       }
       name = "";
       directory = "";
@@ -75,6 +80,7 @@
       color = null;
       icon = null;
       groupId = null;
+      properties = {};
       await onCreated();
     } catch (err) {
       // The project itself was created; only the group assignment failed,
@@ -123,8 +129,9 @@
       {/each}
     </select>
   </label>
-  <SwatchPicker bind:value={color} allowNone />
+  <SwatchPicker bind:value={color} allowNone allowCustom />
   <IconPicker bind:value={icon} {customIcons} {onIconsChanged} onerror={(m) => onerror?.(m)} />
+  <PropertyEditor bind:value={properties} knownKeys={knownPropertyKeys} />
   <button type="submit" disabled={creating} class={`self-start ${primaryButtonClass}`}>
     {creating ? "Creating…" : "Create project"}
   </button>

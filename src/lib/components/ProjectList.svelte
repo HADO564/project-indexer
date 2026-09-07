@@ -4,7 +4,6 @@
   import type { ViewMode } from "$lib/viewState";
   import BinActions from "./BinActions.svelte";
   import ProjectActionsMenu from "./ProjectActionsMenu.svelte";
-  import ProjectCompactRow from "./ProjectCompactRow.svelte";
   import ProjectRow from "./ProjectRow.svelte";
   import ProjectTile from "./ProjectTile.svelte";
   import { cardClass } from "./styles";
@@ -109,9 +108,7 @@
     <ul
       class={mode === "grid"
         ? "grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3"
-        : mode === "compact"
-          ? "flex flex-col"
-          : "flex flex-col gap-3"}
+        : "flex flex-col gap-3"}
     >
       {#each projects as project (project.id)}
         {@const groupColor = groupColorOf(project)}
@@ -124,14 +121,8 @@
         {@const edge = markVar(project.color, groupColor)}
         {@const coloured = Boolean(project.color ?? groupColor)}
         <li
-          class={mode === "compact"
-            ? "border-b border-line px-2 py-1.5 last:border-b-0"
-            : "rounded-sm border border-line p-3"}
-          style={mode === "compact"
-            ? `border-left: 2px solid ${coloured ? edge : "transparent"}`
-            : coloured
-              ? `border-color: ${edge}; border-left-width: 3px`
-              : undefined}
+          class="rounded-sm border border-line p-3"
+          style={coloured ? `border-color: ${edge}; border-left-width: 3px` : undefined}
         >
           {#if mode === "grid"}
             <ProjectTile
@@ -143,16 +134,6 @@
             >
               {#snippet actions()}{@render (binMode ? binActions : standardActions)(project)}{/snippet}
             </ProjectTile>
-          {:else if mode === "compact"}
-            <ProjectCompactRow
-              {project}
-              directoryMissing={missing}
-              {customIcons}
-              {groupColor}
-              {onToggleFavorite}
-            >
-              {#snippet actions()}{@render (binMode ? binActions : standardActions)(project)}{/snippet}
-            </ProjectCompactRow>
           {:else}
             <ProjectRow
               {project}

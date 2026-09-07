@@ -25,8 +25,14 @@ project is built, tested and worked on live in
   bundled set of 24, or from your own SVGs. Colours are eight palette entries
   resolved through the theme, so a future theme recolours everything
   coherently.
-- **Search** across project name, path and tags, applied within the selected
-  view.
+- **Search** across project name, path, tags and property values, applied
+  within the selected view. **Ctrl+;** focuses the search bar (Cmd+; on macOS);
+  Escape clears it, then leaves it.
+- **Custom project properties** — add any key/value facts you like to a
+  project, and search them with `name: value` (e.g. `client: acme`). A bare
+  `name:` finds every project that has that property. The search bar lists the
+  names already in use.
+- **A colour picker for projects**, alongside the eight palette colours.
 - **A content security policy.** The app shipped with `"csp": null`, which was
   survivable only because every script, font and icon is bundled. There is now a
   real policy: SvelteKit emits the strict half (its inline boot script is hashed
@@ -37,6 +43,10 @@ project is built, tested and worked on live in
 
 ### Changed
 
+- **The `client` field is gone**, replaced by custom properties. Any client you
+  had recorded is moved to a `client` property automatically on first launch.
+- Creating and editing a project now happen in a dialog rather than inline
+  above and inside the list.
 - The Favourites and Bin modals are now sidebar views, so there is one
   navigation system rather than two. Restore, and the permanent delete's
   two-click confirm, behave exactly as they did.
@@ -44,6 +54,12 @@ project is built, tested and worked on live in
   now opens on "just remove it from this app", the destructive option is second
   rather than first, and the confirm button says which of the two it will do
   instead of always reading "Delete".
+
+### Removed
+
+- **The compact view.** It differed from the list view only by hiding the
+  tracker badges, which is a setting at most, not a third mode. Anyone left in
+  it lands on the list view.
 
 ### Fixed
 

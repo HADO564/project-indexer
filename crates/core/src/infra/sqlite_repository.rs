@@ -10,7 +10,7 @@ use crate::ports::{GroupReader, GroupRepository, ProjectReader, ProjectRepositor
 
 /// The schema version this binary understands. `open` migrates up to this and
 /// refuses any database already past it.
-pub const CURRENT_SCHEMA_VERSION: i64 = 2;
+pub const CURRENT_SCHEMA_VERSION: i64 = 3;
 
 pub struct SqliteRepository {
     conn: Mutex<Connection>,
@@ -122,6 +122,70 @@ fn run_migrations(conn: &Connection, from: i64) -> Result<(), RepositoryError> {
              COMMIT;",
         )
         .map_err(be)?;
+    }
+
+    if from < 3 {
+        // `client` was a hardcoded field that only ever suited one kind of
+        // user; it is replaced by the open-ended `properties` map. Serde would
+        // simply ignore the old key, which loses the value the moment the
+        // record is next saved — so this rewrites each blob, moving a non-empty
+        // `client` to `properties["client"]` and dropping the key.
+        //
+        // This is a blob rewrite rather than a column change, which is exactly
+        // what the numbered `user_version` runner exists for: a shape change
+        // serde cannot absorb on its own.
+        let tx = conn.unchecked_transaction().map_err(be)?;
+        {
+            let mut select = tx.prepare("SELECT id, data FROM projects").map_err(be)?;
+            let rows: Vec<(String, String)> = select
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .map_err(be)?
+                .collect::<Result<_, _>>()
+                .map_err(be)?;
+
+            let mut update = tx
+                .prepare("UPDATE projects SET data = ?1 WHERE id = ?2")
+                .map_err(be)?;
+
+            for (id, data) in rows {
+                // A blob that does not parse is left exactly as it is. It is
+                // already broken, and a migration is the wrong place to decide
+                // what to do about that — `get` surfaces it as a corrupt record.
+                let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&data) else {
+                    continue;
+                };
+                let Some(object) = value.as_object_mut() else {
+                    continue;
+                };
+
+                let client = object.remove("client");
+                let client = client
+                    .as_ref()
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("")
+                    .trim();
+                if !client.is_empty() {
+                    let entry = object
+                        .entry("properties")
+                        .or_insert_with(|| serde_json::Value::Object(Default::default()));
+                    if let Some(map) = entry.as_object_mut() {
+                        // An existing `properties.client` wins: it was set
+                        // deliberately, where this one is a leftover field.
+                        map.entry("client")
+                            .or_insert_with(|| serde_json::Value::String(client.to_string()));
+                    }
+                }
+
+                let rewritten = serde_json::to_string(&value).map_err(|e| {
+                    RepositoryError::Backend(format!("re-serializing project {id}: {e}"))
+                })?;
+                update
+                    .execute(rusqlite::params![rewritten, id])
+                    .map_err(be)?;
+            }
+        }
+        tx.execute_batch("PRAGMA user_version = 3;").map_err(be)?;
+        tx.commit().map_err(be)?;
     }
 
     // Keep the `meta` mirror of the schema version in lockstep with

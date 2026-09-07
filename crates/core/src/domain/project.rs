@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::domain::normalize::{normalize_directory, normalize_tags, remove_spaces};
 use crate::domain::tracker::Tracker;
 use crate::domain::update_project::UpdateProject;
@@ -42,7 +44,16 @@ pub struct Project {
     pub favorite: bool,
     pub open_with: Option<String>,
     pub notes: Option<String>,
-    pub client: Option<String>,
+    /// User-defined key/value facts — "client", "engine", "priority", whatever
+    /// this particular set of projects needs. Replaces the single hardcoded
+    /// `client` field, which only ever suited one kind of user; the v3
+    /// migration lifts an existing `client` value into `properties["client"]`.
+    ///
+    /// A `BTreeMap` rather than a `HashMap` so the order is stable: the blob
+    /// serializes identically across saves, and the UI lists keys the same way
+    /// every render without sorting at the call site.
+    #[serde(default)]
+    pub properties: BTreeMap<String, String>,
     #[serde(default)]
     pub trackers: Vec<Tracker>,
     /// The group this project belongs to, or `None` for Ungrouped.
@@ -55,6 +66,37 @@ pub struct Project {
     /// Bundled icon name (`"gamepad"`) or a custom one (`"custom:my-logo"`).
     #[serde(default)]
     pub icon: Option<String>,
+}
+
+/// Trims each key and rejects the two shapes that would make a property
+/// unreachable.
+///
+/// A key that is empty after trimming names nothing. A key containing `:`
+/// cannot be searched: the search bar reads `key: value`, splitting on the
+/// first colon, so `a:b` would only ever be looked up as `a`. Rejecting both
+/// on write keeps every stored property findable, rather than letting the UI
+/// accept something the search can never reach.
+///
+/// Values are left exactly as typed — a value may contain anything.
+pub fn normalize_properties(
+    properties: BTreeMap<String, String>,
+) -> Result<BTreeMap<String, String>, ProjectError> {
+    let mut out = BTreeMap::new();
+    for (key, value) in properties {
+        let key = key.trim().to_string();
+        if key.is_empty() {
+            return Err(ProjectError::InvalidPropertyKey(
+                "a property name cannot be empty".into(),
+            ));
+        }
+        if key.contains(':') {
+            return Err(ProjectError::InvalidPropertyKey(format!(
+                "a property name cannot contain ':' (got '{key}') — the search bar reads 'name: value'"
+            )));
+        }
+        out.insert(key, value);
+    }
+    Ok(out)
 }
 
 /// Assigns each listed field from `$update` onto `$self` only when present
@@ -151,7 +193,7 @@ impl Project {
             favorite: false,
             open_with: None,
             notes: None,
-            client: None,
+            properties: BTreeMap::new(),
             trackers: Vec::new(),
             group_id: None,
             color: None,
@@ -170,7 +212,7 @@ impl Project {
         }
 
         if let Some(Some(color)) = &update.color {
-            if !crate::domain::palette::is_known_swatch(color) {
+            if !crate::domain::palette::is_valid_project_color(color) {
                 return Err(ProjectError::UnknownSwatch(color.clone()));
             }
         }
@@ -187,6 +229,10 @@ impl Project {
             self.tags = normalize_tags(tags);
         }
 
+        if let Some(properties) = update.properties {
+            self.properties = normalize_properties(properties)?;
+        }
+
         apply_if_present!(
             self,
             update,
@@ -194,7 +240,6 @@ impl Project {
             favorite,
             open_with,
             notes,
-            client,
             group_id,
             color,
             icon
@@ -241,7 +286,7 @@ mod tests {
             favorite: false,
             open_with: None,
             notes: None,
-            client: None,
+            properties: BTreeMap::new(),
             trackers: Vec::new(),
             group_id: None,
             color: None,
@@ -388,7 +433,7 @@ mod tests {
             favorite: None,
             open_with: None,
             notes: None,
-            client: None,
+            properties: None,
             group_id: Some(Some("group-1".into())),
             color: Some(Some("gold".into())),
             icon: Some(Some("gamepad".into())),
@@ -407,7 +452,7 @@ mod tests {
             favorite: None,
             open_with: None,
             notes: None,
-            client: None,
+            properties: None,
             group_id: Some(None),
             color: None,
             icon: None,
@@ -428,7 +473,7 @@ mod tests {
             favorite: None,
             open_with: None,
             notes: None,
-            client: None,
+            properties: None,
             group_id: None,
             color: Some(Some("chartreuse".into())),
             icon: None,

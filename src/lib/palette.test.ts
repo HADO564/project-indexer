@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SWATCHES, isSwatch, markVar, swatchVar } from "./palette";
+import { SWATCHES, isHexColor, isSwatch, markVar, swatchVar } from "./palette";
 
 describe("SWATCHES", () => {
   it("mirrors crates/core/src/domain/palette.rs exactly, in order", () => {
@@ -44,9 +44,35 @@ describe("swatchVar", () => {
     expect(swatchVar(null)).toBe("var(--color-phos-faint)");
     expect(swatchVar(undefined)).toBe("var(--color-phos-faint)");
   });
-  it("never returns a literal colour, whatever it is given", () => {
-    for (const input of ["#fff", "red", "url(x)", "gold; background: red"]) {
-      expect(swatchVar(input)).toMatch(/^var\(--color-[a-z-]+\)$/);
+  it("passes through a valid hex literal from the colour picker", () => {
+    expect(swatchVar("#e7b64e")).toBe("#e7b64e");
+  });
+  it("never emits anything but a token or an exact hex literal", () => {
+    // This is the security boundary: the result goes straight into a `style`
+    // attribute, and style-src still carries unsafe-inline.
+    for (const input of [
+      "#fff",
+      "red",
+      "url(x)",
+      "gold; background: red",
+      "#e7b64e; background: url(x)",
+      "rgb(1,2,3)",
+      "#gggggg",
+      "#e7b64",
+    ]) {
+      expect(swatchVar(input)).toMatch(/^(var\(--color-[a-z-]+\)|#[0-9a-f]{6})$/i);
+    }
+  });
+});
+
+describe("isHexColor", () => {
+  it("accepts exactly six hex digits after a hash", () => {
+    expect(isHexColor("#e7b64e")).toBe(true);
+    expect(isHexColor("#FFFFFF")).toBe(true);
+  });
+  it("refuses every other shape rather than normalising it", () => {
+    for (const input of ["#abc", "#e7b64", "#e7b64ee", "e7b64e", "#gggggg", "red", "", null]) {
+      expect(isHexColor(input)).toBe(false);
     }
   });
 });

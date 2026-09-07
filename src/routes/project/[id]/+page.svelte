@@ -239,6 +239,7 @@
   <EditProjectModal
     project={inspection.project}
     {groups}
+    knownPropertyKeys={Object.keys(inspection.project.properties)}
     {customIcons}
     onIconsChanged={loadCustomIcons}
     onGroupsStale={loadGroups}

@@ -9,6 +9,7 @@
   // the way off screen. Behind a button it costs nothing until you want it.
   let {
     groups,
+    knownPropertyKeys = [],
     customIcons,
     onIconsChanged,
     onGroupsStale,
@@ -17,6 +18,7 @@
     onerror,
   }: {
     groups: Group[];
+    knownPropertyKeys?: string[];
     customIcons: Map<string, string>;
     onIconsChanged?: () => void | Promise<void>;
     onGroupsStale?: () => void | Promise<void>;
@@ -63,6 +65,7 @@
 
     <CreateProjectForm
       {groups}
+      {knownPropertyKeys}
       {customIcons}
       {onIconsChanged}
       {onGroupsStale}

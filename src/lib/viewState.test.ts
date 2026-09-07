@@ -17,13 +17,17 @@ const groups = [group("g-work", 0), group("g-personal", 1)];
 describe("restoreViewMode", () => {
   it("restores a known mode", () => {
     expect(restoreViewMode("grid")).toBe("grid");
-    expect(restoreViewMode("compact")).toBe("compact");
     expect(restoreViewMode("list")).toBe("list");
   });
   it("defaults to list for junk or nothing stored", () => {
     expect(restoreViewMode(null)).toBe("list");
     expect(restoreViewMode("")).toBe("list");
     expect(restoreViewMode("mosaic")).toBe("list");
+  });
+  it("falls back to list for the retired compact mode", () => {
+    // Anyone who left the app in compact lands on list rather than a blank
+    // toggle, without needing a stored-state migration.
+    expect(restoreViewMode("compact")).toBe("list");
   });
 });
 

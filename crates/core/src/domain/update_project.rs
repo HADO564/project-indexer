@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Wraps a present-but-possibly-null JSON value in `Some`, so the outer
@@ -30,12 +32,11 @@ pub struct UpdateProject {
         deserialize_with = "deserialize_some"
     )]
     pub notes: Option<Option<String>>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_some"
-    )]
-    pub client: Option<Option<String>>,
+    /// Replaces the whole map. Plain `Option`, not a double option: an empty
+    /// map already means "no properties", so there is no absent-vs-null case
+    /// to distinguish the way `open_with` and `notes` need.
+    #[serde(default)]
+    pub properties: Option<BTreeMap<String, String>>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",

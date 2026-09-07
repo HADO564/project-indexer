@@ -18,7 +18,11 @@ export interface Project {
   favorite: boolean;
   open_with: string | null;
   notes: string | null;
-  client: string | null;
+  // User-defined key/value facts. Replaced the hardcoded `client` field, which
+  // only suited one kind of user; the v3 migration moved existing client values
+  // to properties["client"]. Keys are trimmed, non-empty, and contain no ":" —
+  // core rejects the rest, because the search bar reads "name: value".
+  properties: Record<string, string>;
   trackers: Tracker[];
   group_id: string | null;
   color: string | null;
@@ -81,7 +85,7 @@ export interface ProjectInspection {
 }
 
 // Partial update: omit a key to leave that field unchanged. For
-// open_with/notes/client, an explicit `null` clears the field (the Rust
+// open_with/notes, an explicit `null` clears the field (the Rust
 // side distinguishes "key absent" from "key present but null" via a
 // double-Option deserializer), which JSON.stringify's undefined-key
 // dropping matches naturally.
@@ -93,7 +97,9 @@ export interface UpdateProject {
   favorite?: boolean;
   open_with?: string | null;
   notes?: string | null;
-  client?: string | null;
+  // Replaces the whole map; an empty object clears every property. Not
+  // nullable, so there is no absent-vs-null case to distinguish.
+  properties?: Record<string, string>;
   group_id?: string | null;
   color?: string | null;
   icon?: string | null;

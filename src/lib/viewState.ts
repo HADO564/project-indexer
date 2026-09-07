@@ -10,15 +10,16 @@ import { parseViewKey, viewKey, type View } from "./views";
 // current selection and every other view are always on screen, so restoring
 // one cannot surprise anyone. That is precisely why collapse state could not
 // be persisted in the rejected sectioned design.
-export type ViewMode = "list" | "grid" | "compact";
+export type ViewMode = "list" | "grid";
 
-const MODES: readonly ViewMode[] = ["list", "grid", "compact"];
+const MODES: readonly ViewMode[] = ["list", "grid"];
 
 const MODE_KEY = "pi.viewMode";
 const VIEW_KEY = "pi.view";
 
 // Pure. `raw` is whatever was in storage — possibly written by an older build,
-// possibly hand-edited, possibly absent.
+// possibly hand-edited, possibly absent. "compact" reaches here from builds
+// that had a third mode, and falls back to list like any other unknown value.
 export function restoreViewMode(raw: string | null): ViewMode {
   return MODES.includes(raw as ViewMode) ? (raw as ViewMode) : "list";
 }
