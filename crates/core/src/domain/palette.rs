@@ -26,10 +26,13 @@ pub fn is_hex_literal(name: &str) -> bool {
     digits.len() == 6 && digits.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-/// What a *project* may store: a palette name, or a hex literal from the
-/// colour picker. A group is still palette-only — its colour drives a sidebar
-/// entry and a card edge, where staying inside the theme matters most.
-pub fn is_valid_project_color(name: &str) -> bool {
+/// What a project or a group may store: a palette name, or a hex literal from
+/// the colour picker.
+///
+/// A palette name is still the better answer — it is what lets a future theme
+/// recolour everything coherently — but that is a reason to offer the palette
+/// first, not a reason to refuse a colour someone actually wants.
+pub fn is_valid_color(name: &str) -> bool {
     is_known_swatch(name) || is_hex_literal(name)
 }
 
@@ -69,13 +72,18 @@ mod tests {
     }
 
     #[test]
-    fn a_project_may_take_a_palette_name_or_a_hex_literal_but_a_group_may_not() {
-        assert!(is_valid_project_color("cyan"));
-        assert!(is_valid_project_color("#e7b64e"));
-        assert!(!is_valid_project_color("chartreuse"));
+    fn a_stored_colour_is_a_palette_name_or_a_hex_literal_and_nothing_else() {
+        assert!(is_valid_color("cyan"));
+        assert!(is_valid_color("#e7b64e"));
 
-        // Groups stay palette-only: their colour drives sidebar entries and
-        // card edges, where staying inside the theme matters most.
+        assert!(!is_valid_color("chartreuse"));
+        assert!(!is_valid_color("red"));
+        assert!(!is_valid_color("#abc"));
+        assert!(!is_valid_color("#e7b64e; background: url(x)"));
+        assert!(!is_valid_color(""));
+
+        // is_known_swatch stays the narrower question — "is this one of the
+        // eight?" — which the pickers use to decide what to highlight.
         assert!(!is_known_swatch("#e7b64e"));
     }
 

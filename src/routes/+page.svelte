@@ -336,6 +336,7 @@
 {#if groupManagerOpen}
   <GroupManagerModal
     {groups}
+    {customIcons}
     onChanged={handleGroupsChanged}
     onClose={() => (groupManagerOpen = false)}
     onerror={handleError}

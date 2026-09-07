@@ -160,13 +160,14 @@ if it regresses.
     a downgraded binary fails loud instead of corrupting the store.
 
 12. **A stored colour is a palette name or an exact hex literal, and a custom
-    icon is never inlined.** `Group.color` holds one of the eight names in
-    `core::domain::palette` (mirrored, hand-maintained, in `src/lib/palette.ts`),
-    resolved to a `var(--color-swatch-*)` token at render, so a theme override
-    recolours every group coherently — a group's colour drives sidebar entries
-    and card edges, where staying inside the theme matters most.
-    `Project.color` additionally accepts a colour-picker literal, validated by
-    `is_hex_literal` as **exactly** `#` plus six hex digits. That strictness is
+    icon is never inlined.** `Project.color` and `Group.color` both accept
+    either: one of the eight names in `core::domain::palette` (mirrored,
+    hand-maintained, in `src/lib/palette.ts`), resolved to a
+    `var(--color-swatch-*)` token at render so a theme override recolours
+    everything coherently — or a colour-picker literal, validated by
+    `is_hex_literal` as **exactly** `#` plus six hex digits. A palette name is
+    the better answer, which is a reason for the pickers to offer the palette
+    first, not a reason to refuse a colour someone wants. That strictness is
     the security boundary, not pedantry: the value is interpolated into a
     `style` attribute and `style-src` still carries `unsafe-inline`, so the
     shape of what is admitted is the only thing stopping a stored colour

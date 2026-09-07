@@ -212,7 +212,7 @@ impl Project {
         }
 
         if let Some(Some(color)) = &update.color {
-            if !crate::domain::palette::is_valid_project_color(color) {
+            if !crate::domain::palette::is_valid_color(color) {
                 return Err(ProjectError::UnknownSwatch(color.clone()));
             }
         }
