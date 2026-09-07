@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::application::inspection::{results_from, DirectoryState, ProjectInspection};
 use crate::detectors::DetectorRunner;
-use crate::domain::naming::suggest_project_name;
+use crate::domain::naming::{disambiguate, suggest_project_name, taken_names_from};
 use crate::domain::sorting::{filter_deleted, filter_favorites, sort_projects, SortOptions};
 use crate::domain::{Project, Tracker, UpdateProject};
 use crate::error::ProjectError;
@@ -289,16 +289,29 @@ impl ProjectService {
         Ok(self.repo.find_by_directory(&normalized)?)
     }
 
+    /// Names of every non-deleted project. The input to
+    /// [`taken_names_from`](crate::domain::naming::taken_names_from) wherever a
+    /// caller needs to pick a name that will survive `create`'s duplicate check.
+    pub fn active_project_names(&self) -> Result<Vec<String>, ProjectError> {
+        Ok(self
+            .repo
+            .list()?
+            .into_iter()
+            .filter(|p| !p.is_deleted)
+            .map(|p| p.name)
+            .collect())
+    }
+
     /// Returns the project registered for `directory`, creating one if there
     /// isn't one yet. The name is inferred exactly the way the GUI's
     /// `suggest_project_name` command infers it — the git remote's repo name
-    /// when the directory is a repo with a remote, otherwise the folder name.
+    /// when the directory is a repo with a remote, otherwise the folder name —
+    /// and then disambiguated against the names already in use.
     ///
-    /// Note for callers: creation still goes through [`Self::create`], so its
-    /// duplicate-name rule applies. Registering `~/code/api` fails with
-    /// [`ProjectError::DuplicateName`] if some other project is already called
-    /// `api`. An auto-registering caller (the observer CLI) needs to decide
-    /// what to do about that — disambiguate the name, or surface the conflict.
+    /// Checks `find_by_directory` before running detection: an already-tracked
+    /// directory must resolve in a single lookup, not pay for a full detector
+    /// scan whose result is thrown away. The observer CLI calls this on
+    /// directories it has already registered far more often than on new ones.
     pub fn ensure_project(&self, directory: &str) -> Result<Project, ProjectError> {
         if let Some(existing) = self.find_by_directory(directory)? {
             return Ok(existing);
@@ -306,6 +319,38 @@ impl ProjectService {
         let trackers = self.preview_detection(directory);
         let name =
             suggest_project_name(&trackers, directory).unwrap_or_else(|| "project".to_string());
+        self.ensure_project_named(directory, &name)
+    }
+
+    /// Get-or-create for `directory`, using `name` when it has to create.
+    ///
+    /// The scanner's commit path: the user reviewed and possibly edited that
+    /// name, so it is used rather than re-derived. If it collides with a name
+    /// already in use it is disambiguated — `create` would otherwise reject it
+    /// with `DuplicateName`, which across a two-hundred-directory import means
+    /// losing a row for a reason the user cannot act on.
+    ///
+    /// **Idempotent, and never a rename.** A directory already tracked comes
+    /// back untouched, whatever `name` says: re-scanning a folder is a no-op,
+    /// not an edit to projects the user has since renamed by hand.
+    pub fn ensure_project_named(
+        &self,
+        directory: &str,
+        name: &str,
+    ) -> Result<Project, ProjectError> {
+        // A soft-deleted match is not "already tracked" — `create`'s own
+        // duplicate check agrees (it filters `is_deleted` too, below) — so a
+        // binned-then-recreated directory falls through to a fresh `create`
+        // rather than resurrecting the old, still-hidden row.
+        if let Some(existing) = self.find_by_directory(directory)?.filter(|p| !p.is_deleted) {
+            return Ok(existing);
+        }
+        let taken = taken_names_from(self.active_project_names()?);
+        let parent = Path::new(directory)
+            .parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or("");
+        let name = disambiguate(name, parent, &taken);
         self.create(name, directory.to_string(), None, None)
     }
 }
@@ -537,6 +582,153 @@ mod tests {
         let b = svc.ensure_project(&dir).unwrap();
         assert_eq!(a.id, b.id);
         assert_eq!(svc.list(Default::default()).unwrap().len(), 1);
+    }
+
+    /// Regression: `ensure_project` must resolve an already-tracked directory
+    /// from `find_by_directory` alone. It previously ran full detection first
+    /// and only then checked whether the directory was already registered —
+    /// the detection result was thrown away every time `ensure_project_named`
+    /// found an existing row, which is the common case for the observer CLI
+    /// re-polling directories it already knows about.
+    #[test]
+    fn ensure_project_skips_detection_for_an_already_tracked_directory() {
+        use crate::detectors::{Detector, DetectorRunner};
+        use crate::error::DetectorError;
+
+        // Counts invocations rather than panicking/erroring: a clean count of
+        // zero is unambiguous proof detection never ran, and doesn't rely on
+        // catching an unwind.
+        struct CountingDetector {
+            calls: Arc<Mutex<u32>>,
+        }
+        impl Detector for CountingDetector {
+            fn kind(&self) -> &'static str {
+                "counting"
+            }
+            fn detect(&self, _: &std::path::Path) -> Result<Option<Tracker>, DetectorError> {
+                *self.calls.lock().unwrap() += 1;
+                Ok(None)
+            }
+        }
+
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+        let launcher = Arc::new(FakeLauncher::default());
+        let dir = tmpdir("ensure-skip-detect");
+
+        // Register the directory with an empty detector set, so setup itself
+        // doesn't touch the counter.
+        let setup = ProjectService::new(
+            repo.clone(),
+            launcher.clone(),
+            Arc::new(DetectorRunner::new(vec![])),
+            repo.clone(),
+        );
+        let first = setup.ensure_project(&dir).unwrap();
+
+        // A second service over the same repo, wired with a detector that
+        // records every call it gets.
+        let calls = Arc::new(Mutex::new(0));
+        let svc = ProjectService::new(
+            repo.clone(),
+            launcher,
+            Arc::new(DetectorRunner::new(vec![Box::new(CountingDetector {
+                calls: calls.clone(),
+            })])),
+            repo,
+        );
+
+        let second = svc.ensure_project(&dir).unwrap();
+
+        assert_eq!(first.id, second.id);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            0,
+            "ensure_project ran detection on an already-tracked directory"
+        );
+    }
+
+    /// The bug this fixes: two `api` directories under different parents both
+    /// have to register. Before `disambiguate`, the second returned
+    /// `DuplicateName` and the observer CLI simply failed on it.
+    /// Note the expectation is derived, not hardcoded: `tmpdir` prefixes its
+    /// argument (`pi-svc-collide-work`), and that prefix is the parent folder
+    /// name `disambiguate` qualifies with. Spelling the prefix into the
+    /// assertion would couple this test to the helper's naming.
+    #[test]
+    fn ensure_project_disambiguates_a_colliding_name() {
+        let svc = service(Arc::new(FakeLauncher::default()));
+        let code = tmpdir("collide-code");
+        let work = tmpdir("collide-work");
+        let a = std::path::Path::new(&code).join("api");
+        let b = std::path::Path::new(&work).join("api");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+
+        let first = svc.ensure_project(a.to_str().unwrap()).unwrap();
+        let second = svc.ensure_project(b.to_str().unwrap()).unwrap();
+
+        let work_folder = std::path::Path::new(&work)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(first.name, "api");
+        assert_eq!(second.name, format!("{work_folder}/api"));
+        assert_ne!(first.id, second.id);
+    }
+
+    #[test]
+    fn ensure_project_named_uses_the_given_name() {
+        let svc = service(Arc::new(FakeLauncher::default()));
+        let dir = tmpdir("named");
+
+        let project = svc.ensure_project_named(&dir, "Chosen Name").unwrap();
+
+        // `Project::new` runs every name through `remove_spaces`
+        // (crates/core/src/domain/project.rs), so the space survives as an
+        // underscore — the same normalization `create` already applies to
+        // any caller-supplied name, not something `ensure_project_named`
+        // introduces.
+        assert_eq!(project.name, "Chosen_Name");
+    }
+
+    /// Get-or-create: a directory already tracked comes back as-is, and the
+    /// supplied name does not rename it. Re-scanning a folder must be a no-op,
+    /// not an edit.
+    #[test]
+    fn ensure_project_named_is_idempotent_and_does_not_rename() {
+        let svc = service(Arc::new(FakeLauncher::default()));
+        let dir = tmpdir("named-idempotent");
+
+        let first = svc.ensure_project_named(&dir, "First").unwrap();
+        let second = svc.ensure_project_named(&dir, "Second").unwrap();
+
+        assert_eq!(first.id, second.id);
+        assert_eq!(second.name, "First");
+        assert_eq!(svc.list(Default::default()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn ensure_project_named_disambiguates_a_colliding_name() {
+        let svc = service(Arc::new(FakeLauncher::default()));
+        let first_dir = tmpdir("named-collide-a");
+        let parent = tmpdir("clients");
+        let second_dir = std::path::Path::new(&parent).join("api");
+        std::fs::create_dir_all(&second_dir).unwrap();
+
+        svc.ensure_project_named(&first_dir, "api").unwrap();
+        let second = svc
+            .ensure_project_named(second_dir.to_str().unwrap(), "api")
+            .unwrap();
+
+        // Derived, not hardcoded — `tmpdir` prefixes its argument, and that
+        // prefixed folder name is what the qualifier uses.
+        let parent_folder = std::path::Path::new(&parent)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(second.name, format!("{parent_folder}/api"));
     }
 
     fn mk_update_group_id(id: Option<&str>) -> UpdateProject {

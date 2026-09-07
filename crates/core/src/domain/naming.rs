@@ -1,4 +1,5 @@
 use crate::domain::Tracker;
+use std::collections::HashSet;
 
 /// `https://github.com/user/my-repo.git` / `git@github.com:user/my-repo.git` → `my-repo`.
 pub fn repo_name_from_url(url: &str) -> Option<String> {
@@ -27,6 +28,60 @@ pub fn suggest_project_name(trackers: &[Tracker], directory: &str) -> Option<Str
         _ => None,
     });
     from_remote.or_else(|| folder_name_from_directory(directory))
+}
+
+/// Lowercases `names` into the set [`disambiguate`] expects.
+///
+/// Exists so the case rule lives in one place rather than at every call site.
+/// It must stay case-*insensitive* to match
+/// `Project::check_for_duplicate_name_or_dir`, which compares with
+/// `eq_ignore_ascii_case` — a name this function considered free but `create`
+/// considers a duplicate would fail at commit, after the user reviewed it.
+pub fn taken_names_from(names: impl IntoIterator<Item = String>) -> HashSet<String> {
+    names.into_iter().map(|n| n.trim().to_lowercase()).collect()
+}
+
+/// A free project name for a directory, given the names already in use.
+///
+/// Project names must be unique, so scanning `~/code` and `~/work` when both
+/// hold an `api` folder collides on the first run. Resolution, in order:
+///
+/// 1. `preferred` if free — `api`
+/// 2. else parent-qualified — `work/api`
+/// 3. else suffixed — `work/api (2)`, counting up
+///
+/// Step 3 is the terminating fallback: the loop always finds a free integer,
+/// so this never loops forever and always returns something usable. Qualifying
+/// by parent is preferred over a bare suffix because `api (2)` tells you
+/// nothing a month later, where `work/api` says which one it is.
+///
+/// Shared deliberately with `ProjectService::ensure_project` — the scanner and
+/// the observer CLI meet the same collision and must not invent two answers.
+pub fn disambiguate(preferred: &str, parent_dir: &str, taken: &HashSet<String>) -> String {
+    let preferred = preferred.trim();
+    let is_free = |candidate: &str| !taken.contains(&candidate.trim().to_lowercase());
+
+    if is_free(preferred) {
+        return preferred.to_string();
+    }
+
+    let qualified = match folder_name_from_directory(parent_dir) {
+        Some(parent) if !parent.is_empty() => {
+            let qualified = format!("{parent}/{preferred}");
+            if is_free(&qualified) {
+                return qualified;
+            }
+            qualified
+        }
+        // A drive root or an empty parent gives nothing to qualify with, so
+        // suffix the bare name instead of producing a leading slash.
+        _ => preferred.to_string(),
+    };
+
+    (2u32..)
+        .map(|n| format!("{qualified} ({n})"))
+        .find(|candidate| is_free(candidate))
+        .expect("an unbounded counter always reaches a free name")
 }
 
 #[cfg(test)]
@@ -117,5 +172,67 @@ mod tests {
     #[test]
     fn suggest_returns_none_for_empty_directory_and_no_trackers() {
         assert_eq!(suggest_project_name(&[], ""), None);
+    }
+
+    fn taken(names: &[&str]) -> std::collections::HashSet<String> {
+        taken_names_from(names.iter().map(|s| s.to_string()))
+    }
+
+    #[test]
+    fn disambiguate_keeps_a_free_name() {
+        assert_eq!(disambiguate("api", "/home/user/work", &taken(&[])), "api");
+    }
+
+    #[test]
+    fn disambiguate_qualifies_by_parent_on_collision() {
+        assert_eq!(
+            disambiguate("api", "/home/user/work", &taken(&["api"])),
+            "work/api"
+        );
+    }
+
+    #[test]
+    fn disambiguate_suffixes_when_the_qualified_name_also_collides() {
+        assert_eq!(
+            disambiguate("api", "/home/user/work", &taken(&["api", "work/api"])),
+            "work/api (2)"
+        );
+        assert_eq!(
+            disambiguate(
+                "api",
+                "/home/user/work",
+                &taken(&["api", "work/api", "work/api (2)"])
+            ),
+            "work/api (3)"
+        );
+    }
+
+    /// The collision rule is case-insensitive, matching
+    /// `check_for_duplicate_name_or_dir`, which compares with
+    /// `eq_ignore_ascii_case`. A scanner that produced `API` next to an
+    /// existing `api` would be rejected by `create` at commit time.
+    #[test]
+    fn disambiguate_matches_case_insensitively() {
+        assert_eq!(
+            disambiguate("API", "/home/user/work", &taken(&["api"])),
+            "work/API"
+        );
+    }
+
+    /// Windows paths reach this function too — the parent segment has to come
+    /// off a backslash path as readily as a forward-slash one.
+    #[test]
+    fn disambiguate_reads_a_windows_parent() {
+        assert_eq!(
+            disambiguate("api", "D:\\work", &taken(&["api"])),
+            "work/api"
+        );
+    }
+
+    /// A parent that yields no usable segment (a drive root, an empty string)
+    /// must still terminate, falling straight through to the suffix.
+    #[test]
+    fn disambiguate_falls_back_to_a_suffix_without_a_parent() {
+        assert_eq!(disambiguate("api", "", &taken(&["api"])), "api (2)");
     }
 }
