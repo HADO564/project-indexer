@@ -1,9 +1,12 @@
 <script lang="ts">
   import { page } from "$app/stores";
+  import { listGroups } from "$lib/api/groups";
+  import { listCustomIcons } from "$lib/api/icons";
   import { isOpenWithAppMissing, openProjectDirectory } from "$lib/api/opener";
   import { inspectProject, refreshProjectTrackers } from "$lib/api/projects";
-  import type { ProjectInspection } from "$lib/api/types";
-  import EditProjectForm from "$lib/components/EditProjectForm.svelte";
+  import type { Group, ProjectInspection } from "$lib/api/types";
+  import { customIconSrc } from "$lib/icons";
+  import EditProjectModal from "$lib/components/EditProjectModal.svelte";
   import ErrorBanner from "$lib/components/ErrorBanner.svelte";
   import ProjectIdentity from "$lib/components/ProjectIdentity.svelte";
   import TrackerPanel from "$lib/components/TrackerPanel.svelte";
@@ -20,6 +23,28 @@
   let loading = $state(false);
   let editing = $state(false);
   let activeKind = $state<string | null>(null);
+  // The edit form offers a group and an icon here too, so this route needs the
+  // same two lists the main page fetches. Both are best-effort: failing to
+  // load them must not stop the detail view rendering.
+  let groups = $state<Group[]>([]);
+  let customIcons = $state<Map<string, string>>(new Map());
+
+  async function loadGroups() {
+    try {
+      groups = await listGroups();
+    } catch {
+      groups = [];
+    }
+  }
+
+  async function loadCustomIcons() {
+    try {
+      const icons = await listCustomIcons();
+      customIcons = new Map(icons.map((i) => [i.name, customIconSrc(i.svg)]));
+    } catch {
+      customIcons = new Map();
+    }
+  }
 
   async function load(only?: string) {
     if (!id) return;
@@ -55,6 +80,11 @@
     // re-runs when `id` changes
     void id;
     load();
+  });
+
+  $effect(() => {
+    loadGroups();
+    loadCustomIcons();
   });
 
   let detected = $derived(inspection?.results.filter((r) => r.status === "detected") ?? []);
@@ -98,11 +128,6 @@
   }
 </script>
 
-<svelte:window
-  onkeydown={(e) => {
-    if (editing && e.key === "Escape") editing = false;
-  }}
-/>
 
 <main class="mx-auto max-w-3xl px-4 py-8">
   <a href="/" class="font-display text-[14px] uppercase tracking-wide text-accent hover:underline">&larr; all projects</a>
@@ -211,30 +236,15 @@
 </main>
 
 {#if editing && inspection}
-  <div
-    class="fixed inset-0 z-[100] flex items-center justify-center bg-void/85 p-4"
-    role="presentation"
-    onclick={() => (editing = false)}
-  >
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- click only stops the backdrop's close-on-click-outside; Escape is
-         handled globally by <svelte:window>, so there's no keyboard pair -->
-    <div
-      class="w-11/12 max-w-lg rounded-sm border border-line bg-panel p-4"
-      role="dialog"
-      aria-modal="true"
-      tabindex="-1"
-      onclick={(e) => e.stopPropagation()}
-    >
-      <h2 class="mb-3 text-sm text-phos">
-        <span class="text-accent">&gt;</span>&nbsp;edit {inspection.project.name}
-      </h2>
-      <EditProjectForm
-        project={inspection.project}
-        onSaved={handleSaved}
-        onCancel={() => (editing = false)}
-        onerror={(m) => (banner = m)}
-      />
-    </div>
-  </div>
+  <EditProjectModal
+    project={inspection.project}
+    {groups}
+    knownPropertyKeys={Object.keys(inspection.project.properties)}
+    {customIcons}
+    onIconsChanged={loadCustomIcons}
+    onGroupsStale={loadGroups}
+    onSaved={handleSaved}
+    onClose={() => (editing = false)}
+    onerror={(m) => (banner = m)}
+  />
 {/if}

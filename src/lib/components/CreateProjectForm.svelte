@@ -1,13 +1,27 @@
 <script lang="ts">
-  import { createProject, suggestProjectName } from "$lib/api/projects";
-  import type { CreateProjectInput } from "$lib/api/types";
+  import { isGroupNotFound } from "$lib/api/groups";
+  import { createProject, suggestProjectName, updateProject } from "$lib/api/projects";
+  import type { CreateProjectInput, Group } from "$lib/api/types";
   import DirectoryField from "./DirectoryField.svelte";
-  import { cardClass, inputClass, labelClass, primaryButtonClass } from "./styles";
+  import IconPicker from "./IconPicker.svelte";
+  import PropertyEditor from "./PropertyEditor.svelte";
+  import SwatchPicker from "./SwatchPicker.svelte";
+  import { inputClass, labelClass, primaryButtonClass } from "./styles";
 
   let {
+    groups,
+    knownPropertyKeys = [],
+    customIcons,
+    onIconsChanged,
+    onGroupsStale,
     onCreated,
     onerror,
   }: {
+    groups: Group[];
+    knownPropertyKeys?: string[];
+    customIcons: Map<string, string>;
+    onIconsChanged?: () => void | Promise<void>;
+    onGroupsStale?: () => void | Promise<void>;
     onCreated: () => void | Promise<void>;
     onerror?: (message: string) => void;
   } = $props();
@@ -16,6 +30,10 @@
   let directory = $state("");
   let description = $state("");
   let tags = $state("");
+  let color = $state<string | null>(null);
+  let icon = $state<string | null>(null);
+  let groupId = $state<string | null>(null);
+  let properties = $state<Record<string, string>>({});
   let creating = $state(false);
 
   function parseTags(raw: string): string[] {
@@ -47,43 +65,74 @@
         description: description || null,
         tags: parseTags(tags),
       };
-      await createProject(input);
+      const created = await createProject(input);
+      // create_project takes only name/directory/description/tags, so the
+      // three new fields are applied straight after. One extra call against a
+      // local database, and CreateProjectInput stays unchanged.
+      const hasProperties = Object.keys(properties).length > 0;
+      if (color || icon || groupId || hasProperties) {
+        await updateProject(created.id, { color, icon, group_id: groupId, properties });
+      }
       name = "";
       directory = "";
       description = "";
       tags = "";
+      color = null;
+      icon = null;
+      groupId = null;
+      properties = {};
       await onCreated();
     } catch (err) {
-      onerror?.((err as Error).message);
+      // The project itself was created; only the group assignment failed,
+      // because the group was deleted between opening this form and
+      // submitting it. Clear the stale selection and refetch rather than
+      // retrying — the backend rejected the write and changed nothing.
+      if (isGroupNotFound(err)) {
+        groupId = null;
+        await onGroupsStale?.();
+        onerror?.("That group no longer exists — the project was created without one.");
+        await onCreated();
+      } else {
+        onerror?.((err as Error).message);
+      }
     } finally {
       creating = false;
     }
   }
 </script>
 
-<section class={`mb-6 ${cardClass}`}>
-  <h2 class="mb-3 font-display text-[14px] uppercase tracking-wide text-phos-dim"><span class="text-gold">//</span> new project</h2>
-  <form onsubmit={handleSubmit} class="flex flex-col gap-3">
-    <label class={labelClass}>
-      Name
-      <input bind:value={name} required placeholder="My project" class={inputClass} />
-    </label>
-    <DirectoryField
-      bind:value={directory}
-      required
-      onerror={(m) => onerror?.(m)}
-      onPicked={handleDirectoryPicked}
-    />
-    <label class={labelClass}>
-      Description
-      <input bind:value={description} placeholder="Optional description" class={inputClass} />
-    </label>
-    <label class={labelClass}>
-      Tags (comma separated)
-      <input bind:value={tags} placeholder="rust, tauri" class={inputClass} />
-    </label>
-    <button type="submit" disabled={creating} class={`self-start ${primaryButtonClass}`}>
-      {creating ? "Creating…" : "Create project"}
-    </button>
-  </form>
-</section>
+<form onsubmit={handleSubmit} class="flex flex-col gap-3">
+  <label class={labelClass}>
+    Name
+    <input bind:value={name} required placeholder="My project" class={inputClass} />
+  </label>
+  <DirectoryField
+    bind:value={directory}
+    required
+    onerror={(m) => onerror?.(m)}
+    onPicked={handleDirectoryPicked}
+  />
+  <label class={labelClass}>
+    Description
+    <input bind:value={description} placeholder="Optional description" class={inputClass} />
+  </label>
+  <label class={labelClass}>
+    Tags (comma separated)
+    <input bind:value={tags} placeholder="rust, tauri" class={inputClass} />
+  </label>
+  <label class={labelClass}>
+    Group
+    <select bind:value={groupId} class={inputClass}>
+      <option value={null}>Ungrouped</option>
+      {#each groups as group (group.id)}
+        <option value={group.id}>{group.name}</option>
+      {/each}
+    </select>
+  </label>
+  <SwatchPicker bind:value={color} allowNone allowCustom />
+  <IconPicker bind:value={icon} {customIcons} {onIconsChanged} onerror={(m) => onerror?.(m)} />
+  <PropertyEditor bind:value={properties} knownKeys={knownPropertyKeys} />
+  <button type="submit" disabled={creating} class={`self-start ${primaryButtonClass}`}>
+    {creating ? "Creating…" : "Create project"}
+  </button>
+</form>

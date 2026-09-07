@@ -1,36 +1,72 @@
 <script lang="ts">
-  import type { Project } from "$lib/api/types";
-  import EditProjectForm from "./EditProjectForm.svelte";
-  import ProjectCard from "./ProjectCard.svelte";
+  import type { Group, Project } from "$lib/api/types";
+  import { markVar } from "$lib/palette";
+  import type { ViewMode } from "$lib/viewState";
+  import BinActions from "./BinActions.svelte";
+  import ProjectActionsMenu from "./ProjectActionsMenu.svelte";
+  import ProjectRow from "./ProjectRow.svelte";
+  import ProjectTile from "./ProjectTile.svelte";
   import { cardClass } from "./styles";
 
   let {
     projects,
+    groups,
+    customIcons,
+    mode,
     loading,
-    editingId,
     missingDirs,
     onEdit,
-    onCancelEdit,
-    onSaved,
     onRequestDelete,
     onOpened,
     onTrackersRefreshed,
     onOpenWithAppMissing,
+    onToggleFavorite,
+    emptyMessage = "No projects yet.",
+    binMode = false,
+    onBinChanged,
     onerror,
   }: {
     projects: Project[];
+    groups: Group[];
+    customIcons: Map<string, string>;
+    mode: ViewMode;
     loading: boolean;
-    editingId: string | null;
     missingDirs: Set<string>;
     onEdit: (project: Project) => void;
-    onCancelEdit: () => void;
-    onSaved: () => void | Promise<void>;
     onRequestDelete: (project: Project) => void;
     onOpened: () => void | Promise<void>;
     onTrackersRefreshed: () => void | Promise<void>;
     onOpenWithAppMissing: (project: Project) => void;
+    // Only the Favourites view supplies this; elsewhere the star stays a
+    // static marker, exactly as it is today.
+    onToggleFavorite?: (project: Project) => void;
+    // Per-view, because "No projects yet." is wrong for a view that filters:
+    // you may well have projects and no favourites.
+    emptyMessage?: string;
+    // Bin rows never offer Open, Edit or Detect type — the directory is gone —
+    // and must not open the edit form either.
+    binMode?: boolean;
+    onBinChanged?: () => void | Promise<void>;
     onerror: (message: string) => void;
   } = $props();
+
+  // Which Bin row, if any, has had its purge button clicked once. Owned here
+  // rather than per row so arming one disarms the others, which is what
+  // BinModal's single confirmPurgeId did.
+  let confirmPurgeId = $state<string | null>(null);
+
+  // Leaving the Bin disarms. BinModal reset this by being destroyed on close;
+  // this list survives the view change, so it has to do it explicitly.
+  $effect(() => {
+    if (!binMode) confirmPurgeId = null;
+  });
+
+  // The group's palette *name*, resolved per project. Null when the project
+  // has no group or when its group has since been deleted.
+  function groupColorOf(project: Project): string | null {
+    if (!project.group_id) return null;
+    return groups.find((g) => g.id === project.group_id)?.color ?? null;
+  }
 </script>
 
 <section class={cardClass}>
@@ -41,24 +77,73 @@
          current list on screen rather than flashing this. -->
     <p class="text-sm text-phos-dim">Loading…</p>
   {:else if projects.length === 0}
-    <p class="text-sm text-phos-dim">No projects yet.</p>
+    <p class="text-sm text-phos-dim">{emptyMessage}</p>
   {:else}
-    <ul class="flex flex-col gap-3">
+    {#snippet standardActions(project: Project)}
+      <ProjectActionsMenu
+        {project}
+        {onEdit}
+        {onRequestDelete}
+        {onOpened}
+        {onTrackersRefreshed}
+        {onOpenWithAppMissing}
+        {onerror}
+      />
+    {/snippet}
+
+    {#snippet binActions(project: Project)}
+      <BinActions
+        {project}
+        armed={confirmPurgeId === project.id}
+        onArm={() => (confirmPurgeId = project.id)}
+        onRestored={() => onBinChanged?.()}
+        onPurged={() => {
+          confirmPurgeId = null;
+          return onBinChanged?.();
+        }}
+        {onerror}
+      />
+    {/snippet}
+
+    <ul
+      class={mode === "grid"
+        ? "grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3"
+        : "flex flex-col gap-3"}
+    >
       {#each projects as project (project.id)}
-        <li class="rounded-sm border border-line p-3">
-          {#if editingId === project.id}
-            <EditProjectForm {project} {onSaved} onCancel={onCancelEdit} {onerror} />
-          {:else}
-            <ProjectCard
+        {@const groupColor = groupColorOf(project)}
+        {@const missing = missingDirs.has(project.id)}
+        <!-- The card's border takes the same cascaded colour as the mark —
+             the project's own, else its group's — so a project is findable by
+             colour from its outline, not just its icon. The left edge stays
+             thicker, which is what still distinguishes group membership when
+             several groups sit together in All or Favourites. -->
+        {@const edge = markVar(project.color, groupColor)}
+        {@const coloured = Boolean(project.color ?? groupColor)}
+        <li
+          class="rounded-sm border border-line p-3"
+          style={coloured ? `border-color: ${edge}; border-left-width: 3px` : undefined}
+        >
+          {#if mode === "grid"}
+            <ProjectTile
               {project}
-              directoryMissing={missingDirs.has(project.id)}
-              {onEdit}
-              {onRequestDelete}
-              {onOpened}
-              {onTrackersRefreshed}
-              {onOpenWithAppMissing}
-              {onerror}
-            />
+              directoryMissing={missing}
+              {customIcons}
+              {groupColor}
+              {onToggleFavorite}
+            >
+              {#snippet actions()}{@render (binMode ? binActions : standardActions)(project)}{/snippet}
+            </ProjectTile>
+          {:else}
+            <ProjectRow
+              {project}
+              directoryMissing={missing}
+              {customIcons}
+              {groupColor}
+              {onToggleFavorite}
+            >
+              {#snippet actions()}{@render (binMode ? binActions : standardActions)(project)}{/snippet}
+            </ProjectRow>
           {/if}
         </li>
       {/each}

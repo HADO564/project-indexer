@@ -16,10 +16,6 @@
     <dt class="font-display text-[13px] uppercase tracking-wide text-phos-dim">Description</dt>
     <dd class="text-phos">{project.description}</dd>
   {/if}
-  {#if project.client}
-    <dt class="font-display text-[13px] uppercase tracking-wide text-phos-dim">Client</dt>
-    <dd class="text-phos">{project.client}</dd>
-  {/if}
   {#if project.tags.length > 0}
     <dt class="font-display text-[13px] uppercase tracking-wide text-phos-dim">Tags</dt>
     <dd class="text-phos">{project.tags.join(", ")}</dd>
@@ -28,6 +24,11 @@
     <dt class="font-display text-[13px] uppercase tracking-wide text-phos-dim">Notes</dt>
     <dd class="text-phos">{project.notes}</dd>
   {/if}
+
+  {#each Object.entries(project.properties) as [key, value] (key)}
+    <dt class="font-display text-[13px] uppercase tracking-wide text-phos-dim">{key}</dt>
+    <dd class="text-phos">{value}</dd>
+  {/each}
 
   <dt class="font-display text-[13px] uppercase tracking-wide text-phos-dim">Created</dt>
   <dd class="text-phos">{formatDate(project.created_at)}</dd>

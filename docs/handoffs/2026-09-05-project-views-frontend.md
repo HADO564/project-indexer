@@ -1,8 +1,12 @@
 # Handoff — project views, colour, icons and groups (frontend half)
 
 **Date:** 2026-09-05
-**Status:** **ready — the backend half is complete and merged to `main`.** Nothing
-here needs a design decision first; the shape is settled and written down.
+**Status:** **complete** — implemented by
+[`docs/superpowers/plans/2026-09-06-project-views-frontend.md`](../superpowers/plans/2026-09-06-project-views-frontend.md).
+The five open questions in §6 are answered in that plan's "Decisions this plan
+settles"; two deviations from §3 and from the spec are argued in its "Two
+deviations from the spec", and one correction to §3's icon-error list is inline
+below. Kept for the reasoning, not as live work.
 **Prerequisite:** satisfied. [`docs/superpowers/plans/2026-09-05-groups-backend.md`](../superpowers/plans/2026-09-05-groups-backend.md)
 shipped as 30 commits: nine TDD tasks each independently reviewed, a whole-branch
 review, and a six-item fix wave with its own re-review. The eight commands below
@@ -163,8 +167,15 @@ rejects any SVG that would not re-parse as well-formed XML — an undefined enti
 (`&xxe;`), a bare `&` in text, and notably `&nbsp;`, which is an HTML entity that
 is simply not defined in XML and turns up in HTML-flavoured icon exports. It also
 rejects anything with no drawable element left after sanitizing, anything over
-256 KB, and any attribute value containing a backslash. All arrive as
-`ProjectError::Icon(...)` with a message naming the reason. Surface that message
+256 KB, and anything that is not an SVG at all. All arrive as
+`ProjectError::Icon(...)` with a message naming the reason.
+
+*Correction, verified against `sanitize.rs:286` while implementing this half:*
+a backslash in an attribute value does **not** fail the import. The sanitizer
+`continue`s — it drops that one attribute and keeps the icon. So there is no
+message to surface for it, and nothing for the UI to do; the icon simply
+imports having quietly lost that attribute, the same way it loses any
+attribute off the allow-list. Surface that message
 rather than a generic failure — "this icon could not be imported" tells the user
 nothing they can act on, and the reasons here are all things they can fix.
 
@@ -253,7 +264,8 @@ tightening this, and this feature is a good opportunity to not make it worse.
 drifts silently — nothing checks it. Update it in the same commit as anything it
 mirrors.
 
-**`pnpm run check` has a known baseline:** 0 errors and 8
+**`pnpm run check` has a known baseline:** 0 errors and 8 *(now 7 — the
+`client` field it counted was retired; see `KNOWN-ISSUES.md` PI-003)*
 `state_referenced_locally` warnings, all in `EditProjectForm.svelte`. That is
 `PI-003`, a documented false positive. Do not "fix" them; do not add a ninth.
 

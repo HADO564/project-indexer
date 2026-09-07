@@ -12,6 +12,28 @@ project is built, tested and worked on live in
 
 ### Added
 
+- **Project views, colour, icons and groups.** The project list becomes
+  something you scan rather than read. Three view modes — list, grid and
+  compact — and a sidebar replacing the flat single column: All, Favourites,
+  your groups, Ungrouped and Bin, each with a count. Selecting an entry changes
+  what the list shows.
+- **Groups.** Create, rename, recolour, re-icon, reorder and delete them from a
+  group manager reached off the sidebar. A project belongs to one group at a
+  time; tags stay the non-exclusive mechanism. Deleting a group never deletes a
+  project — its members become Ungrouped.
+- **A colour and an icon per project, and per group.** Icons come from a
+  bundled set of 25, or from your own SVGs. Colours are eight palette entries
+  resolved through the theme, so a future theme recolours everything
+  coherently.
+- **Search** across project name, path, tags and property values, applied
+  within the selected view. **Ctrl+;** focuses the search bar (Cmd+; on macOS);
+  Escape clears it, then leaves it.
+- **Custom project properties** — add any key/value facts you like to a
+  project, and search them with `name: value` (e.g. `client: acme`). A bare
+  `name:` finds every project that has that property. The search bar lists the
+  names already in use.
+- **A colour picker for projects and groups**, alongside the eight palette
+  colours.
 - **A content security policy.** The app shipped with `"csp": null`, which was
   survivable only because every script, font and icon is bundled. There is now a
   real policy: SvelteKit emits the strict half (its inline boot script is hashed
@@ -22,13 +44,29 @@ project is built, tested and worked on live in
 
 ### Changed
 
+- **The `client` field is gone**, replaced by custom properties. Any client you
+  had recorded is moved to a `client` property automatically on first launch.
+- Creating and editing a project now happen in a dialog rather than inline
+  above and inside the list.
+- The Favourites and Bin modals are now sidebar views, so there is one
+  navigation system rather than two. Restore, and the permanent delete's
+  two-click confirm, behave exactly as they did.
 - **The delete dialog no longer pre-selects deleting the folder from disk.** It
   now opens on "just remove it from this app", the destructive option is second
   rather than first, and the confirm button says which of the two it will do
   instead of always reading "Delete".
 
+### Removed
+
+- **The compact view.** It differed from the list view only by hiding the
+  tracker badges, which is a setting at most, not a third mode. Anyone left in
+  it lands on the list view.
+
 ### Fixed
 
+- The icon sanitizer no longer strips `stroke-dasharray`, `stroke-dashoffset`,
+  `stroke-miterlimit`, `fill-opacity` or `stroke-opacity` — five inert
+  presentation attributes real icon sets use routinely.
 - **A tray-icon failure stopped the app from starting at all, with no window and
   no message.** The tray is built during startup, and any failure there was
   propagated out of Tauri's `setup` hook into `run()`'s `.expect(..)`, killing
