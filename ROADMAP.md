@@ -147,7 +147,10 @@ generically. See [`CONTRIBUTING.md`](CONTRIBUTING.md#adding-a-detector).
 - **Unity** — the next detector, and the one the generic path was built for.
 - **Blender** — same shape.
 
-**Ship the re-detect sweep first.** Detection results are persisted, so adding a
+**Ship the re-detect sweep before either of these.** It does not gate the
+scanner — the two are independent — but scanning first raises what it is worth:
+importing two hundred projects before Unity ships turns a handful of stale
+records into two hundred. Detection results are persisted, so adding a
 detector does nothing for projects already registered — a git+Unity directory
 added today stays git-only after a Unity detector ships, with nothing to say it
 is incomplete. Shipping Unity without the sweep ships a silent gap in every
@@ -191,8 +194,8 @@ and it should stay behind it.
 
 ## Scanning a folder for projects
 
-Point the app at `~/code` and let it find everything inside, instead of adding
-projects one directory at a time. This is the single biggest usability gap for
+**This is the next thing built.** Point the app at `~/code` and let it find
+everything inside, instead of adding projects one directory at a time. This is the single biggest usability gap for
 anyone adopting the app with an existing disk full of work — and adoption is
 exactly when the manual path is most painful.
 
