@@ -4,6 +4,7 @@ A desktop app that keeps track of the projects scattered across your disk — wh
 they are, where they are, and what opens them.
 
 [![CI](https://github.com/HADO564/project-indexer/actions/workflows/ci.yml/badge.svg)](https://github.com/HADO564/project-indexer/actions/workflows/ci.yml)
+[![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue)](LICENSE)
 
 Point it at a directory and it works out what kind of project lives there — a
 git repository, an Unreal Engine project — and records the details. From then on
@@ -289,6 +290,12 @@ Development setup, the checks CI runs, and the structural rules the codebase
 enforces on purpose are in [**CONTRIBUTING.md**](CONTRIBUTING.md). Two worth
 knowing up front: `indexer-core` must never depend on Tauri (the compiler
 enforces it), and a new detector should need no frontend code at all.
+
+Pull requests need agreement to the [**CLA**](CLA.md) — you keep the copyright
+in your work, and the project gets the right to relicense it, which is what
+makes the two-year Apache 2.0 conversion below possible to honour. There is
+nothing to do in advance: a bot asks on your first pull request and never asks
+again.
 
 Also here: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and
 [`SECURITY.md`](SECURITY.md) for reporting a vulnerability privately.
