@@ -18,7 +18,9 @@ jobs:
     steps:
       - name: Check the contributor has signed the CLA
         if: >
-          (github.event.comment.body == 'I have read the CLA document and I hereby sign the CLA')
+          (github.event_name == 'issue_comment'
+            && github.event.issue.pull_request
+            && github.event.comment.body == 'I have read the CLA document and I hereby sign the CLA')
           || github.event_name == 'pull_request_target'
         uses: contributor-assistant/github-action@v2.6.1
         env:
@@ -30,7 +32,7 @@ jobs:
           # not add commits to main. Create it once:
           #   git switch --orphan cla-signatures && git commit --allow-empty \n          #     -m 'chore: branch for CLA signatures' && git push -u origin cla-signatures
           branch: cla-signatures
-          allowlist: dependabot[bot]
+          allowlist: HADO564,dependabot[bot]
           custom-notsigned-prcomment: >
             Thanks for the pull request. Project Indexer needs every contributor
             to agree to its [Contributor License Agreement](https://github.com/HADO564/project-indexer/blob/main/CLA.md)
