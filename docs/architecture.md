@@ -263,6 +263,19 @@ because they edit a first-party struct. A dedicated commit-graph panel is a
 *frontend feature*, and gated on the containment decision. Ask which of the
 three a proposal is before arguing about how to build it.
 
+**The contract is also what makes sandboxed third-party detectors viable.**
+WASI is capability-based: a module reaches exactly the directories preopened
+for it, read-only when `dir_perms` says so. That is the four properties above,
+enforced by a runtime rather than by convention — which is why the settled
+plan for third-party detectors is a downloaded wasm module (`ROADMAP.md` →
+*Plugins*) rather than the general-purpose plugin API most apps end up
+building. Two things in this codebase assume compile-time detectors and will
+have to give: `Tracker` is a closed enum, and `Detector::kind()` returns
+`&'static str` where a downloaded detector's kind is a runtime string —
+`&str` costs nothing and breaks neither existing detector. `DetectorRunner`
+needs no change at all; it holds `Vec<Box<dyn Detector>>` and does not care
+what is behind the box.
+
 ## Recorded decisions
 
 Choices that could plausibly have gone the other way, settled on purpose so
