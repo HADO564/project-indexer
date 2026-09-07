@@ -18,7 +18,8 @@ project is built, tested and worked on live in
   source stays readable and modifiable. What is no longer permitted is shipping
   it, or a close substitute for it, as a commercial product competing with this
   one. Every version converts to the Apache License 2.0 two years after it is
-  published. Versions 0.1.0 and 0.1.1 were released under MIT and remain MIT.
+  published. Every version up to and including 0.2.0 was released under MIT
+  and remains MIT.
 
 ### Added
 
