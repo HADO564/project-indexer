@@ -307,7 +307,15 @@ impl ProjectService {
     /// `suggest_project_name` command infers it — the git remote's repo name
     /// when the directory is a repo with a remote, otherwise the folder name —
     /// and then disambiguated against the names already in use.
+    ///
+    /// Checks `find_by_directory` before running detection: an already-tracked
+    /// directory must resolve in a single lookup, not pay for a full detector
+    /// scan whose result is thrown away. The observer CLI calls this on
+    /// directories it has already registered far more often than on new ones.
     pub fn ensure_project(&self, directory: &str) -> Result<Project, ProjectError> {
+        if let Some(existing) = self.find_by_directory(directory)? {
+            return Ok(existing);
+        }
         let trackers = self.preview_detection(directory);
         let name =
             suggest_project_name(&trackers, directory).unwrap_or_else(|| "project".to_string());
@@ -570,6 +578,69 @@ mod tests {
         let b = svc.ensure_project(&dir).unwrap();
         assert_eq!(a.id, b.id);
         assert_eq!(svc.list(Default::default()).unwrap().len(), 1);
+    }
+
+    /// Regression: `ensure_project` must resolve an already-tracked directory
+    /// from `find_by_directory` alone. It previously ran full detection first
+    /// and only then checked whether the directory was already registered —
+    /// the detection result was thrown away every time `ensure_project_named`
+    /// found an existing row, which is the common case for the observer CLI
+    /// re-polling directories it already knows about.
+    #[test]
+    fn ensure_project_skips_detection_for_an_already_tracked_directory() {
+        use crate::detectors::{Detector, DetectorRunner};
+        use crate::error::DetectorError;
+
+        // Counts invocations rather than panicking/erroring: a clean count of
+        // zero is unambiguous proof detection never ran, and doesn't rely on
+        // catching an unwind.
+        struct CountingDetector {
+            calls: Arc<Mutex<u32>>,
+        }
+        impl Detector for CountingDetector {
+            fn kind(&self) -> &'static str {
+                "counting"
+            }
+            fn detect(&self, _: &std::path::Path) -> Result<Option<Tracker>, DetectorError> {
+                *self.calls.lock().unwrap() += 1;
+                Ok(None)
+            }
+        }
+
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+        let launcher = Arc::new(FakeLauncher::default());
+        let dir = tmpdir("ensure-skip-detect");
+
+        // Register the directory with an empty detector set, so setup itself
+        // doesn't touch the counter.
+        let setup = ProjectService::new(
+            repo.clone(),
+            launcher.clone(),
+            Arc::new(DetectorRunner::new(vec![])),
+            repo.clone(),
+        );
+        let first = setup.ensure_project(&dir).unwrap();
+
+        // A second service over the same repo, wired with a detector that
+        // records every call it gets.
+        let calls = Arc::new(Mutex::new(0));
+        let svc = ProjectService::new(
+            repo.clone(),
+            launcher,
+            Arc::new(DetectorRunner::new(vec![Box::new(CountingDetector {
+                calls: calls.clone(),
+            })])),
+            repo,
+        );
+
+        let second = svc.ensure_project(&dir).unwrap();
+
+        assert_eq!(first.id, second.id);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            0,
+            "ensure_project ran detection on an already-tracked directory"
+        );
     }
 
     /// The bug this fixes: two `api` directories under different parents both
