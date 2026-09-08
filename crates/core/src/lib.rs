@@ -7,6 +7,9 @@ pub mod infra;
 pub mod platform;
 pub mod ports;
 
+#[cfg(test)]
+mod tests;
+
 pub use application::{GroupService, ProjectInspection, ProjectService, ScanService};
 pub use detectors::{Detection, DetectorOutcome, DetectorRunner};
 pub use domain::{
