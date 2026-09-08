@@ -3,7 +3,10 @@
 _Written 2026-08-28 from a Linux build-and-run pass (`main` at `9761e80` plus
 `761d848`). Extended 2026-09-04 with `PI-005` from the first Linux run of the
 post-refactor `main` (`5cf2275`). `PI-004`, an inaccurate comment on the NVIDIA
-workaround, was fixed and retired the same day._
+workaround, was fixed and retired the same day. Re-verified 2026-09-08 on `main`
+at `5bb818f`: every gate below still passes on Arch, and `PI-006` still
+reproduces — its previously untested workaround is now tested, and replaced with
+one that needs no root._
 
 Five issues are tracked here from getting the Windows-developed app compiling
 and running on Linux. They carry deliberately different dispositions: two were
@@ -18,10 +21,15 @@ is the host distribution's problem rather than the app's.
 | PI-005 | Missing appindicator library kills startup | High — blocks launch | **Fixed** |
 | PI-006 | AppImage bundling fails on Arch | Low — local packaging only | Environmental |
 
-Nothing here blocks the Linux *build* — `cargo check`, `cargo test`, `pnpm build`
-and `pnpm tauri build` all complete cleanly. PI-005 blocked the Linux *run* until
-its fix: everything compiled and every test passed, and the app still exited
-before showing a window.
+Nothing here blocks the Linux *build* — `cargo check`, `cargo clippy`,
+`cargo fmt --check`, `cargo test`, `pnpm run check`, `pnpm test` and `pnpm build`
+all complete cleanly, and `pnpm tauri build` produces the binary, the `.deb` and
+the `.rpm`. On Arch it then exits 1 bundling the AppImage (PI-006) — a linuxdeploy
+limitation, not a compilation failure, and absent on the `ubuntu-22.04` runner
+that builds the published AppImage.
+
+PI-005 blocked the Linux *run* until its fix: everything compiled and every test
+passed, and the app still exited before showing a window.
 
 ---
 
@@ -217,7 +225,7 @@ clicking the titlebar X):
 
 ## PI-006 — `tauri build` cannot produce an AppImage on Arch
 
-**Severity:** Low (local packaging only) · **Status:** Environmental, no fix planned · **Platform:** Arch and other rolling distributions
+**Severity:** Low (local packaging only) · **Status:** Environmental, no fix planned; local workaround verified · **Platform:** Arch and other rolling distributions
 
 `pnpm run tauri build` exits 1 with `failed to run linuxdeploy` after having
 already produced a working binary, `.deb` and `.rpm`. The AppImage target is the
@@ -243,10 +251,33 @@ distributions AppImages exist to serve. The release workflow builds it on
 unaffected**, and this only ever bites someone running the full bundle locally.
 
 **If you need one locally anyway:** build `--bundles deb,rpm` and let CI produce
-the AppImage, or run the bundle in an `ubuntu-22.04` container. Creating the
-missing directory (`sudo mkdir -p /usr/lib/gdk-pixbuf-2.0/2.10.0`) alongside
-`NO_STRIP=1` would likely satisfy both, but it puts an unowned directory in
-`/usr/lib` and has not been tested here.
+the AppImage, or run the bundle in an `ubuntu-22.04` container.
+
+**Both causes can also be worked around directly, without root** (verified
+2026-09-08 on `main` at `5bb818f`; produced a valid 103 MB AppImage that
+extracts and carries the expected binary). `NO_STRIP=1` clears the first. For
+the second, the earlier suggestion here was `sudo mkdir -p
+/usr/lib/gdk-pixbuf-2.0/2.10.0` — that was never tested, and it is the worse
+option: it puts an unowned directory in `/usr/lib` that no package will ever
+clean up. Shadowing the `.pc` file instead keeps the whole thing in a temp
+directory, because the plugin only ever learns the path by asking pkg-config:
+
+```sh
+shim=$(mktemp -d)
+mkdir -p "$shim/pkgconfig" "$shim/pixbuf/2.10.0/loaders"
+: > "$shim/pixbuf/2.10.0/loaders.cache"
+sed "s|^gdk_pixbuf_binarydir=.*|gdk_pixbuf_binarydir=$shim/pixbuf/2.10.0|" \
+  /usr/lib/pkgconfig/gdk-pixbuf-2.0.pc > "$shim/pkgconfig/gdk-pixbuf-2.0.pc"
+
+NO_STRIP=1 PKG_CONFIG_PATH="$shim/pkgconfig" pnpm run tauri build --bundles appimage
+```
+
+An empty loader directory is the honest stand-in rather than a trick: on Arch
+there genuinely are no loader modules left to copy, since `gdk-pixbuf2 2.44.7`
+builds them into the library. **This does not make the result shippable** — the
+glibc argument above is unchanged, and the AppImage this produces still only
+runs on distributions as new as the one that built it. It is for reproducing a
+bundling problem locally, not for release.
 
 ---
 
@@ -269,3 +300,16 @@ stays hidden.
 PI-005 was found on the same machine on 2026-09-04, by which point it ran kernel
 7.2.2, Node 26.8.1 / pnpm 11.21.0, and `libayatana-appindicator` 0.6.0-2 (absent
 until that pass — which is what exposed the defect).
+
+The 2026-09-08 re-verification ran on that same configuration (kernel 7.2.2,
+Rust 1.94.0, Node 26.8.1 / pnpm 11.21.0, WebKitGTK 2.52.6, `gdk-pixbuf2`
+2.44.7-1). Results: `cargo fmt --check`, `cargo clippy --workspace
+--all-targets` (one pre-existing `module_inception` warning, no errors) and
+`cargo test --workspace` (212 passed) clean; `pnpm run check` (0 errors, the 7
+PI-003 warnings), `pnpm test` (99 passed) and `pnpm build` clean; `pnpm tauri
+build` produced the binary, `.deb` and `.rpm`, then failed on the AppImage
+exactly as PI-006 describes.
+
+Note that `pnpm tauri build`'s failure is easy to miss when its output is piped:
+`pnpm ... | tail` reports the exit status of `tail`, so the run looks like it
+succeeded. Check `${PIPESTATUS[0]}` (`${pipestatus[1]}` in zsh), or don't pipe.
