@@ -194,6 +194,10 @@ pnpm run tauri dev     # run in development
 pnpm run tauri build   # produce installers under target/release/bundle
 ```
 
+On Arch and other rolling distributions, `tauri build` produces the binary, the
+`.deb` and the `.rpm` and then fails at the AppImage step — see
+[AppImage bundling on rolling distributions](#appimage-bundling-on-rolling-distributions).
+
 Run it through one of those two commands, not by launching the built binary
 directly. A plain `cargo build` bakes in the dev server's URL, so
 `target/debug/project-indexer` started on its own shows "Could not connect to
@@ -248,6 +252,40 @@ has no tray icon, and closing the window quits instead of hiding to it.
 
 Nothing is distro-specific at runtime: app discovery and the NVIDIA workaround
 below both key off standard paths rather than package names.
+
+### AppImage bundling on rolling distributions
+
+Everything compiles and tests cleanly on Arch, and `tauri build` gets as far as
+producing the binary, the `.deb` and the `.rpm`. Only the AppImage step fails,
+with `failed to run linuxdeploy`. Nothing in this project causes it — linuxdeploy
+makes two assumptions that a current Arch system no longer satisfies. The
+details are in [PI-006](docs/KNOWN-ISSUES.md#pi-006--tauri-build-cannot-produce-an-appimage-on-arch).
+
+The simplest answer is to skip the target, since the published AppImage is built
+on `ubuntu-22.04` by CI anyway:
+
+```sh
+pnpm run tauri build --bundles deb,rpm
+```
+
+An AppImage built on Arch links against a glibc newer than the older
+distributions AppImages exist to serve, so it is the wrong artifact to ship
+regardless. If you want one locally anyway — to reproduce a bundling problem,
+say — both assumptions can be satisfied without touching the system:
+
+```sh
+# 1. linuxdeploy's bundled `strip` predates SHT_RELR and chokes on Arch libraries.
+# 2. Its GTK plugin `cp`s the gdk-pixbuf loader directory, which no longer
+#    exists — Arch builds the loaders into the library. Point pkg-config at an
+#    empty stand-in rather than creating an unowned directory under /usr/lib.
+shim=$(mktemp -d)
+mkdir -p "$shim/pkgconfig" "$shim/pixbuf/2.10.0/loaders"
+: > "$shim/pixbuf/2.10.0/loaders.cache"
+sed "s|^gdk_pixbuf_binarydir=.*|gdk_pixbuf_binarydir=$shim/pixbuf/2.10.0|" \
+  /usr/lib/pkgconfig/gdk-pixbuf-2.0.pc > "$shim/pkgconfig/gdk-pixbuf-2.0.pc"
+
+NO_STRIP=1 PKG_CONFIG_PATH="$shim/pkgconfig" pnpm run tauri build --bundles appimage
+```
 
 ### NVIDIA proprietary driver
 

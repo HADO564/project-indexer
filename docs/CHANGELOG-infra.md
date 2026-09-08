@@ -17,6 +17,40 @@ version is tagged. Newest first.
 
 ---
 
+## 2026-09-08
+
+### Notes
+
+- **Re-verified the Arch build end to end.** Every gate passes on Arch as it
+  stands — `cargo fmt --check`, `cargo clippy --workspace --all-targets`,
+  `cargo test --workspace` (212), `pnpm run check`, `pnpm test` (99),
+  `pnpm build` — and no code changes were needed. The one Rust warning
+  (`module_inception` on `detectors/unreal/unreal.rs`) and the seven
+  `state_referenced_locally` warnings (PI-003) are both pre-existing and
+  deliberate; clippy is not run with `-D warnings`, so neither gates CI.
+
+### Changed
+
+- **Documented that `tauri build` fails on Arch, where it previously read as
+  working.** `README.md` promised `pnpm run tauri build` with no Linux caveat,
+  and `docs/KNOWN-ISSUES.md` opened by claiming `pnpm tauri build` "completes
+  cleanly" — which PI-006, four sections below it, contradicted. On Arch the
+  command produces the binary, `.deb` and `.rpm`, then exits 1 on the AppImage.
+  Both documents now say so and point at `--bundles deb,rpm`.
+
+- **Replaced PI-006's untested workaround with a tested one.** It suggested
+  `sudo mkdir -p /usr/lib/gdk-pixbuf-2.0/2.10.0` alongside `NO_STRIP=1`, marked
+  "has not been tested here". The diagnosis was right and both causes still
+  reproduce, but that remedy leaves an unowned directory in `/usr/lib` that no
+  package will clean up. Shadowing `gdk-pixbuf-2.0.pc` through
+  `PKG_CONFIG_PATH` reaches the same place inside a `mktemp -d` — the GTK
+  plugin only learns the loader path by asking pkg-config. Verified: produces a
+  valid AppImage that extracts and carries the expected binary.
+
+  It is a reproduction aid, not a packaging route. The glibc argument against
+  shipping an Arch-built AppImage is unchanged, and CI still builds the
+  published one on `ubuntu-22.04`.
+
 ## 2026-09-07
 
 ### Changed
