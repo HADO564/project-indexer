@@ -19,6 +19,24 @@ version is tagged. Newest first.
 
 ## 2026-09-08
 
+### Added
+
+- **`scripts/check-linux-platform.sh` — compiles the Linux-gated platform code
+  from Windows.** The full crate cannot be cross-checked: `git2` and `rusqlite`
+  build scripts need `x86_64-linux-gnu-gcc`. But `platform/` is std-only plus
+  `InstalledApp`, so the script assembles a scratch crate with a stub, copies
+  the platform modules and their tests in, and runs
+  `cargo check --target x86_64-unknown-linux-gnu` — where
+  `cfg(target_os = "linux")` is true, so the gated code is what actually gets
+  compiled. Needs `rustup target add x86_64-unknown-linux-gnu` once; no linker,
+  because `check` does not link.
+
+  Worth having because roughly 60% of `app_discovery` was Linux-only, which
+  meant every edit to it was previously unverifiable until CI. It caught four
+  real breakages during the platform split, including a `#[cfg(windows)]` that
+  had detached from the module it gated — which would have compiled fine on
+  Windows and failed on Linux.
+
 ### Notes
 
 - **Re-verified the Arch build end to end.** Every gate passes on Arch as it

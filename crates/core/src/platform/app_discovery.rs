@@ -1,3 +1,8 @@
+//! Finding the applications installed on this machine.
+//!
+//! Launching one is [`super::app_launching`]; the `.desktop` format both use
+//! is [`super::desktop_entry`].
+
 use crate::domain::InstalledApp;
 
 /// Scans platform-specific sources for installed applications, used by
@@ -17,79 +22,6 @@ pub fn list_installed_apps() -> Vec<InstalledApp> {
     {
         Vec::new()
     }
-}
-
-/// Checks whether the app an `open_with` value points at can still be
-/// launched, so a project configured to open with an app that's since been
-/// uninstalled or moved can be caught before actually trying — and reported
-/// as a specific "app is missing" error rather than a generic launch
-/// failure.
-///
-/// On Linux `open_with` is a full command line (as stored by the picker, or
-/// hand-typed), so only the program — the first token — is resolved. On
-/// Windows/macOS it's just a path or bare command name.
-pub fn open_with_app_available(open_with: &str) -> bool {
-    let program = program_from_open_with(open_with);
-    let program = program.trim();
-    if program.is_empty() {
-        return false;
-    }
-    command_exists(program)
-}
-
-#[cfg(target_os = "linux")]
-fn program_from_open_with(open_with: &str) -> String {
-    linux_impl::split_command(open_with)
-        .into_iter()
-        .next()
-        .unwrap_or_default()
-}
-
-#[cfg(not(target_os = "linux"))]
-fn program_from_open_with(open_with: &str) -> String {
-    open_with.to_string()
-}
-
-/// Checks whether `program` exists: as a path on its own when it looks like
-/// one (absolute, or containing a separator), otherwise by searching `PATH`
-/// the way the OS would when launching a bare command name.
-fn command_exists(program: &str) -> bool {
-    use std::path::Path;
-
-    let path = Path::new(program);
-    if path.is_absolute() || program.contains(std::path::MAIN_SEPARATOR) {
-        return path.is_file();
-    }
-
-    let Some(path_var) = std::env::var_os("PATH") else {
-        return false;
-    };
-    let extensions = windows_path_extensions();
-
-    std::env::split_paths(&path_var).any(|dir| {
-        dir.join(program).is_file()
-            || extensions
-                .iter()
-                .any(|ext| dir.join(format!("{program}{ext}")).is_file())
-    })
-}
-
-/// `PATHEXT` suffixes (`.EXE`, `.CMD`, …) that Windows tries in turn against
-/// a bare command name when resolving it through `PATH`. Empty on other
-/// platforms, where a bare name must match a `PATH` entry exactly.
-#[cfg(windows)]
-fn windows_path_extensions() -> Vec<String> {
-    std::env::var("PATHEXT")
-        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
-        .split(';')
-        .filter(|ext| !ext.is_empty())
-        .map(str::to_string)
-        .collect()
-}
-
-#[cfg(not(windows))]
-fn windows_path_extensions() -> Vec<String> {
-    Vec::new()
 }
 
 #[cfg(windows)]
@@ -205,7 +137,8 @@ mod windows_impl {
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) mod linux_impl {
+mod linux_impl {
+    use super::super::desktop_entry::parse_desktop_entry;
     use crate::domain::InstalledApp;
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
@@ -218,7 +151,7 @@ pub(crate) mod linux_impl {
     /// into a single picker entry. Earlier directories win, which gives a
     /// user's `~/.local/share/applications` override precedence over the
     /// system copy, matching XDG lookup order.
-    pub fn list_installed_apps() -> Vec<InstalledApp> {
+    pub(crate) fn list_installed_apps() -> Vec<InstalledApp> {
         let mut apps: HashMap<String, InstalledApp> = HashMap::new();
 
         for dir in application_dirs() {
@@ -234,7 +167,7 @@ pub(crate) mod linux_impl {
     /// Directory / Desktop Entry specifications. Covers the Flatpak and Snap
     /// exports that Ubuntu and Fedora add to `XDG_DATA_DIRS` too, since those
     /// are ordinary entries in an `applications` subdirectory.
-    fn application_dirs() -> Vec<PathBuf> {
+    pub(crate) fn application_dirs() -> Vec<PathBuf> {
         let mut dirs = Vec::new();
 
         if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
@@ -252,7 +185,7 @@ pub(crate) mod linux_impl {
         dirs
     }
 
-    fn scan_applications_dir(dir: &Path, apps: &mut HashMap<String, InstalledApp>) {
+    pub(crate) fn scan_applications_dir(dir: &Path, apps: &mut HashMap<String, InstalledApp>) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
         };
@@ -291,265 +224,4 @@ pub(crate) mod linux_impl {
             }
         }
     }
-
-    /// Parses the `[Desktop Entry]` section of a `.desktop` file into an
-    /// `InstalledApp`, skipping entries that shouldn't be launchable from
-    /// a picker (`NoDisplay`/`Hidden`, or a non-`Application` `Type`) or
-    /// that lack a usable `Exec` line.
-    pub(crate) fn parse_desktop_entry(contents: &str) -> Option<InstalledApp> {
-        let mut in_entry_section = false;
-        let mut name = None;
-        let mut exec = None;
-        let mut entry_type = None;
-
-        for line in contents.lines() {
-            let line = line.trim();
-
-            if line.starts_with('[') {
-                in_entry_section = line == "[Desktop Entry]";
-                continue;
-            }
-            if !in_entry_section || line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-
-            let Some((key, value)) = line.split_once('=') else {
-                continue;
-            };
-            // Unlocalized keys only: `Name[de]` and friends don't match, so
-            // the C-locale name always wins.
-            match key.trim() {
-                "Name" => name = Some(value.trim().to_string()),
-                "Exec" => exec = Some(value.trim().to_string()),
-                "Type" => entry_type = Some(value.trim().to_string()),
-                "NoDisplay" | "Hidden" if value.trim().eq_ignore_ascii_case("true") => {
-                    return None;
-                }
-                _ => {}
-            }
-        }
-
-        // `Type=Link`/`Type=Directory` entries have no Exec worth launching.
-        if let Some(t) = entry_type {
-            if !t.eq_ignore_ascii_case("Application") {
-                return None;
-            }
-        }
-
-        let name = name?;
-        let command = exec_command(&exec?)?;
-
-        Some(InstalledApp {
-            name,
-            path: command,
-        })
-    }
-
-    /// Normalizes an `Exec=` line into a command line we can launch later.
-    ///
-    /// The whole line is kept, not just the first token: wrapper-based
-    /// entries carry their meaning in the arguments (`flatpak run <app-id>`,
-    /// `env WINEPREFIX=… wine start …`, `systemctl --user start …`), so
-    /// dropping them left an unlaunchable bare `flatpak`/`env`. The result is
-    /// re-quoted so that [`split_command`] round-trips it back to the same
-    /// arguments.
-    pub(crate) fn exec_command(exec: &str) -> Option<String> {
-        let args: Vec<String> = split_exec(exec)
-            .into_iter()
-            .filter(|arg| is_path_field_code(arg) || !is_droppable_field_code(arg))
-            .collect();
-
-        if args.first().is_none_or(|program| program.is_empty()) {
-            return None;
-        }
-
-        Some(
-            args.iter()
-                .map(|arg| quote_arg(arg))
-                .collect::<Vec<_>>()
-                .join(" "),
-        )
-    }
-
-    /// Field codes that stand in for the file(s) being opened.
-    ///
-    /// These are deliberately kept in the stored command so the directory can
-    /// be substituted at the position the entry expects. Flatpak wraps them in
-    /// file-forwarding markers (`… --file-forwarding <app-id> @@u %u @@`), so
-    /// dropping the code and appending the path at the end would leave the
-    /// markers unpaired and the path never forwarded into the sandbox.
-    fn is_path_field_code(arg: &str) -> bool {
-        matches!(arg, "%f" | "%F" | "%u" | "%U")
-    }
-
-    /// Any other single-character field code — `%i`, `%c`, `%k` and the
-    /// deprecated `%d`/`%n`/`%v`/`%m` — expands to icons, captions and similar
-    /// metadata we have nothing to supply, so it's dropped. `%%` is a literal
-    /// percent and is already unescaped by [`split_exec`].
-    fn is_droppable_field_code(arg: &str) -> bool {
-        let mut chars = arg.chars();
-        chars.next() == Some('%') && chars.next().is_some() && chars.next().is_none()
-    }
-
-    /// Splits a raw `Exec=` value: like [`split_command`], plus the Desktop
-    /// Entry spec's `%%` escape for a literal percent.
-    fn split_exec(exec: &str) -> Vec<String> {
-        split_with(exec, true)
-    }
-
-    /// Splits a stored command line — one we produced with [`exec_command`],
-    /// or one the user typed into the "open with" field by hand.
-    ///
-    /// Percent escaping is deliberately not applied here: the stored form
-    /// still contains real field codes like `%u` for [`open_with_command`] to
-    /// substitute, and leaving `%` alone keeps the round trip exact.
-    pub fn split_command(command: &str) -> Vec<String> {
-        split_with(command, false)
-    }
-
-    /// Whitespace separates arguments, double quotes group them, and a
-    /// backslash inside quotes escapes the next character.
-    fn split_with(command: &str, unescape_percent: bool) -> Vec<String> {
-        let mut args = Vec::new();
-        let mut current = String::new();
-        let mut has_current = false;
-        let mut in_quotes = false;
-        let mut chars = command.chars();
-
-        while let Some(c) = chars.next() {
-            match c {
-                '\\' => {
-                    // Outside quotes a lone backslash is literal; inside, it
-                    // escapes `"`, `\`, `$` and backtick.
-                    match chars.next() {
-                        Some(next) if in_quotes => current.push(next),
-                        Some(next) => {
-                            current.push('\\');
-                            current.push(next);
-                        }
-                        None => current.push('\\'),
-                    }
-                    has_current = true;
-                }
-                '"' => {
-                    in_quotes = !in_quotes;
-                    has_current = true;
-                }
-                '%' if unescape_percent && !in_quotes => {
-                    // `%%` is an escaped literal percent.
-                    if chars.as_str().starts_with('%') {
-                        chars.next();
-                    }
-                    current.push('%');
-                    has_current = true;
-                }
-                c if c.is_whitespace() && !in_quotes => {
-                    if has_current {
-                        args.push(std::mem::take(&mut current));
-                        has_current = false;
-                    }
-                }
-                c => {
-                    current.push(c);
-                    has_current = true;
-                }
-            }
-        }
-
-        if has_current {
-            args.push(current);
-        }
-
-        args
-    }
-
-    /// Inverse of [`split_command`] for a single argument.
-    fn quote_arg(arg: &str) -> String {
-        let needs_quoting = arg.is_empty()
-            || arg
-                .chars()
-                .any(|c| c.is_whitespace() || c == '"' || c == '\\');
-        if !needs_quoting {
-            return arg.to_string();
-        }
-
-        let mut quoted = String::with_capacity(arg.len() + 2);
-        quoted.push('"');
-        for c in arg.chars() {
-            if c == '"' || c == '\\' {
-                quoted.push('\\');
-            }
-            quoted.push(c);
-        }
-        quoted.push('"');
-        quoted
-    }
-
-    /// Resolves a stored command line and a directory into the program and
-    /// argument list to spawn.
-    pub(crate) fn build_launch_args(
-        command: &str,
-        directory: &str,
-    ) -> Result<(String, Vec<String>), String> {
-        let mut args = split_command(command);
-        if args.is_empty() {
-            return Err(format!("'{}' is not a runnable command", command));
-        }
-        let program = args.remove(0);
-
-        // Substitute the directory for the entry's file placeholder, keeping
-        // any surrounding markers intact. Commands without a placeholder —
-        // including anything the user typed by hand, like a bare `code` —
-        // just take it as a trailing argument.
-        let mut substituted = false;
-        for arg in &mut args {
-            if is_path_field_code(arg) {
-                *arg = directory.to_string();
-                substituted = true;
-            }
-        }
-        if !substituted {
-            args.push(directory.to_string());
-        }
-
-        Ok((program, args))
-    }
-
-    /// Launches `directory` with a specific application.
-    ///
-    /// `open::with_detached`, which the opener plugin uses, runs the whole
-    /// `open_with` string as a single program name, so it can't launch the
-    /// multi-argument commands real `.desktop` entries use. Splitting the
-    /// stored command line ourselves and spawning it directly is what makes
-    /// Flatpak, Snap and Wine entries work.
-    pub fn open_with_command(directory: &str, command: &str) -> Result<(), String> {
-        use std::os::unix::process::CommandExt as _;
-        use std::process::{Command, Stdio};
-
-        let (program, args) = build_launch_args(command, directory)?;
-
-        let mut child = Command::new(&program)
-            .args(&args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            // Own process group, so the editor we launch isn't taken down by
-            // a Ctrl-C or terminal hangup aimed at this app.
-            .process_group(0)
-            .spawn()
-            .map_err(|e| format!("Failed to launch '{}': {}", program, e))?;
-
-        // Reap in the background: the child outlives this call, and without a
-        // wait it would linger as a zombie for the lifetime of the app.
-        std::thread::spawn(move || {
-            let _ = child.wait();
-        });
-
-        Ok(())
-    }
 }
-
-/// Re-exported for the Tauri launcher adapter (Task 6), which spawns Linux
-/// `.desktop` command lines itself rather than through the opener plugin.
-#[cfg(target_os = "linux")]
-pub use linux_impl::open_with_command;
