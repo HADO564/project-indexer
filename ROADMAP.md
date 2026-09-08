@@ -10,7 +10,8 @@ the non-feature quality backlog see
 
 ## Where things stand
 
-**v0.2.0** is the current release, and the first under the new licence. The
+**v0.3.0** is the current release; **v0.2.0** was the first under the new
+licence. The
 app tracks projects, detects git and
 Unreal Engine trackers, opens projects in your installed applications, and runs
 in the background from the system tray. A project carries a colour, an icon and
