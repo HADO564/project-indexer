@@ -93,14 +93,40 @@ touches startup, the tray, or anything platform-specific, run the real thing.
 
 ```
 crates/core/     indexer-core — all domain logic, orchestration, persistence
+  src/tests/       its unit tests, mirroring the module tree
 crates/cli/      indexer-cli — stub for the observer CLI (see ROADMAP.md)
 src-tauri/       the desktop app: Tauri commands, adapters, startup
 src/             SvelteKit frontend
+  src/tests/       its vitest suites, mirroring the modules they cover
 docs/            architecture, knowledgebase, checklist, handoffs
 ```
 
 `indexer-core` is where the behaviour lives. `src-tauri` is a thin adapter over
 it: each `#[tauri::command]` is a ~3-line pass-through to `ProjectService`.
+
+**Tests live beside the tree they cover, not inside it.** A test for
+`crates/core/src/domain/scan.rs` goes in `crates/core/src/tests/domain/scan.rs`;
+one for `src/lib/views.ts` goes in `src/tests/lib/views.test.ts`. Same path,
+different root.
+
+This is not the Rust default — the language puts `#[cfg(test)] mod tests` at the
+foot of each file — and it was changed on purpose, because the crate had reached
+roughly as many lines of test as of code and files like `service.rs` (806 lines,
+449 of them tests) had stopped reading as source.
+
+Two consequences worth knowing before you add a test:
+
+- **They are still unit tests, not integration tests.** They live under `src/`
+  and are declared by `#[cfg(test)] mod tests;` in `lib.rs`, so they compile out
+  of release builds and can reach `pub(crate)` internals. `crates/core/tests/`
+  is reserved for genuine integration tests — `migrations.rs` is the one there,
+  and it exercises only the public API.
+- **Reaching an internal means `pub(crate)`, never `pub`.** A test needing a
+  private item promotes it to `pub(crate)`, which is crate-internal and does not
+  widen the published API. `scan::is_pruned`, `SqliteRepository::lock_conn` and
+  `gitector::web_url` are the existing cases, each carrying a comment saying so.
+  If a test seems to need full `pub`, that is a signal the test wants the public
+  API instead.
 
 ## Rules the codebase enforces
 

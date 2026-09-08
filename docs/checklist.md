@@ -89,6 +89,13 @@ Migrations run identically on both. Workspace total via
 `cargo test --workspace`: **212 on Linux, 204 on Windows**. `cargo test -p
 project-indexer` is 0; everything lives in `indexer-core`.
 
+The tests themselves live in `crates/core/src/tests/`, mirroring the module
+tree — `domain/scan.rs`'s tests are at `tests/domain/scan.rs`. They are still
+unit tests (declared from `lib.rs` behind `#[cfg(test)]`, compiled out of
+release builds, able to reach `pub(crate)` internals); `crates/core/tests/` is
+reserved for real integration tests, of which `migrations.rs` is the only one.
+See `CONTRIBUTING.md` → *Project layout*.
+
 - [x] `Gitector` (11), `UnrealDetector` (10), detector-runner (10) + `results_from` — incl. `inspect_kinds`' set filter: a named subset runs, an empty selection runs **nothing** (so a scan with no detectors ticked finds nothing rather than everything), and an unknown kind matches nothing rather than erroring
 - [x] `normalize`, `sorting`, `Project` invariants / soft-delete / health checks
 - [x] `naming` (14) — SSH/HTTPS remotes, `.git` suffix, trailing separators, no-remote fallback, empty; plus `disambiguate` — a free name passes through, a collision parent-qualifies (`api` → `work/api`), a second collision suffixes (`work/api (2)`), matching is case-insensitive to agree with `check_for_duplicate_name_or_dir`, Windows parents split on `\`, and a parent that yields no segment falls straight to the suffix rather than looping
@@ -106,9 +113,10 @@ project-indexer` is 0; everything lives in `indexer-core`.
 
 99 vitest tests across six suites, all pure modules — no component is mounted,
 which is the whole reason the logic lives in modules rather than in `.svelte`
-files. `vite.config.ts` runs them in the `node` environment. **`ScanFolderModal`
-is the one substantial piece with no automated coverage**, which is why the
-0.3.0 scanner was released as a beta first.
+files. `vite.config.js` runs them in the `node` environment, from
+`src/tests/lib/`, mirroring the modules they cover the same way the Rust tests
+do. **`ScanFolderModal` is the one substantial piece with no automated
+coverage**, which is why the 0.3.0 scanner was released as a beta first.
 
 - [x] `trackers` (14) — variant key, hand-picked vs name-hashed hues, and the field-affordance inference that keeps a new detector zero-frontend-code
 - [x] `palette` (15) — the eight names mirror `core::domain::palette` in order, a known name resolves to its token, an unknown one and a null both fall back to neutral, a hex literal passes through only in the exact six-digit form, the mark colour cascades project → group → neutral, and no input can make `swatchVar` return anything but a token or that exact literal
