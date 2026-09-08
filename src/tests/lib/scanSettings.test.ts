@@ -4,7 +4,7 @@ import {
   restoreScanSettings,
   toScanRequest,
   type ScanSettings,
-} from "./scanSettings";
+} from "$lib/scanSettings";
 
 const KINDS = ["git", "unreal"];
 

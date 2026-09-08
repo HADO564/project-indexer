@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Group, Project } from "./api/types";
+import type { Group, Project } from "$lib/api/types";
 import {
   isPropertyQuery,
   matchesQuery,
@@ -10,7 +10,7 @@ import {
   viewKey,
   viewLabel,
   type View,
-} from "./views";
+} from "$lib/views";
 
 const project = (over: Partial<Project> = {}): Project => ({
   id: "id-1",

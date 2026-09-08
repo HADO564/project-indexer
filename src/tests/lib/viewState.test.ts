@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Group } from "./api/types";
-import { restoreView, restoreViewMode } from "./viewState";
+import type { Group } from "$lib/api/types";
+import { restoreView, restoreViewMode } from "$lib/viewState";
 
 const group = (id: string, position: number): Group => ({
   id,
