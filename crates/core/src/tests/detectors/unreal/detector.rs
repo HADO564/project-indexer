@@ -1,7 +1,7 @@
 //! Tests for [`crate::detectors::unreal::detector`].
 
 use crate::detectors::detector::Detector;
-use crate::detectors::unreal::UnrealInfo;
+use crate::domain::Tracker;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -48,7 +48,7 @@ fn detect_recognizes_a_directory_with_a_uproject() {
 
     let result = UnrealDetector.detect(&dir).expect("should detect");
 
-    assert!(result.as_ref().is_some_and(|t| t.is("unreal")));
+    assert!(matches!(result, Some(Tracker::Unreal(_))));
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -95,7 +95,9 @@ fn detect_parses_descriptor_fields() {
         .expect("should get info")
         .expect("should find project");
 
-    let info: UnrealInfo = tracker.info().expect("a unreal payload");
+    let Tracker::Unreal(info) = tracker else {
+        panic!("expected Tracker::Unreal");
+    };
 
     assert_eq!(info.project_name, "MyGame");
     assert_eq!(info.engine_association.as_deref(), Some("5.3"));
@@ -117,7 +119,9 @@ fn detect_treats_missing_optional_fields_as_absent() {
         .expect("should get info")
         .expect("should find project");
 
-    let info: UnrealInfo = tracker.info().expect("a unreal payload");
+    let Tracker::Unreal(info) = tracker else {
+        panic!("expected Tracker::Unreal");
+    };
 
     assert_eq!(info.engine_association, None);
     assert_eq!(info.category, None);
@@ -145,7 +149,9 @@ fn detect_reads_the_configured_source_control_provider() {
         .expect("should get info")
         .expect("should find project");
 
-    let info: UnrealInfo = tracker.info().expect("a unreal payload");
+    let Tracker::Unreal(info) = tracker else {
+        panic!("expected Tracker::Unreal");
+    };
 
     assert_eq!(info.vcs_provider.as_deref(), Some("Perforce"));
     fs::remove_dir_all(&dir).ok();
@@ -169,7 +175,9 @@ fn detect_treats_an_explicit_none_provider_as_absent() {
         .expect("should get info")
         .expect("should find project");
 
-    let info: UnrealInfo = tracker.info().expect("a unreal payload");
+    let Tracker::Unreal(info) = tracker else {
+        panic!("expected Tracker::Unreal");
+    };
 
     assert_eq!(info.vcs_provider, None);
     fs::remove_dir_all(&dir).ok();

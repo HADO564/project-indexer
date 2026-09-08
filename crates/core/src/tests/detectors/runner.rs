@@ -11,20 +11,17 @@ use crate::detectors::runner::*;
 use std::path::PathBuf;
 
 fn sample_git_tracker() -> Tracker {
-    Tracker::new(
-        "Git",
-        GitInfo {
-            repo_root: "/tmp/x".to_string(),
-            dirty: false,
-            detached_head: false,
-            repo_url: None,
-            web_url: None,
-            contributors: Vec::new(),
-            curr_branch: Some("main".to_string()),
-            branches: None,
-            commit_hash: None,
-        },
-    )
+    Tracker::Git(GitInfo {
+        repo_root: "/tmp/x".to_string(),
+        dirty: false,
+        detached_head: false,
+        repo_url: None,
+        web_url: None,
+        contributors: Vec::new(),
+        curr_branch: Some("main".to_string()),
+        branches: None,
+        commit_hash: None,
+    })
 }
 
 /// `DetectorRunner` must stay usable in Tauri's managed app state
@@ -58,7 +55,7 @@ fn detected_directory_yields_a_detected_outcome() {
         detection.outcomes.as_slice(),
         [DetectorOutcome::Detected { kind: "git", .. }]
     ));
-    assert!(matches!(detection.trackers().as_slice(), [t] if t.is("git")));
+    assert!(matches!(detection.trackers().as_slice(), [Tracker::Git(_)]));
     assert!(detection.errors().is_empty());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -101,7 +98,7 @@ fn one_detector_failing_keeps_the_others_results() {
     let runner = DetectorRunner::new(vec![Box::new(Boom), Box::new(Gitector)]);
     let detection = runner.detect_project(&dir);
 
-    assert!(matches!(detection.trackers().as_slice(), [t] if t.is("git")));
+    assert!(matches!(detection.trackers().as_slice(), [Tracker::Git(_)]));
     assert_eq!(detection.errors().len(), 1);
 
     std::fs::remove_dir_all(&dir).ok();
@@ -132,7 +129,7 @@ fn into_result_returns_every_tracker_when_no_detector_failed() {
     };
 
     let trackers = detection.into_result().expect("clean detection is Ok");
-    assert!(matches!(trackers.as_slice(), [t] if t.is("git")));
+    assert!(matches!(trackers.as_slice(), [Tracker::Git(_)]));
 }
 
 /// The deliberate all-or-nothing contract behind `refresh_project_trackers`

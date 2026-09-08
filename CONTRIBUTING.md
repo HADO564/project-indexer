@@ -174,25 +174,33 @@ crates/core/src/detectors/unity/
   error.rs      its error type, plus `impl From<UnityError> for DetectorError`
 ```
 
-Then add two lines to `crates/core/src/detectors/mod.rs`: `pub mod unity;` and
-an entry in `default_detectors()`. **That is the whole registration.** Nothing
-in `domain`, `error`, the command layer or the frontend needs to change.
+Then two one-line edits:
 
-Three deliberate design choices are what make that true, and each is worth
-knowing before you fight one of them:
+- `crates/core/src/detectors/mod.rs` — declare `pub mod unity;` and add it to
+  `default_detectors()`. That is the only place detectors are registered.
+- `crates/core/src/domain/tracker.rs` — add a `Unity(UnityInfo)` variant.
 
-- **`Tracker` is not an enum.** It is `{ kind, data }`, so there is no variant
-  to add. Your detector builds its typed `info.rs` struct and passes it to
-  `Tracker::new("Unity", info)`, which serialises it. Reading a payload back
-  typed is `tracker.info::<UnityInfo>()`; reading one field is
-  `tracker.str_field("engine_version")`.
+Nothing else changes. Two design choices are what keep it to that, and each is
+worth knowing before you fight one:
+
 - **`DetectorError` has no per-detector variant.** The `impl From<..>` in your
-  `error.rs` boxes into `Other`, which is what keeps `?` working without that
-  enum growing. `git/error.rs` is the example.
+  `error.rs` boxes into `Other`, which keeps `?` working without that enum
+  growing. `git/error.rs` is the example.
 - **The frontend renders unfamiliar kinds already.** `lib/trackers.ts` infers
   each field's affordance from its name and value shape, `TrackerPanel` renders
   them, and `trackerColor(kind)` hashes a contrast-safe hue for a kind it has
   never seen. There is no TypeScript to write.
+
+**`Tracker` stays an enum, deliberately.** It was briefly a generic
+`{ kind, data }` struct so that adding a detector touched one file rather than
+two. That was the wrong trade and was reverted: a detector is added a handful
+of times in a project's life, but a tracker's contents are read for the life of
+the project. The enum makes the compiler prove every kind is handled and catch
+a renamed field at build time; a string-keyed map compiled cleanly and failed
+silently. Do not reach for the map again to save one line.
+
+Do not add a `Tracker` variant without a detector behind it. Placeholder
+variants for Unity and Blender existed once and were removed for that reason.
 
 Put the tests in `crates/core/src/tests/detectors/unity/detector.rs`, mirroring
 the source path — `Gitector` (11 tests) and `UnrealDetector` (10) are the model.
