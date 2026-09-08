@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SWATCHES, isHexColor, isSwatch, markVar, swatchVar } from "./palette";
+import { SWATCHES, isHexColor, isSwatch, markVar, swatchVar } from "$lib/palette";
 
 describe("SWATCHES", () => {
   it("mirrors crates/core/src/domain/palette.rs exactly, in order", () => {

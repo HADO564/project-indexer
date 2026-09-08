@@ -6,7 +6,7 @@ import {
   customIconSrc,
   iconPaths,
   isCustomIcon,
-} from "./icons";
+} from "$lib/icons";
 
 describe("ICON_NAMES", () => {
   it("has 25 unique names", () => {

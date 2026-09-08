@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { trackerColor, trackerFields, trackerKind } from "./trackers";
-import type { Tracker } from "./api/types";
+import { trackerColor, trackerFields, trackerKind } from "$lib/trackers";
+import type { Tracker } from "$lib/api/types";
 
 const gitTracker = (over: Record<string, unknown> = {}): Tracker =>
   ({

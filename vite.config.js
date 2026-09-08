@@ -10,6 +10,11 @@ export default defineConfig(async () => ({
   plugins: [tailwindcss(), sveltekit()],
 
   test: {
+    // Tests live in `src/tests/`, mirroring the tree they cover, the same way
+    // `crates/core/src/tests/` mirrors the Rust modules — so a source file
+    // reads as source. The glob deliberately stays broad rather than pinned to
+    // `src/tests/**`: a test written next to its source is in the wrong place,
+    // but it should still *run* and be moved, not sit there silently skipped.
     include: ["src/**/*.test.ts"],
     environment: "node",
   },
