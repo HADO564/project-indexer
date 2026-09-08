@@ -42,22 +42,19 @@ impl Detector for Gitector {
         let repo_url = remote_url(&repo, "origin")?;
         let web_url = repo_url.as_deref().and_then(web_url);
 
-        Ok(Some(Tracker::new(
-            "Git",
-            GitInfo {
-                repo_root: root,
-                dirty,
-                detached_head: is_detached(&repo)?,
-                repo_url,
-                web_url,
-                // Walking full commit history for authors is a separate feature;
-                // left empty until that's built.
-                contributors: Vec::new(),
-                curr_branch: get_current_branch(&repo)?,
-                branches,
-                commit_hash: head_commit_hash(&repo)?,
-            },
-        )))
+        Ok(Some(Tracker::Git(GitInfo {
+            repo_root: root,
+            dirty,
+            detached_head: is_detached(&repo)?,
+            repo_url,
+            web_url,
+            // Walking full commit history for authors is a separate feature;
+            // left empty until that's built.
+            contributors: Vec::new(),
+            curr_branch: get_current_branch(&repo)?,
+            branches,
+            commit_hash: head_commit_hash(&repo)?,
+        })))
     }
 }
 

@@ -5,20 +5,17 @@ use crate::domain::naming::*;
 use crate::domain::Tracker;
 
 fn git_tracker(repo_url: Option<&str>) -> Tracker {
-    Tracker::new(
-        "Git",
-        GitInfo {
-            repo_root: "/tmp/x".into(),
-            dirty: false,
-            detached_head: false,
-            repo_url: repo_url.map(str::to_string),
-            web_url: None,
-            contributors: vec![],
-            curr_branch: None,
-            branches: None,
-            commit_hash: None,
-        },
-    )
+    Tracker::Git(GitInfo {
+        repo_root: "/tmp/x".into(),
+        dirty: false,
+        detached_head: false,
+        repo_url: repo_url.map(str::to_string),
+        web_url: None,
+        contributors: vec![],
+        curr_branch: None,
+        branches: None,
+        commit_hash: None,
+    })
 }
 
 #[test]

@@ -29,25 +29,22 @@ impl Detector for UnrealDetector {
 
         let descriptor = read_project_descriptor(&uproject_path)?;
 
-        Ok(Some(Tracker::new(
-            "Unreal",
-            UnrealInfo {
-                project_root: path.display().to_string(),
-                project_name,
-                uproject_path: uproject_path.display().to_string(),
-                engine_association: non_empty(descriptor.engine_association.unwrap_or_default()),
-                category: non_empty(descriptor.category),
-                description: non_empty(descriptor.description),
-                modules: descriptor.modules.into_iter().map(|m| m.name).collect(),
-                plugins: descriptor
-                    .plugins
-                    .into_iter()
-                    .filter(|p| p.enabled)
-                    .map(|p| p.name)
-                    .collect(),
-                vcs_provider: vcs_provider(path)?,
-            },
-        )))
+        Ok(Some(Tracker::Unreal(UnrealInfo {
+            project_root: path.display().to_string(),
+            project_name,
+            uproject_path: uproject_path.display().to_string(),
+            engine_association: non_empty(descriptor.engine_association.unwrap_or_default()),
+            category: non_empty(descriptor.category),
+            description: non_empty(descriptor.description),
+            modules: descriptor.modules.into_iter().map(|m| m.name).collect(),
+            plugins: descriptor
+                .plugins
+                .into_iter()
+                .filter(|p| p.enabled)
+                .map(|p| p.name)
+                .collect(),
+            vcs_provider: vcs_provider(path)?,
+        })))
     }
 }
 

@@ -7,20 +7,17 @@ use crate::domain::tracker::Tracker;
 use crate::error::DetectorError;
 
 fn sample_git_tracker() -> Tracker {
-    Tracker::new(
-        "Git",
-        GitInfo {
-            repo_root: "/tmp/x".to_string(),
-            dirty: false,
-            detached_head: false,
-            repo_url: None,
-            web_url: None,
-            contributors: Vec::new(),
-            curr_branch: Some("main".to_string()),
-            branches: None,
-            commit_hash: None,
-        },
-    )
+    Tracker::Git(GitInfo {
+        repo_root: "/tmp/x".to_string(),
+        dirty: false,
+        detached_head: false,
+        repo_url: None,
+        web_url: None,
+        contributors: Vec::new(),
+        curr_branch: Some("main".to_string()),
+        branches: None,
+        commit_hash: None,
+    })
 }
 
 #[test]
