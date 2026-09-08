@@ -163,22 +163,43 @@ fails, what you have is a backend feature and it belongs in a service, a port,
 or `platform/`. `docs/architecture.md` → *Detector, or backend feature?* has the
 table and the worked examples.
 
-The generic path exists so that a new tracker needs no frontend code at all:
+**A detector is one directory plus one edit.** Copy the shape of
+`crates/core/src/detectors/git/`:
 
-1. Add the info model to `core::domain`, and a variant to `Tracker`.
-2. Implement `Detector` — `kind() -> &'static str` and
-   `detect(&Path) -> Result<Option<Tracker>, DetectorError>`.
-3. Register it in `core::detectors::registry::default_detectors()`. That is the
-   one place detectors are registered.
-4. Add the variant to `src/lib/types.ts`.
+```
+crates/core/src/detectors/unity/
+  mod.rs        declares the three below and re-exports them
+  detector.rs   the `Detector` impl — kind() and detect()
+  info.rs       the struct describing what it found
+  error.rs      its error type, plus `impl From<UnityError> for DetectorError`
+```
 
-The UI picks it up automatically: `lib/trackers.ts` infers field types from key
-names and value shapes, `TrackerPanel` renders them, and `trackerColor(kind)`
-assigns a contrast-safe hue. Add unit tests alongside the detector — the existing
-ones (`Gitector`, 11; `UnrealDetector`, 10) are the model to follow.
+Then add two lines to `crates/core/src/detectors/mod.rs`: `pub mod unity;` and
+an entry in `default_detectors()`. **That is the whole registration.** Nothing
+in `domain`, `error`, the command layer or the frontend needs to change.
 
-Do not add a `Tracker` variant without a detector behind it. Placeholder variants
-for Unity and Blender existed once and were removed for that reason.
+Three deliberate design choices are what make that true, and each is worth
+knowing before you fight one of them:
+
+- **`Tracker` is not an enum.** It is `{ kind, data }`, so there is no variant
+  to add. Your detector builds its typed `info.rs` struct and passes it to
+  `Tracker::new("Unity", info)`, which serialises it. Reading a payload back
+  typed is `tracker.info::<UnityInfo>()`; reading one field is
+  `tracker.str_field("engine_version")`.
+- **`DetectorError` has no per-detector variant.** The `impl From<..>` in your
+  `error.rs` boxes into `Other`, which is what keeps `?` working without that
+  enum growing. `git/error.rs` is the example.
+- **The frontend renders unfamiliar kinds already.** `lib/trackers.ts` infers
+  each field's affordance from its name and value shape, `TrackerPanel` renders
+  them, and `trackerColor(kind)` hashes a contrast-safe hue for a kind it has
+  never seen. There is no TypeScript to write.
+
+Put the tests in `crates/core/src/tests/detectors/unity/detector.rs`, mirroring
+the source path — `Gitector` (11 tests) and `UnrealDetector` (10) are the model.
+
+Pick the `kind` string once and never rename it: it is the key every project
+record stores the payload under. The two that predate the generic `Tracker`
+use their old enum variant names, `"Git"` and `"Unreal"`.
 
 ## Commits and pull requests
 

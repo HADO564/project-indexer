@@ -2,9 +2,10 @@ use crate::detectors::detector::Detector;
 use git2::{BranchType, ErrorCode, Repository, StatusOptions};
 use std::path::Path;
 
-use crate::domain::git::GitInfo;
+use super::error::GitError;
+use super::info::GitInfo;
 use crate::domain::tracker::Tracker;
-use crate::error::{DetectorError, GitError};
+use crate::error::DetectorError;
 
 pub struct Gitector;
 
@@ -41,19 +42,22 @@ impl Detector for Gitector {
         let repo_url = remote_url(&repo, "origin")?;
         let web_url = repo_url.as_deref().and_then(web_url);
 
-        Ok(Some(Tracker::Git(GitInfo {
-            repo_root: root,
-            dirty,
-            detached_head: is_detached(&repo)?,
-            repo_url,
-            web_url,
-            // Walking full commit history for authors is a separate feature;
-            // left empty until that's built.
-            contributors: Vec::new(),
-            curr_branch: get_current_branch(&repo)?,
-            branches,
-            commit_hash: head_commit_hash(&repo)?,
-        })))
+        Ok(Some(Tracker::new(
+            "Git",
+            GitInfo {
+                repo_root: root,
+                dirty,
+                detached_head: is_detached(&repo)?,
+                repo_url,
+                web_url,
+                // Walking full commit history for authors is a separate feature;
+                // left empty until that's built.
+                contributors: Vec::new(),
+                curr_branch: get_current_branch(&repo)?,
+                branches,
+                commit_hash: head_commit_hash(&repo)?,
+            },
+        )))
     }
 }
 

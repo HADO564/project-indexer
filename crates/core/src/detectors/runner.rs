@@ -1,7 +1,7 @@
 use std::path::Path;
 
+use crate::detectors::default_detectors;
 use crate::detectors::detector::Detector;
-use crate::detectors::registry::default_detectors;
 use crate::domain::tracker::Tracker;
 use crate::error::DetectorError;
 

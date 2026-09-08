@@ -11,12 +11,10 @@ pub mod ports;
 mod tests;
 
 pub use application::{GroupService, ProjectInspection, ProjectService, ScanService};
+pub use detectors::git::{GitError, GitInfo};
+pub use detectors::unreal::{UnrealError, UnrealInfo};
 pub use detectors::{Detection, DetectorOutcome, DetectorRunner};
-pub use domain::{
-    GitInfo, Group, InstalledApp, Project, Tracker, UnrealInfo, UpdateGroup, UpdateProject,
-};
-pub use error::{
-    DetectorError, GitError, IconError, LauncherError, ProjectError, RepositoryError, UnrealError,
-};
+pub use domain::{Group, InstalledApp, Project, Tracker, UpdateGroup, UpdateProject};
+pub use error::{DetectorError, IconError, LauncherError, ProjectError, RepositoryError};
 pub use infra::{IconStore, SqliteRepository, StoredIcon, CURRENT_SCHEMA_VERSION};
 pub use ports::{AppLauncher, GroupReader, GroupRepository, ProjectReader, ProjectRepository};

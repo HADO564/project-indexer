@@ -1,23 +1,26 @@
 //! Tests for [`crate::application::inspection`].
 
 use crate::application::inspection::*;
+use crate::detectors::git::GitInfo;
 use crate::detectors::{Detection, DetectorOutcome};
-use crate::domain::git::GitInfo;
 use crate::domain::tracker::Tracker;
 use crate::error::DetectorError;
 
 fn sample_git_tracker() -> Tracker {
-    Tracker::Git(GitInfo {
-        repo_root: "/tmp/x".to_string(),
-        dirty: false,
-        detached_head: false,
-        repo_url: None,
-        web_url: None,
-        contributors: Vec::new(),
-        curr_branch: Some("main".to_string()),
-        branches: None,
-        commit_hash: None,
-    })
+    Tracker::new(
+        "Git",
+        GitInfo {
+            repo_root: "/tmp/x".to_string(),
+            dirty: false,
+            detached_head: false,
+            repo_url: None,
+            web_url: None,
+            contributors: Vec::new(),
+            curr_branch: Some("main".to_string()),
+            branches: None,
+            commit_hash: None,
+        },
+    )
 }
 
 #[test]

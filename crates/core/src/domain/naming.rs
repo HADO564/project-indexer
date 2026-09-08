@@ -23,10 +23,10 @@ pub fn folder_name_from_directory(directory: &str) -> Option<String> {
 
 /// The git remote's repo name if the project is in git with a remote, else the folder name.
 pub fn suggest_project_name(trackers: &[Tracker], directory: &str) -> Option<String> {
-    let from_remote = trackers.iter().find_map(|t| match t {
-        Tracker::Git(g) => g.repo_url.as_deref().and_then(repo_name_from_url),
-        _ => None,
-    });
+    let from_remote = trackers
+        .iter()
+        .filter(|t| t.is("git"))
+        .find_map(|t| t.str_field("repo_url").and_then(repo_name_from_url));
     from_remote.or_else(|| folder_name_from_directory(directory))
 }
 
