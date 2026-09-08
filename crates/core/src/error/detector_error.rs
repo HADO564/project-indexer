@@ -1,14 +1,11 @@
 use thiserror::Error;
 
-use crate::error::GitError;
-use crate::error::UnrealError;
-
 /// Errors a detector can raise while inspecting a path.
 ///
 /// Most detectors only touch the filesystem and can lean on the `Io` variant.
-/// The first-party git and Unreal detectors carry richer, structured error
-/// types, so those get a dedicated `#[from]` variant. A new detector with its
-/// own error type doesn't have to edit this enum — it boxes into `Other`:
+/// A detector with its own structured error type never edits this enum: it
+/// writes `impl From<MyError> for DetectorError` in its own directory, which
+/// boxes into `Other` and keeps `?` working. `git/error.rs` is the example.
 ///
 /// ```ignore
 /// something().map_err(|e| DetectorError::Other(Box::new(e)))?;
@@ -17,12 +14,6 @@ use crate::error::UnrealError;
 pub enum DetectorError {
     #[error("Failed to read path: {0}")]
     Io(#[from] std::io::Error),
-
-    #[error(transparent)]
-    Git(#[from] GitError),
-
-    #[error(transparent)]
-    Unreal(#[from] UnrealError),
 
     #[error(transparent)]
     Other(#[from] Box<dyn std::error::Error + Send + Sync>),

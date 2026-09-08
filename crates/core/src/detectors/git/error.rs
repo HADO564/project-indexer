@@ -17,3 +17,12 @@ pub enum GitError {
     #[error("Failed to read remote information")]
     Remote(#[source] git2::Error),
 }
+
+/// Lets `?` lift a [`GitError`] into the shared [`DetectorError`] without
+/// that enum carrying a variant per detector. Living here is what keeps
+/// a new detector's blast radius inside its own directory.
+impl From<GitError> for crate::error::DetectorError {
+    fn from(e: GitError) -> Self {
+        crate::error::DetectorError::Other(Box::new(e))
+    }
+}

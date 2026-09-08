@@ -1,11 +1,11 @@
-//! Tests for [`crate::detectors::git::gitector`].
+//! Tests for [`crate::detectors::git::detector`].
 
 use crate::detectors::detector::Detector;
-use crate::domain::tracker::Tracker;
+use crate::detectors::git::GitInfo;
 use git2::Repository;
 use std::path::Path;
 
-use crate::detectors::git::gitector::*;
+use crate::detectors::git::detector::*;
 use git2::{IndexAddOption, RepositoryInitOptions, Signature};
 use std::path::PathBuf;
 
@@ -65,7 +65,7 @@ fn detect_recognizes_a_git_repository() {
 
     let result = Gitector.detect(&dir).expect("should detect");
 
-    assert!(matches!(result, Some(Tracker::Git(_))));
+    assert!(result.as_ref().is_some_and(|t| t.is("git")));
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -89,9 +89,7 @@ fn detect_reports_a_freshly_initialized_repo_with_no_commits() {
         .expect("should get info")
         .expect("should recognize the repo");
 
-    let Tracker::Git(info) = tracker else {
-        panic!("expected Tracker::Git");
-    };
+    let info: GitInfo = tracker.info().expect("a git payload");
 
     // No commits yet, so HEAD is "unborn" — current branch still reads
     // from the symbolic ref name rather than a resolved commit.
@@ -115,9 +113,7 @@ fn detect_reports_a_repo_with_a_commit() {
         .expect("should get info")
         .expect("should recognize the repo");
 
-    let Tracker::Git(info) = tracker else {
-        panic!("expected Tracker::Git");
-    };
+    let info: GitInfo = tracker.info().expect("a git payload");
 
     assert_eq!(info.curr_branch.as_deref(), Some("main"));
     assert!(info.commit_hash.is_some());
@@ -141,9 +137,7 @@ fn detect_reports_dirty_state_for_untracked_files() {
         .expect("should get info")
         .expect("should recognize the repo");
 
-    let Tracker::Git(info) = tracker else {
-        panic!("expected Tracker::Git");
-    };
+    let info: GitInfo = tracker.info().expect("a git payload");
 
     assert!(info.dirty);
     std::fs::remove_dir_all(&dir).ok();
@@ -161,9 +155,7 @@ fn detect_reports_the_origin_remote_url() {
         .expect("should get info")
         .expect("should recognize the repo");
 
-    let Tracker::Git(info) = tracker else {
-        panic!("expected Tracker::Git");
-    };
+    let info: GitInfo = tracker.info().expect("a git payload");
 
     assert_eq!(
         info.repo_url.as_deref(),
@@ -192,9 +184,7 @@ fn detect_reports_every_local_branch() {
         .expect("should get info")
         .expect("should recognize the repo");
 
-    let Tracker::Git(info) = tracker else {
-        panic!("expected Tracker::Git");
-    };
+    let info: GitInfo = tracker.info().expect("a git payload");
 
     let mut branches = info.branches.expect("should have branches");
     branches.sort();
@@ -224,9 +214,7 @@ fn detect_reports_a_detached_head() {
         .expect("should get info")
         .expect("should recognize the repo");
 
-    let Tracker::Git(info) = tracker else {
-        panic!("expected Tracker::Git");
-    };
+    let info: GitInfo = tracker.info().expect("a git payload");
 
     assert!(info.detached_head);
     assert_eq!(info.curr_branch, None);
@@ -279,9 +267,7 @@ fn get_info_derives_web_url_from_an_ssh_remote() {
         .detect(&dir)
         .expect("should detect")
         .expect("should recognize the repo");
-    let Tracker::Git(info) = tracker else {
-        panic!("expected Tracker::Git");
-    };
+    let info: GitInfo = tracker.info().expect("a git payload");
 
     assert_eq!(
         info.web_url.as_deref(),

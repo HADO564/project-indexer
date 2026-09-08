@@ -1,173 +1,23 @@
+//! The app's composition root: build the services, register the commands,
+//! wire the window events. The pieces it assembles live beside it.
+
 mod adapters;
 pub mod commands;
 
-use std::panic::AssertUnwindSafe;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
 
 use indexer_core::application::{GroupService, ProjectService, ScanService};
 use indexer_core::detectors::DetectorRunner;
-use indexer_core::infra::{IconStore, SqliteRepository};
 
 use crate::adapters::OpenerLauncher;
+mod startup;
+mod tray;
 
-/// Works around WebKitGTK's DMABUF renderer failing on NVIDIA's proprietary
-/// driver, where it can't allocate GBM buffers. The window then either comes
-/// up blank ("Failed to create GBM buffer") or, under Wayland, the app dies
-/// during startup with "Error 71 (Protocol error) dispatching to Wayland
-/// display". Disabling the DMABUF renderer falls back to a software path that
-/// works on both X11 and Wayland.
-///
-/// Gated on an NVIDIA kernel module being loaded so that Mesa, nouveau and
-/// everything else keep the accelerated path, and skipped when the variable is
-/// already set so a user can still force either behaviour. Must run before
-/// GTK/WebKit start.
-#[cfg(target_os = "linux")]
-fn disable_dmabuf_renderer_on_nvidia() {
-    const VAR: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
-
-    if std::env::var_os(VAR).is_some() {
-        return;
-    }
-
-    // Both paths are created by either NVIDIA kernel module, proprietary or
-    // open, and catching both is deliberate: the open module still pairs with
-    // the proprietary userspace GL stack that has the GBM allocation failure.
-    // Distro-independent — no package or driver-version probing needed.
-    let nvidia_loaded = std::path::Path::new("/proc/driver/nvidia/version").exists()
-        || std::path::Path::new("/sys/module/nvidia/version").exists();
-
-    if nvidia_loaded {
-        std::env::set_var(VAR, "1");
-    }
-}
-
-/// Brings the main window back to the foreground — used by the tray icon, the
-/// tray menu, and a second launch of the app (single-instance).
-fn show_main_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-}
-
-/// Whether the tray icon was actually created. When it wasn't, closing the
-/// window must really quit (see the `CloseRequested` handler) — hiding to a
-/// tray that isn't there would strand the app with no way back.
-static TRAY_AVAILABLE: AtomicBool = AtomicBool::new(false);
-
-/// Builds the tray, downgrading any failure to "no tray" instead of taking the
-/// app down with it.
-///
-/// On Linux the tray needs an appindicator shared library at runtime, and
-/// `libappindicator-sys` *panics* rather than returning an error when it can't
-/// load one — so `setup_tray(..)?` never sees that failure, and the process
-/// dies during `setup` with a raw panic and no window. Catching the unwind is
-/// the only way to observe it. The panic's own message still reaches stderr
-/// via the default hook; this adds the part the user can act on.
-fn setup_tray_or_warn(app: &tauri::AppHandle) -> bool {
-    match std::panic::catch_unwind(AssertUnwindSafe(|| setup_tray(app))) {
-        Ok(Ok(())) => true,
-        Ok(Err(e)) => {
-            eprintln!("Project Indexer: could not create the tray icon: {e}");
-            false
-        }
-        Err(_) => {
-            eprintln!(
-                "Project Indexer: could not create the tray icon — no appindicator \
-                 library is installed.\nThe app will keep running, but closing the \
-                 window now quits instead of hiding to the tray.\nOn Arch, install \
-                 `libayatana-appindicator`; see the README's Linux notes for other \
-                 distributions."
-            );
-            false
-        }
-    }
-}
-
-/// Builds the system-tray icon: left-click restores the window, right-click
-/// opens a small menu (Show / Quit). Closing the window only hides it (see the
-/// `CloseRequested` handler), so the tray is how you get back — or quit.
-fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "Show Project Indexer", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
-
-    TrayIconBuilder::with_id("main")
-        .icon(app.default_window_icon().expect("bundled app icon").clone())
-        .tooltip("Project Indexer")
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "show" => show_main_window(app),
-            "quit" => app.exit(0),
-            _ => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                show_main_window(tray.app_handle());
-            }
-        })
-        .build(app)?;
-
-    Ok(())
-}
-
-/// Reports a fatal startup problem and exits.
-///
-/// Deliberately *not* `tauri_plugin_dialog`: that plugin queues the dialog onto
-/// the main-thread event loop (`run_on_main_thread`) and then blocks the caller
-/// waiting for the result. `setup` runs on the main thread before the loop has
-/// started, so the queued work would never run — the app would hang with no
-/// window and no message, which is worse than the crash this replaced. `rfd`
-/// renders the modal synchronously on the calling thread instead.
-///
-/// The message also goes to stderr, so a terminal launch or a captured log
-/// still records it when no GUI is available at all.
-fn fatal_startup_error(message: &str) -> ! {
-    eprintln!("{message}");
-    let _ = rfd::MessageDialog::new()
-        .set_level(rfd::MessageLevel::Error)
-        .set_title("Project Indexer")
-        .set_description(message)
-        .set_buttons(rfd::MessageButtons::Ok)
-        .show();
-    std::process::exit(1);
-}
-
-/// Resolve the config dir and open the SQLite-backed project store. Every
-/// failure here is one the user must be told about rather than crash on.
-fn open_repository(app: &tauri::App) -> Result<SqliteRepository, String> {
-    let dir = app
-        .path()
-        .app_config_dir()
-        .map_err(|e| format!("could not locate the app config directory: {e}"))?;
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
-    SqliteRepository::open(&dir.join("projects.db"))
-        .map_err(|e| format!("failed to open the project database: {e}"))
-}
-
-/// The icon store lives beside `projects.db` in the app config directory. The
-/// directory itself is created lazily on first import, so a missing one is not
-/// a startup failure.
-fn icon_store(app: &tauri::App) -> Result<IconStore, String> {
-    let dir = app
-        .path()
-        .app_config_dir()
-        .map_err(|e| format!("could not locate the app config directory: {e}"))?;
-    Ok(IconStore::new(dir.join("icons")))
-}
+use startup::{fatal_startup_error, icon_store, open_repository};
+use tray::{setup_tray_or_warn, show_main_window, TRAY_AVAILABLE};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

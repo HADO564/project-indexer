@@ -12,3 +12,4 @@ mod palette;
 mod project;
 mod scan;
 mod sorting;
+mod tracker;
