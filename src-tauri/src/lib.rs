@@ -106,6 +106,7 @@ pub fn run() {
             commands::projects::open_project_in_explorer,
             commands::projects::refresh_project_trackers,
             commands::projects::detect_project_trackers,
+            commands::projects::redetect_kind,
             commands::projects::suggest_project_name,
             commands::inspect::inspect_project,
             commands::scan::scan_folder,

@@ -1,8 +1,9 @@
 //! Re-running detectors against a project, and previewing a directory.
 
+use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 use indexer_core::application::ProjectService;
 use indexer_core::domain::{Project, Tracker};
@@ -25,6 +26,84 @@ pub fn refresh_project_trackers(
     id: String,
 ) -> Result<Project, ProjectError> {
     service.refresh_trackers(&id)
+}
+
+static SWEEP_RUNNING: AtomicBool = AtomicBool::new(false);
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SweepFinished {
+    kinds: Vec<String>,
+    scanned: usize,
+    updated: usize,
+    failures: usize,
+    error: Option<String>,
+}
+
+pub(crate) fn spawn_sweep(
+    app: AppHandle,
+    service: Arc<ProjectService>,
+    kinds: Vec<String>,
+) -> bool {
+    if SWEEP_RUNNING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return false;
+    }
+
+    std::thread::spawn(move || {
+        let _guard = SweepGuard;
+
+        let mut scanned = 0;
+        let mut updated = 0;
+        let mut failures = 0;
+        let mut error = None;
+
+        for kind in &kinds {
+            match service.redetect_kind(kind) {
+                Ok(report) => {
+                    scanned += report.scanned;
+                    updated += report.updated;
+                    failures += report.failures.len();
+                }
+                Err(e) => {
+                    error = Some(e.to_string());
+                    break;
+                }
+            }
+        }
+
+        let _ = app.emit(
+            "sweep://done",
+            SweepFinished {
+                kinds,
+                scanned,
+                updated,
+                failures,
+                error,
+            },
+        );
+    });
+
+    true
+}
+
+#[tauri::command]
+pub fn redetect_kind(
+    app: AppHandle,
+    service: State<'_, Arc<ProjectService>>,
+    kind: String,
+) -> bool {
+    spawn_sweep(app, service.inner().clone(), vec![kind])
+}
+
+struct SweepGuard;
+
+impl Drop for SweepGuard {
+    fn drop(&mut self) {
+        SWEEP_RUNNING.store(false, Ordering::SeqCst);
+    }
 }
 
 /// Runs detection against a directory that isn't a project yet — nothing is
