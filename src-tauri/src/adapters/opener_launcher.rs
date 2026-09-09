@@ -30,7 +30,7 @@ fn open_in_app(directory: &str, open_with: Option<&str>) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         if let Some(command) = open_with.map(str::trim).filter(|c| !c.is_empty()) {
-            return indexer_core::platform::app_discovery::open_with_command(directory, command);
+            return indexer_core::platform::open_with_command(directory, command);
         }
     }
 
