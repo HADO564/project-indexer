@@ -42,6 +42,8 @@ mod directory;
 mod launching;
 mod queries;
 
+pub use detection::{SweepFailure, SweepReport};
+
 impl ProjectService {
     pub fn new(
         repo: Arc<dyn ProjectRepository>,
