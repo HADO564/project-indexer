@@ -130,7 +130,7 @@ pub(crate) fn build_launch_args(
 /// multi-argument commands real `.desktop` entries use. Splitting the
 /// stored command line ourselves and spawning it directly is what makes
 /// Flatpak, Snap and Wine entries work.
-pub(crate) fn open_with_command(directory: &str, command: &str) -> Result<(), String> {
+pub fn open_with_command(directory: &str, command: &str) -> Result<(), String> {
     use std::os::unix::process::CommandExt as _;
     use std::process::{Command, Stdio};
 

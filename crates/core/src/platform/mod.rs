@@ -6,4 +6,6 @@ pub mod filesystem;
 
 pub use app_discovery::list_installed_apps;
 pub use app_launching::open_with_app_available;
+#[cfg(target_os = "linux")]
+pub use app_launching::open_with_command;
 pub use filesystem::{check_directory_status, remove_directory, DirectoryStatus};
