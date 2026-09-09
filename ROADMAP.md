@@ -142,6 +142,41 @@ rather than by accident at the keyboard.
 The cost is one wrapper struct and a documented rule. The cost of skipping it is
 a breaking change the first time somebody adds a project type.
 
+## Agent access — MCP, or a CLI plus a skill
+
+Drive the app from an agent instead of a window. The premise is the same one the
+CLI rests on: `indexer-core` has no Tauri dependency, so an agent surface is a
+*fourth frontend* over the same `ProjectService` and the same SQLite file, not a
+new backend.
+
+**Whether it needs to be MCP is the actual question, and it is open.** Once
+[plain subcommands](#plain-subcommands) and the `--json` contract above exist, an
+agent skill is a markdown file that documents `indexer list --json` — no crate,
+no protocol, no server lifetime, and no second output shape to keep in step with
+the first. MCP buys typed tool schemas and a discovery handshake, and charges a
+`crates/mcp` crate, a transport, and a parallel contract that will drift from
+`--json` the first time one of them changes.
+
+That settles the order rather than the outcome: **plain subcommands and `--json`
+first, then judge.** If a skill over the CLI proves sufficient, MCP is never
+built and nothing is lost. If it does not, MCP is then built over a JSON shape
+already proved against a real consumer, which is the cheaper way round.
+
+Three things have to be answered before either ships.
+
+- **Concurrent writers.** Exactly one process writes today. A GUI, a CLI and a
+  long-lived agent server means three. SQLite in WAL takes many readers and one
+  writer; the second writer gets `SQLITE_BUSY` unless a busy timeout is set, and
+  none is set today. An agent is the first consumer likely to write *while* the
+  GUI is open, so this stops being theoretical the moment this work starts.
+- **What an agent is allowed to do.** Reading and registering are
+  uncontroversial. `delete_project_directory` reached from a tool call is not.
+  The defensible default is that the agent surface is read-plus-register, and
+  destructive operations stay behind a human — the same argument that gives
+  [storage](#storage--what-a-project-costs-on-disk) its review step.
+- **Whether the GUI remains the primary face.** Asked plainly, because if the
+  answer is no, that reorders most of this document rather than adding to it.
+
 ## More project types
 
 Detection is designed so a new tracker costs no frontend code: implement the
@@ -355,6 +390,101 @@ which is the fast-versus-deep split again, arriving from a second direction.
 per-row failures instead of calling `refresh_trackers` or `into_result()`; and
 `domain::naming::disambiguate` is what resolves `~/code/api` against
 `~/work/api`, shared with `ensure_project` as predicted.
+
+## Storage — what a project costs on disk
+
+The index already knows where every project is, so it is most of the way to
+knowing what each one *costs* and which parts of it are rebuildable. Turning that
+into a report — largest first, with the reclaimable share named — is a small step
+from data already held.
+
+**It does not make this a disk cleaner, and the distinction is load-bearing.**
+The README says the app "does not move your files, manage your repositories, or
+replace your editor. It is an index." A feature that deletes directories
+contradicts that sentence, and the sentence should not be quietly edited to
+accommodate it. The reading that keeps both: **the index reports; the user
+disposes.** It measures, ranks, and explains what is reclaimable and why.
+Removal stays explicit, per item, and user-initiated, with the same review step
+that makes a bulk scan a deliberate act rather than a surprise.
+
+**The seam already exists.** The scanner's prune list — `node_modules`, `target`,
+`.venv`, `build`, `dist` — is precisely the set of directories that are large,
+rebuildable, and never projects. Today it means *do not descend into these*. A
+storage report inverts it: *these are what you can get back*. One list, two uses,
+and no second taxonomy to invent or maintain.
+
+**Safe deletion is a prerequisite, and a gap today.**
+`platform::filesystem::remove_directory` is `std::fs::remove_dir_all` — permanent
+— and it is what `delete_directory`, and therefore the GUI's delete, already
+calls. Nothing in this app reaches a recycle bin. The `trash` crate covers the
+Windows Recycle Bin, the XDG trash and macOS Trash behind one call, so the change
+is small, but it is not free: trashing fails outright on network and some
+removable drives, and it does not free the space until the bin is emptied.
+Both need an honest message. **A silent fallback to `remove_dir_all` when
+trashing fails must never be written** — that is the one shape of this feature
+that is worse than not having it.
+
+**Measuring costs a full walk**, and a walk over `node_modules` stats hundreds of
+thousands of files. That belongs nowhere near detection — invariant 2 in
+[`docs/architecture.md`](docs/architecture.md), *basic detection stays cheap and
+bounded*, rules it out of the fast path directly. So sizing is opt-in, explicitly
+triggered, cancellable, and its result is stored rather than recomputed per view.
+
+**The reported number will be wrong unless three things are decided.** Logical
+size and size on disk differ, and neither is the obviously right one to show.
+Hardlinks are counted once per link, which is not a corner case here: pnpm
+hardlinks its content store into every `node_modules`, so a naive sum can promise
+several gigabytes and free a few hundred megabytes. And junctions and symlinks
+must not be followed, or the walk both double-counts and can loop. A confidently
+wrong "4.2 GB reclaimable" is worse than reporting nothing.
+
+Still undecided: whether staleness — last commit, last mtime — is part of this
+report or a separate axis alongside size; whether it covers only tracked projects
+or arbitrary directories, the latter making it a general disk tool and a far
+larger thing than an index feature; and whether it surfaces as a GUI view, a CLI
+subcommand, or only through the
+[agent surface](#agent-access--mcp-or-a-cli-plus-a-skill).
+
+### Prior art — TreeMap Disk Visualizer
+
+[TreeMap](https://github.com/Prithvi-Web/TreeMap-Disk-Visualizer) is a
+Node/Electron disk visualiser that ships a stdio MCP server alongside its GUI, so
+an agent can drive a read-only audit and propose reclaims. It is a different
+product from this one, and most of it is not worth copying — but it has already
+paid for the answers to several questions above, and those are worth taking.
+
+**Worth lifting.**
+
+- **Deletion always routes through the OS trash; permanent removal is not an
+  option the code has.** That is the same conclusion reached above, reached
+  independently, which is the useful kind of corroboration.
+- **Hard links are counted once, by design.** A defensible default for the
+  accounting question above, and it settles the pnpm case in the honest
+  direction. Copy-on-write clones stay an acknowledged over-count — worth
+  documenting rather than pretending to solve.
+- **Destructive operations are confined to the scanned root, with a system
+  directory blocklist on top.** Cheap to implement, and exactly the right shape
+  for an agent surface: it bounds what any tool call can reach regardless of what
+  the agent was persuaded to ask for.
+- **Every destructive operation is audit-logged.** The natural companion to a
+  trash-only policy, and the thing that makes "nothing destructive" checkable
+  rather than merely asserted.
+- **Never leave zero copies.** Its duplicate finder refuses to delete every
+  member of a group. Generalised: no automated pass may reduce a thing to none.
+
+**Deliberately not copied.** Seventeen visualisation modes, cloud-account
+scanning, network fleet monitoring, and a 50-endpoint REST API are a separate
+product. **Autopilot policies — scheduled unattended cleanup — are the direct
+opposite of the framing above** and should not arrive by imitation. Its Time
+Capsule (copy the file, verify by SHA-256, then trash the original) is a genuinely
+good idea in the wrong context here: it needs free space in order to free space.
+
+**One thing to read it for rather than borrow.** Its scanner is a packed
+structure-of-arrays — names in a UTF-8 pool, directories as contiguous id ranges
+in breadth-first order, ~52 bytes per file — walked by a threadpool capped at
+sixteen threads. The lesson transfers even though the code does not: size a tree
+in one pass into flat arrays rather than building a tree of owned structs, and
+cap concurrency rather than spawning per directory.
 
 ## Project linking
 
@@ -581,6 +711,17 @@ These are not "someday". Each has a specific condition that should start it.
   detection getting slow enough to need debugging.
 - **Frontend page-state extraction.** `+page.svelte` was around 250 lines before
   the views work and is 362 now. Watch it; don't pre-split it.
+- **Portfolio and résumé export.** Turn tracked projects into the raw material
+  for a CV or a GitHub profile: what each one is, what it is built with, when it
+  was worked on, and how much of it is yours. The app should not write the prose
+  — an agent or the user does — so its job is to hand over structured facts,
+  which makes this a *consumer* of the [`--json` contract](#the---json-contract)
+  and the [agent surface](#agent-access--mcp-or-a-cli-plus-a-skill) rather than a
+  feature with machinery of its own. Trigger: **deep detection**, because the
+  facts that make the output worth having — commit range, contributors, language
+  mix — are exactly the expensive ones, which is why `GitInfo.contributors` is
+  deliberately empty today. Until then an export would say little that the folder
+  name does not.
 
 ## Considered and declined
 
