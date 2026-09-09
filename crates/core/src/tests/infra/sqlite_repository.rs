@@ -306,3 +306,71 @@ fn refuses_a_newer_database() {
         Err(RepositoryError::Backend(_))
     ));
 }
+
+/// The `WHERE is_deleted = 0` in `list_ids` is the whole reason it exists
+/// rather than callers reusing `list`: a sweep has no business re-detecting
+/// projects the user has already binned.
+#[test]
+fn list_ids_excludes_binned_projects() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let live = sample("live-1", &tmp());
+    let mut binned = sample("binned-1", &tmp());
+    binned.is_deleted = true;
+    repo.save(&live).unwrap();
+    repo.save(&binned).unwrap();
+
+    let ids = repo.list_ids().unwrap();
+
+    assert_eq!(ids, vec!["live-1".to_string()]);
+}
+
+#[test]
+fn list_ids_is_empty_on_a_fresh_database() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    assert!(repo.list_ids().unwrap().is_empty());
+}
+
+/// The case that runs on somebody's very first launch, before any sweep has
+/// recorded anything. Absent must read as `None`, not as an error.
+#[test]
+fn get_meta_is_none_for_a_key_that_was_never_set() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    assert_eq!(repo.get_meta("detector_kinds").unwrap(), None);
+}
+
+#[test]
+fn meta_round_trips() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    repo.set_meta("detector_kinds", "git,unreal").unwrap();
+    assert_eq!(
+        repo.get_meta("detector_kinds").unwrap().as_deref(),
+        Some("git,unreal")
+    );
+}
+
+/// The one that catches a plain `INSERT`. `meta.key` is a primary key, so
+/// without the `ON CONFLICT` clause the second write fails — and the sweep
+/// writes this key after *every* completed run, so it would break on the
+/// second one and pass every other test here.
+#[test]
+fn set_meta_overwrites_rather_than_failing_on_a_second_write() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    repo.set_meta("detector_kinds", "git").unwrap();
+    repo.set_meta("detector_kinds", "git,unreal,blender")
+        .unwrap();
+    assert_eq!(
+        repo.get_meta("detector_kinds").unwrap().as_deref(),
+        Some("git,unreal,blender")
+    );
+}
+
+/// Proves `get_meta` reads the same table the migration runner writes, rather
+/// than a lookalike — a fresh database already carries this row.
+#[test]
+fn get_meta_sees_the_schema_version_the_migration_wrote() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    assert_eq!(
+        repo.get_meta("schema_version").unwrap(),
+        Some(CURRENT_SCHEMA_VERSION.to_string())
+    );
+}
