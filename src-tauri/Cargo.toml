@@ -24,6 +24,10 @@ tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 indexer-core = { path = "../crates/core" }
+# Only for command payloads defined in this crate rather than in core --
+# the sweep event, for one. Already in the tree via tauri, so this adds a
+# name this crate may use, not a build.
+serde = { version = "1", features = ["derive"] }
 # Used only for the fatal-startup-error dialog, which has to render *before*
 # Tauri's event loop exists (see `lib.rs`). Feature set is a subset of what
 # tauri-plugin-dialog already enables, so this pulls in no extra crates.

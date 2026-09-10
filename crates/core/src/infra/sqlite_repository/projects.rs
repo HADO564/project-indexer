@@ -32,6 +32,15 @@ impl ProjectReader for SqliteRepository {
         Ok(out)
     }
 
+    fn list_ids(&self) -> Result<Vec<String>, RepositoryError> {
+        let conn = self.lock_conn();
+        let mut stmt = conn
+            .prepare("SELECT id FROM projects WHERE is_deleted = 0")
+            .map_err(be)?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0)).map_err(be)?;
+        rows.collect::<Result<Vec<String>, _>>().map_err(be)
+    }
+
     fn find_by_directory(
         &self,
         normalized_directory: &str,

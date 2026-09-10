@@ -22,7 +22,7 @@ use tray::{setup_tray_or_warn, show_main_window, TRAY_AVAILABLE};
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "linux")]
-    disable_dmabuf_renderer_on_nvidia();
+    startup::disable_dmabuf_renderer_on_nvidia();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -106,6 +106,7 @@ pub fn run() {
             commands::projects::open_project_in_explorer,
             commands::projects::refresh_project_trackers,
             commands::projects::detect_project_trackers,
+            commands::projects::redetect_kind,
             commands::projects::suggest_project_name,
             commands::inspect::inspect_project,
             commands::scan::scan_folder,

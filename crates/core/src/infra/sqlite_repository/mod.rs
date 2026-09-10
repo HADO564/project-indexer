@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::domain::{Group, Project};
 use crate::error::RepositoryError;
@@ -54,6 +54,27 @@ impl SqliteRepository {
         Ok(Self {
             conn: Mutex::new(conn),
         })
+    }
+
+    pub fn get_meta(&self, key: &str) -> Result<Option<String>, RepositoryError> {
+        let conn = self.lock_conn();
+        let data: Option<String> = conn
+            .query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
+            .optional()
+            .map_err(be)?;
+        Ok(data)
+    }
+
+    pub fn set_meta(&self, key: &str, value: &str) -> Result<(), RepositoryError> {
+        let conn = self.lock_conn();
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?1,?2)
+        ON CONFLICT (key) DO UPDATE SET value = excluded.value
+        ",
+            [key, value],
+        )
+        .map_err(be)?;
+        Ok(())
     }
 
     /// Takes the connection lock, recovering from poisoning.

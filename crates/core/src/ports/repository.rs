@@ -7,6 +7,14 @@ pub trait ProjectReader: Send + Sync {
     fn get(&self, id: &str) -> Result<Option<Project>, RepositoryError>;
     /// Every project, deleted included, no ordering guarantee.
     fn list(&self) -> Result<Vec<Project>, RepositoryError>;
+    /// IDs of every **live** project — binned ones excluded, unlike [`list`](Self::list).
+    ///
+    /// Exists so a caller can work through projects one at a time instead of
+    /// holding them all in memory: the re-detect sweep loads, updates and drops
+    /// each project in turn, so its peak memory is one project whatever the
+    /// database holds.
+    fn list_ids(&self) -> Result<Vec<String>, RepositoryError>;
+
     /// `normalized_directory` must already be `normalize_directory`'d.
     fn find_by_directory(
         &self,
