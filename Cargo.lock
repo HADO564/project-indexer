@@ -2865,6 +2865,7 @@ version = "0.3.0"
 dependencies = [
  "indexer-core",
  "rfd",
+ "serde",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
