@@ -10,6 +10,20 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-09-12
+
+A maintenance release. Nothing you use changes. The database format is the same
+as 0.3.0's, so either version opens the other's data.
+
+### Changed
+
+- **The backend is reorganised so that a new project type is cheaper to add** —
+  one new folder plus one registration line. No change in behaviour.
+- **Groundwork for re-checking already-tracked projects when a new project type
+  is added.** Detection results are stored, so a project registered before a
+  detector existed would otherwise never pick up that detector's details. The
+  backend half is in place; nothing in the app triggers it yet.
+
 ## [0.3.0] — 2026-09-08
 
 Released as the `0.3.0-1` beta on 2026-09-07 and promoted unchanged after
@@ -204,7 +218,8 @@ The feature set below is what 0.1.1 ships.
 - Projects are stored in SQLite at `projects.db` in the platform config
   directory, with synchronous transactional writes.
 
-[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/HADO564/project-indexer/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/HADO564/project-indexer/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/HADO564/project-indexer/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/HADO564/project-indexer/releases/tag/v0.1.1
