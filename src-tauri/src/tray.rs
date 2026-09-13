@@ -7,6 +7,8 @@
 
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::AtomicBool;
+#[cfg(target_os = "macos")]
+use std::sync::atomic::Ordering;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -20,6 +22,68 @@ pub(crate) fn show_main_window(app: &tauri::AppHandle) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
+}
+
+/// Hides the main window to the tray — the counterpart to `show_main_window`,
+/// used by the `CloseRequested` handler. On macOS a fullscreen window lives in
+/// its own Space, and hiding it there leaves that Space open and black. So it
+/// leaves fullscreen first, and `watch_fullscreen_exit` hides it once macOS
+/// reports the transition has finished.
+pub(crate) fn hide_main_window(window: &tauri::Window) {
+    #[cfg(target_os = "macos")]
+    if window.is_fullscreen().unwrap_or(false) {
+        HIDE_AFTER_FULLSCREEN_EXIT.store(true, Ordering::Relaxed);
+        let _ = window.set_fullscreen(false);
+        return;
+    }
+    let _ = window.hide();
+}
+
+/// Set when a close arrives while the main window is fullscreen (macOS), so
+/// the fullscreen exit that follows ends in a hide. Exits the user starts
+/// (green button, Ctrl+Cmd+F) leave it unset and the window stays visible.
+#[cfg(target_os = "macos")]
+static HIDE_AFTER_FULLSCREEN_EXIT: AtomicBool = AtomicBool::new(false);
+
+/// Hides the main window once macOS reports that a fullscreen exit started by
+/// `hide_main_window` has finished. Registered once, at startup.
+///
+/// This listens for `NSWindowDidExitFullScreenNotification` rather than using
+/// Tauri's events: tao reports `is_fullscreen() == false` as soon as the exit
+/// *starts*, and a hide during the animation is ignored, so no `Resized` event
+/// reliably marks the end.
+#[cfg(target_os = "macos")]
+pub(crate) fn watch_fullscreen_exit(app: &tauri::AppHandle) {
+    use std::ptr::NonNull;
+
+    use block2::RcBlock;
+    use objc2::runtime::AnyObject;
+    use objc2_app_kit::NSWindowDidExitFullScreenNotification;
+    use objc2_foundation::{NSNotification, NSNotificationCenter};
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(ns_window) = window.ns_window() else {
+        return;
+    };
+    let block = RcBlock::new(move |_: NonNull<NSNotification>| {
+        if HIDE_AFTER_FULLSCREEN_EXIT.swap(false, Ordering::Relaxed) {
+            let _ = window.hide();
+        }
+    });
+    // SAFETY: `ns_window` is the live NSWindow behind the main window. With no
+    // queue, the block runs on the posting thread, which is AppKit's main thread.
+    let observer = unsafe {
+        NSNotificationCenter::defaultCenter().addObserverForName_object_queue_usingBlock(
+            Some(NSWindowDidExitFullScreenNotification),
+            Some(&*ns_window.cast::<AnyObject>()),
+            None,
+            &block,
+        )
+    };
+    // The main window lives as long as the app, so the observer does too.
+    std::mem::forget(observer);
 }
 
 /// Whether the tray icon was actually created. When it wasn't, closing the
