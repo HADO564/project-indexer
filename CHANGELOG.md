@@ -10,6 +10,13 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+### Fixed
+
+- **macOS: closing the window while it's fullscreen no longer leaves a black
+  screen.** Cmd+W or the close button now takes the window out of fullscreen
+  and hides it to the tray, returning you to the desktop you were on before.
+  ([#4](https://github.com/HADO564/project-indexer/issues/4))
+
 ## [0.3.1] — 2026-09-12
 
 A maintenance release. Nothing you use changes. The database format is the same

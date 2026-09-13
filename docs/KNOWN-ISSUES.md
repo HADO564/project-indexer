@@ -6,12 +6,14 @@ post-refactor `main` (`5cf2275`). `PI-004`, an inaccurate comment on the NVIDIA
 workaround, was fixed and retired the same day. Re-verified 2026-09-08 on `main`
 at `5bb818f`: every gate below still passes on Arch, and `PI-006` still
 reproduces — its previously untested workaround is now tested, and replaced with
-one that needs no root._
+one that needs no root. Extended 2026-09-14 with `PI-007`, the first entry from
+a macOS run (`main` at `ba59c61`)._
 
 Five issues are tracked here from getting the Windows-developed app compiling
 and running on Linux. They carry deliberately different dispositions: two were
 real defects, one is cosmetic log noise, one is a linter false positive, and one
-is the host distribution's problem rather than the app's.
+is the host distribution's problem rather than the app's. `PI-007` is macOS-only
+and was reported separately, as issue #4.
 
 | ID | Issue | Severity | Status |
 |----|-------|----------|--------|
@@ -20,6 +22,7 @@ is the host distribution's problem rather than the app's.
 | PI-003 | `state_referenced_locally` warnings ×7 | None — false positive | Not a defect |
 | PI-005 | Missing appindicator library kills startup | High — blocks launch | **Fixed** |
 | PI-006 | AppImage bundling fails on Arch | Low — local packaging only | Environmental |
+| PI-007 | Cmd+W in fullscreen leaves a black screen | Medium — user-visible | **Fixed** |
 
 Nothing here blocks the Linux *build* — `cargo check`, `cargo clippy`,
 `cargo fmt --check`, `cargo test`, `pnpm run check`, `pnpm test` and `pnpm build`
@@ -278,6 +281,74 @@ builds them into the library. **This does not make the result shippable** — th
 glibc argument above is unchanged, and the AppImage this produces still only
 runs on distributions as new as the one that built it. It is for reproducing a
 bundling problem locally, not for release.
+
+---
+
+## PI-007 — Cmd+W in fullscreen leaves a black screen on macOS
+
+**Severity:** Medium (user-visible) · **Status:** Fixed in `b52e9d4` (issue #4) · **Platform:** macOS
+
+With the main window fullscreen, pressing Cmd+W (or the red close button) left
+the screen black. The app kept running, but its fullscreen Space stayed open
+with nothing in it, instead of the window hiding to the tray and returning you
+to the previous Space.
+
+**Cause.** The `CloseRequested` handler called `api.prevent_close()` and then
+`window.hide()`. On macOS a fullscreen window lives in its own Space, and hiding
+the window doesn't take it out of fullscreen — so the Space outlived the window.
+
+**Why the obvious fix didn't work.** Leaving fullscreen first and hiding on the
+next `Resized` event whose `is_fullscreen()` was `false` still only left
+fullscreen; the window never hid. tao sets its fullscreen state to `None` the
+moment `set_fullscreen(false)` is called
+(`tao-0.35.3/src/platform_impl/macos/window.rs:1263`) and starts the animation
+asynchronously, and Tauri's `is_fullscreen()` reads that state
+(`tauri-runtime-wry-2.11.4/src/lib.rs:3406`). A temporary log in the `Resized`
+handler showed the sequence:
+
+```
+Resized: pending=false fullscreen=Ok(true)    ← entering fullscreen
+Resized: pending=false fullscreen=Ok(true)
+Resized: pending=true fullscreen=Ok(false)    ← mid-animation: hide() ignored
+Resized: pending=false fullscreen=Ok(false)   ← animation done, flag already cleared
+```
+
+The hide ran one event early, and macOS ignores a hide during the transition.
+Counting `Resized` events instead would be fragile: how many arrive depends on
+the window and on "Reduce motion".
+
+**Why not hide the whole app.** `AppHandle::hide()` (Cmd+H) was tried too. It
+does switch back to the previous Space, but the window stays fullscreen and its
+Space stays open.
+
+**Fix** — `src-tauri/src/tray.rs`, `src-tauri/src/lib.rs`, and macOS-only
+`objc2`, `block2`, `objc2-foundation` and `objc2-app-kit` dependencies in
+`src-tauri/Cargo.toml` (all already in the tree via tao):
+
+- `hide_main_window()` hides a normal window as before. For a fullscreen one on
+  macOS it sets `HIDE_AFTER_FULLSCREEN_EXIT` and calls `set_fullscreen(false)`.
+- `watch_fullscreen_exit()`, registered once in `setup`, observes AppKit's
+  `NSWindowDidExitFullScreenNotification` for the main window — posted only
+  once the transition has actually finished — and hides the window if the flag
+  is set, clearing it.
+
+**Why the flag.** It limits the hide to exits started by a close. Leaving
+fullscreen with the green button or Ctrl+Cmd+F posts the same notification and
+must leave the window visible.
+
+**Verified** manually on macOS 26.5 (Darwin 25.5.0) with `pnpm tauri dev`:
+
+| Action | Result |
+|---|---|
+| Cmd+W in fullscreen | leaves fullscreen, then hides; previous Space shown |
+| Red close button in fullscreen | same as Cmd+W |
+| Tray icon click afterwards | window returns, not fullscreen |
+| Green button or Ctrl+Cmd+F | leaves fullscreen, stays visible |
+| Cmd+W when not fullscreen | hides immediately, as before |
+| Quit from tray and relaunch | window restores normally |
+
+The Dock icon stays while the window is hidden. That is the app's normal
+close-to-tray behaviour on macOS, not part of this issue.
 
 ---
 

@@ -193,6 +193,11 @@ running.
 - Launching the app again while it is hidden also brings the window forward
   rather than starting a second copy.
 
+**On macOS, closing a fullscreen window** (Cmd+W or the close button) first
+takes it out of fullscreen, then hides it once the animation finishes, returning
+you to the desktop you were on. Bringing it back from the tray opens it as a
+normal window. The Dock icon stays while the window is hidden.
+
 **On Linux the tray needs an appindicator library.** If one is not installed the
 app still runs and prints a message naming the package — and in that case closing
 the window genuinely quits, since there would be no tray to restore it from. The

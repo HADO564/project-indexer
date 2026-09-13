@@ -326,3 +326,28 @@ the project given the scaffolding a published release needs.
   distribution. The CLI's `--json` contract is settled ahead of the code:
   versioned envelope, additive-only within a version, unknown tracker kinds
   serialise instead of failing, stdout is data and stderr is prose.
+
+## 2026-09-14 — macOS: closing a fullscreen window hides it properly
+
+- `b52e9d4` **PI-007 — Cmd+W in fullscreen left a black screen** (issue #4).
+  The close handler hid the window while it was still in its own fullscreen
+  Space, which stayed open with nothing in it. `hide_main_window()` in
+  `tray.rs` now takes a fullscreen window out of fullscreen first, and
+  `watch_fullscreen_exit()` hides it when AppKit posts
+  `NSWindowDidExitFullScreenNotification`. A flag limits that hide to exits a
+  close started, so leaving fullscreen with the green button still leaves the
+  window visible.
+
+- **Two approaches were tried and dropped first**, and the entry records why.
+  Hiding on the next `Resized` whose `is_fullscreen()` was `false` never hid:
+  tao flips that state the moment the exit is requested, so the hide ran
+  mid-animation and macOS ignored it — confirmed with a temporary log rather
+  than assumed. Hiding the whole app (`AppHandle::hide()`) switched Spaces but
+  left the window fullscreen. The fix adds macOS-only `objc2` / `block2` /
+  `objc2-foundation` / `objc2-app-kit` dependencies, all already in the tree
+  via tao.
+
+- **Verified by hand on macOS 26.5**, the first entry from a macOS run: Cmd+W
+  and the close button in fullscreen, restore from the tray, the green button,
+  Cmd+W outside fullscreen, and quit-and-relaunch. Like PI-005, CI could not
+  have caught this — it never launches the app, and does not build macOS at all.

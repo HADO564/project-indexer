@@ -130,6 +130,7 @@ coverage**, which is why the 0.3.0 scanner was released as a beta first.
 - [x] System tray — closing the window hides the app instead of quitting; left-click restores, right-click gives Show / Quit
 - [x] `tauri-plugin-single-instance` — a second launch brings the running window forward rather than starting a copy
 - [x] Tray failure degrades instead of killing startup (`setup_tray_or_warn` + `TRAY_AVAILABLE`); no tray means closing genuinely quits, so the window can't hide beyond reach (`KNOWN-ISSUES.md` PI-005)
+- [x] macOS: closing a fullscreen window leaves fullscreen and then hides, instead of leaving its Space open and black — `hide_main_window` + `watch_fullscreen_exit`, which waits for `NSWindowDidExitFullScreenNotification` (`KNOWN-ISSUES.md` PI-007, issue #4)
 
 ## Release engineering
 
