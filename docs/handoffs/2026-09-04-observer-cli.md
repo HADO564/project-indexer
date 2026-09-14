@@ -3,6 +3,11 @@
 **Date:** 2026-09-04
 **Updated:** 2026-09-04, after the first Linux run of the post-refactor `main`.
 **Status:** ready to start. Nothing is blocked; the backend seams exist.
+**Superseded in part (2026-09-14):** the CLI's organisation, release model, TUI
+and distribution are settled in
+[`../superpowers/specs/2026-09-14-cli-design.md`](../superpowers/specs/2026-09-14-cli-design.md).
+Read that first. This briefing stays the reference for the backend and the shared
+database (§3–§5).
 **Prerequisite:** the frontend-agnostic-core refactor, shipped in v0.1.1.
 
 This is the briefing for the next initiative, not its design. It records what
@@ -147,6 +152,12 @@ Other properties already handled for you:
 
 Nothing below was decided. Do not treat the examples in §1 as settled scope.
 
+**Update 2026-09-14 — now settled** (see the CLI design spec): 4, duplicate names
+(`domain::naming::disambiguate`, shared with the scanner); 5, plain subcommands
+ship, and before the observer; 6, recognizers live in `crates/cli` until a second
+consumer exists; and 9, distribution through package managers after the package
+works, with no `self-update`.
+
 1. **Which recognizers ship first?** `mkdir <name>`, `git init`, `git clone
    <url>`, `gh repo create`, `cargo new` were illustrative examples, not a
    committed list. What is the minimum set that makes this genuinely useful?
@@ -168,7 +179,7 @@ Nothing below was decided. Do not treat the examples in §1 as settled scope.
    parent-qualified name), surface the conflict, or register with a fallback
    name? This is documented as the CLI's decision in `ensure_project`'s doc
    comment. **Not only the CLI's problem any more:** scanning a folder for
-   projects (`ROADMAP.md`) hits the identical case — point it at a directory of
+   projects (`docs/app/ROADMAP.md`) hits the identical case — point it at a directory of
    forty repos and `client/app` and `internal/app` both want to be "app". Solve
    it once, for both.
 
@@ -188,7 +199,7 @@ Nothing below was decided. Do not treat the examples in §1 as settled scope.
    command's code wins). **The `--json` contract is now settled too** — versioned
    envelope, additive-only within a version, unknown tracker kinds serialise
    rather than fail, stdout is data and stderr is prose. It is written up in
-   `ROADMAP.md` under "The `--json` contract"; follow it rather than reinventing
+   `docs/cli/ROADMAP.md` under "The `--json` contract"; follow it rather than reinventing
    it. Still open: what the observer prints on the human path (nothing? a
    one-line note to stderr?), `--quiet`, and whether recording failures are
    surfaced or silent.
@@ -211,11 +222,11 @@ Nothing below was decided. Do not treat the examples in §1 as settled scope.
 - **A pre-commit hook runs the CI gates**, and is worth installing before you
   start: `git config core.hooksPath .githooks`. It runs only the gates your
   staged files can affect, and mirrors `.github/workflows/ci.yml` exactly.
-- **Commit trailer:** every commit ends with a `Co-Authored-By:` line naming the
-  model that did the work — this document says Sonnet 5 because Sonnet 5 wrote
-  it; commits from 2026-09-04 onward say Opus 5. Name whichever model you are,
-  rather than copying the line above.
-- **`crates/cli` is at version 0.1.1** with the workspace but has no deps yet.
+- **Commits carry no AI co-author trailer.** Conventional-commit messages with a
+  why-focused body, and nothing else — see `CONTRIBUTING.md` → *Commits and pull
+  requests*.
+- **`crates/cli` is at version 0.1.0**, versioned independently of the app, and
+  has no deps yet.
 
 ## 7a. If you're picking this up on Linux
 
@@ -289,7 +300,7 @@ twenty lines, and everything else builds on it.
 | [`../knowledgebase.md`](../knowledgebase.md) | how each piece actually works, module by module |
 | [`../superpowers/specs/2026-09-02-frontend-agnostic-core-design.md`](../superpowers/specs/2026-09-02-frontend-agnostic-core-design.md) | the refactor's spec; §"Spec 2 preview" and §"App updates" are the CLI's prehistory |
 | [`../superpowers/plans/2026-09-02-frontend-agnostic-core.md`](../superpowers/plans/2026-09-02-frontend-agnostic-core.md) | how the refactor was executed, if you want the task-shaping precedent |
-| [`../checklist.md`](../checklist.md) | feature status |
+| [`../cli/checklist.md`](../cli/checklist.md) | the CLI's milestones and status |
 | [`../../CHANGELOG.md`](../../CHANGELOG.md) | what shipped in v0.1.0 / v0.1.1 |
 
 **Related future work:** a separate app, **devmon** (an activity tracker), is

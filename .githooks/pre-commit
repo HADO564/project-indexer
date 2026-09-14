@@ -15,7 +15,7 @@
 #
 # What this does NOT catch: whether the app actually starts. PI-005 compiled,
 # passed every test, and still exited before showing a window. Launching it is
-# still a manual step — see docs/KNOWN-ISSUES.md.
+# still a manual step — see docs/app/KNOWN-ISSUES.md.
 
 set -e
 

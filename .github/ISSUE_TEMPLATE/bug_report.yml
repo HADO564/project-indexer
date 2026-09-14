@@ -8,7 +8,7 @@ body:
         Thanks for reporting. If this is a **security** issue, please don't file
         it here — use the Security tab's "Report a vulnerability" instead.
 
-        Worth checking [docs/KNOWN-ISSUES.md](https://github.com/HADO564/project-indexer/blob/main/docs/KNOWN-ISSUES.md)
+        Worth checking [docs/app/KNOWN-ISSUES.md](https://github.com/HADO564/project-indexer/blob/main/docs/app/KNOWN-ISSUES.md)
         first; a few known behaviours are triaged there already.
 
   - type: textarea

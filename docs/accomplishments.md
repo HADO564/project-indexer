@@ -1,6 +1,6 @@
 # Project Indexer — Accomplishments Log
 
-A dated record of what's been completed, in the order it landed. Append new entries at the bottom as work lands — don't rewrite history here. For current-state reference (not history), see `knowledgebase.md`; for what's still open, see `checklist.md`.
+A dated record of what's been completed, in the order it landed. Append new entries at the bottom as work lands — don't rewrite history here. For current-state reference (not history), see `knowledgebase.md`; for what's still open, see the per-product checklists, `app/checklist.md` and `cli/checklist.md`.
 
 ## 2026-08-20 — Project start
 
@@ -351,3 +351,24 @@ the project given the scaffolding a published release needs.
   and the close button in fullscreen, restore from the tray, the green button,
   Cmd+W outside fullscreen, and quit-and-relaunch. Like PI-005, CI could not
   have caught this — it never launches the app, and does not build macOS at all.
+
+## 2026-09-14 — The CLI's architecture, and one repository for two products
+
+- **The CLI's shape settled before any code**, in
+  `docs/superpowers/specs/2026-09-14-cli-design.md`. It stays in this workspace
+  as `crates/cli` rather than moving to a separate repository, because it is
+  almost entirely calls into `indexer-core` and shares the database whose schema
+  core owns. One command layer serves both the shell and the TUI's `:` line; the
+  observer is core scope rather than an add-on; the TUI is view-only,
+  LazyVim-style; and distribution is through package managers once the package
+  works — which drops the earlier `self-update` and GUI-downloads-the-CLI
+  designs.
+- **Released independently.** The CLI has its own version, changelog and
+  `cli-v*` tags, and every crate is `publish = false`. The one coupling left is
+  written down as a rule: a schema bump ships with a CLI release.
+- **Docs split per product.** The root `ROADMAP.md` became an overview, with
+  `docs/app/ROADMAP.md` and `docs/cli/ROADMAP.md` for detail — sections moved
+  verbatim by script, not retyped. The app's usage guide, checklist and known
+  issues moved into `docs/app/`, and the CLI gained its own checklist. Moving the
+  roadmap also caught a stale claim in *Agent access*: it said no SQLite busy
+  timeout was set, but every connection sets `busy_timeout = 5000`.

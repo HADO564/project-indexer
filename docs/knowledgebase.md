@@ -1,6 +1,6 @@
 # Project Indexer — Knowledgebase
 
-Reference for how the app works and why it's built this way. Unlike `accomplishments.md`, this file describes current state, not history — update it in place as things change rather than appending. See `checklist.md` for what's still open.
+Reference for how the app works and why it's built this way. Unlike `accomplishments.md`, this file describes current state, not history — update it in place as things change rather than appending. See `app/checklist.md` and `cli/checklist.md` for what's still open.
 
 ## What this is
 
@@ -11,8 +11,11 @@ A Tauri v2 desktop app (Rust backend, Svelte 5 + SvelteKit + Tailwind v4 fronten
 Three crates. `indexer-core` (`crates/core`) holds every bit of domain logic,
 orchestration and persistence and has **no `tauri` dependency** (a `use tauri::`
 in it fails to compile). `src-tauri` is a thin GUI adapter over it. `crates/cli`
-(`indexer-cli`) is a one-line stub — `eprintln!("… not implemented (spec 2)")`,
-exit 1 — reserving the layout for a future observer CLI (Spec 2).
+(`indexer-cli`) is still a one-line stub — `eprintln!("… not implemented (spec 2)")`,
+exit 1. It builds a binary named `indexer` (a placeholder), is versioned and
+released independently of the app (`cli-v*` tags), and is designed in
+`superpowers/specs/2026-09-14-cli-design.md`. All three crates are
+`publish = false`.
 `src-tauri → indexer-core`, never the reverse.
 
 ### `crates/core` (`indexer-core`)
@@ -30,7 +33,7 @@ exit 1 — reserving the layout for a future observer CLI (Spec 2).
 - `commands/` — `projects.rs`, `inspect.rs`, `system.rs`: every `#[tauri::command]` is a ~3-line pass-through over `State<'_, Arc<ProjectService>>` (`AppHandle` gone from every signature). `system.rs` is now just `list_installed_apps` (delegating to `core::platform`). New command: `suggest_project_name`.
 - `adapters/opener_launcher.rs` — `OpenerLauncher impl AppLauncher`, the one genuine adapter and the only place `tauri-plugin-opener` is still used. `open` body = the old `system.rs::open_in_app` verbatim: on Windows a concrete `open_with` executable is spawned via `std::process::Command` with `ELECTRON_RUN_AS_NODE` / `ELECTRON_NO_ATTACH_CONSOLE` scrubbed (that variable, inherited from a VS Code terminal, makes `Code.exe <folder>` run as Node and `require()` the folder); bare command names and the system-default open go through the opener plugin. `is_available` calls `core::platform::open_with_app_available`.
 - `lib.rs` — the Tauri `Builder`: plugin registration, then `setup` builds `SqliteRepository::open(app_config_dir()/projects.db)` + `OpenerLauncher` + `DetectorRunner::default()` into one `ProjectService` and `app.manage(Arc::new(service))`. No `tauri-plugin-store`, no flush-on-close hook, no separate `.manage(DetectorRunner)`.
-- `tray.rs` — the system tray and the window-visibility rules that depend on it. `setup_tray_or_warn` builds the tray and sets `TRAY_AVAILABLE`; the `CloseRequested` handler in `lib.rs` hides to the tray only when that flag is set, otherwise the close goes through. `show_main_window` restores the window (tray icon, tray menu, second launch); `hide_main_window` hides it. **On macOS a fullscreen window can't just be hidden** — its Space would stay open and black — so `hide_main_window` sets `HIDE_AFTER_FULLSCREEN_EXIT` and leaves fullscreen, and `watch_fullscreen_exit` (registered once in `setup`) hides the window when AppKit posts `NSWindowDidExitFullScreenNotification`. Tauri's own events can't do this: tao reports `is_fullscreen() == false` as soon as the exit starts, and a hide during the animation is ignored. See `KNOWN-ISSUES.md` PI-007.
+- `tray.rs` — the system tray and the window-visibility rules that depend on it. `setup_tray_or_warn` builds the tray and sets `TRAY_AVAILABLE`; the `CloseRequested` handler in `lib.rs` hides to the tray only when that flag is set, otherwise the close goes through. `show_main_window` restores the window (tray icon, tray menu, second launch); `hide_main_window` hides it. **On macOS a fullscreen window can't just be hidden** — its Space would stay open and black — so `hide_main_window` sets `HIDE_AFTER_FULLSCREEN_EXIT` and leaves fullscreen, and `watch_fullscreen_exit` (registered once in `setup`) hides the window when AppKit posts `NSWindowDidExitFullScreenNotification`. Tauri's own events can't do this: tao reports `is_fullscreen() == false` as soon as the exit starts, and a hide during the animation is ignored. See `app/KNOWN-ISSUES.md` PI-007.
 
 ## Frontend architecture (`src/`)
 
@@ -70,7 +73,7 @@ Every entry point is a `ProjectService` method (the `DetectorRunner` is one of t
 3. `ProjectService::preview_detection` (`detect_project_trackers`) — advisory preview against a directory that isn't a project yet; nothing touches the store. Best-effort like `create`; returns `Vec<Tracker>` directly. Also feeds `suggest_project_name`.
 4. `ProjectService::inspect` (`inspect_project`) — the `/project/[id]` view's read: loads the stored project, then runs a **live** detection pass (`DetectorRunner::inspect`, all detectors or just `only` on a per-tab re-detect) against its directory and returns every `DetectorResult { kind, status, tracker?, error? }` plus a `directory_status`. Read-only — a live re-scan for display, deliberately not persisted; the user commits it with Refresh (path 2). A missing/inaccessible directory comes back as `directory_status.ok = false` with empty results, not a command error, so the view can still show the project's identity.
 5. Two real detectors are registered (in `detectors/registry.rs`):
-   - `Gitector` — repo root, dirty (untracked + modified, not ignored), detached-HEAD, remote URL (`origin`), current branch (handles the unborn-HEAD case for a fresh repo with no commits), every local branch, HEAD commit hash. `contributors` is deliberately left `Vec::new()` — see `checklist.md`.
+   - `Gitector` — repo root, dirty (untracked + modified, not ignored), detached-HEAD, remote URL (`origin`), current branch (handles the unborn-HEAD case for a fresh repo with no commits), every local branch, HEAD commit hash. `contributors` is deliberately left `Vec::new()` — see `app/checklist.md`.
    - `UnrealDetector` — finds the `.uproject` file directly inside a directory (not discovered upward like git), parses its JSON for engine association/category/description/modules/enabled plugins, and reads the configured source-control provider from `Saved/Config/<Platform>Editor/SourceControlSettings.ini` (a per-user file most `.gitignore`s exclude, so `None` on a fresh clone is the common case, not a bug).
 6. **Browse-to-prefill:** picking a directory in `CreateProjectForm` calls the `suggest_project_name` command (which runs a preview detection and then `core::domain::naming::suggest_project_name` — git remote's repo name, else the folder name) — only while Name is still empty, and silently skipped on failure. The name logic used to be inline JS in the form; it now lives in `core` and is unit-tested there.
 7. **Project detail view:** `ProjectCard`'s "Details" link opens `/project/[id]`, which calls `inspect_project` (path 4) — `ProjectIdentity` up top, a per-detector status strip, then one tab per detected tracker rendered generically by `TrackerPanel` (`lib/trackers.ts`).

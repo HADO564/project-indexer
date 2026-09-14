@@ -17,6 +17,26 @@ version is tagged. Newest first.
 
 ---
 
+## 2026-09-14
+
+### Changed
+
+- **The desktop app and the CLI are released independently.** `crates/cli` is
+  now versioned on its own (`0.1.0`, unreleased), with its own
+  `crates/cli/CHANGELOG.md` and tags of the form `cli-v<version>`; the app keeps
+  `v<version>`, and an app release no longer bumps the CLI. All three crates are
+  `publish = false`. The CLI's binary is named `indexer`, a placeholder. See
+  `CONTRIBUTING.md` → *Versioning and releases*.
+- **Docs are split per product.** `docs/app/` holds the app's roadmap, usage
+  guide, checklist and known issues — moved from `docs/` with `git mv`, so their
+  history follows. `docs/cli/` holds the CLI's roadmap and checklist. The root
+  `ROADMAP.md` is now an overview of both plus everything they share.
+  Architecture, knowledgebase, accomplishments, this file, handoffs and specs
+  stay shared. Links in the issue and PR templates and the pre-commit hook's
+  comment point at the new paths.
+
+---
+
 ## 2026-09-08
 
 ### Added
@@ -143,7 +163,7 @@ version is tagged. Newest first.
 
   Build `--bundles deb,rpm` locally. The release workflow builds AppImages on
   `ubuntu-22.04`, where neither problem occurs, so published artifacts are
-  unaffected. Full detail in [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md).
+  unaffected. Full detail in [`KNOWN-ISSUES.md`](app/KNOWN-ISSUES.md).
 
 - **Neither CI nor the pre-commit hook launches the app.** `PI-005` compiled,
   passed every test, and still exited before showing a window. Recorded here

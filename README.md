@@ -137,7 +137,7 @@ the explicit "delete directory" action.
 
 ## Using it
 
-[**docs/USAGE.md**](docs/USAGE.md) is the walkthrough — adding a project, what
+[**docs/app/USAGE.md**](docs/app/USAGE.md) is the walkthrough — adding a project, what
 each detector reports, the project view, opening projects in your installed
 applications, favourites and tags, the difference between deleting a directory
 and untracking a project, and how the tray behaves.
@@ -259,7 +259,7 @@ Everything compiles and tests cleanly on Arch, and `tauri build` gets as far as
 producing the binary, the `.deb` and the `.rpm`. Only the AppImage step fails,
 with `failed to run linuxdeploy`. Nothing in this project causes it — linuxdeploy
 makes two assumptions that a current Arch system no longer satisfies. The
-details are in [PI-006](docs/KNOWN-ISSUES.md#pi-006--tauri-build-cannot-produce-an-appimage-on-arch).
+details are in [PI-006](docs/app/KNOWN-ISSUES.md#pi-006--tauri-build-cannot-produce-an-appimage-on-arch).
 
 The simplest answer is to skip the target, since the published AppImage is built
 on `ubuntu-22.04` by CI anyway:
@@ -325,10 +325,10 @@ between the file-forwarding markers.
 
 ```
 crates/core/      indexer-core — domain, services, ports, detectors, SQLite
-crates/cli/       stub for the planned command-line frontend
+crates/cli/       the command-line tool — not started; released separately
 src-tauri/        the Tauri desktop app: commands, adapters, tray, wiring
 src/              SvelteKit frontend
-docs/             architecture, knowledgebase, checklist, known issues
+docs/             shared docs, plus per-product docs in docs/app/ and docs/cli/
 ```
 
 Further reading: [`docs/architecture.md`](docs/architecture.md) for the shape of
@@ -338,12 +338,15 @@ changed between releases.
 
 ## Roadmap
 
-The next initiative is a command-line frontend that wraps a real command, notices
-what it did, and registers the project automatically — sharing the GUI's database
-with no pairing. After that: more detectors (Unity, Blender), macOS completeness,
-and in-app update notifications.
+The next initiative is a command-line tool: an observer that wraps a real
+command, notices what it did and registers the project automatically, plain
+subcommands for most of what the app does, and a view-only TUI — sharing the
+app's database with no pairing, and released on its own cycle. Alongside it: more
+detectors (Unity, Blender), macOS completeness, and in-app update notifications.
 
-[**ROADMAP.md**](ROADMAP.md) has the detail, including what is deferred behind a
+[**ROADMAP.md**](ROADMAP.md) is the overview, with each product's detail in
+[`docs/app/ROADMAP.md`](docs/app/ROADMAP.md) and
+[`docs/cli/ROADMAP.md`](docs/cli/ROADMAP.md) — including what is deferred behind a
 specific trigger and what has been considered and **declined**, with reasons.
 
 ## Contributing

@@ -13,6 +13,7 @@ structural rules the codebase enforces on purpose.
 - [Rules the codebase enforces](#rules-the-codebase-enforces)
 - [Adding a detector](#adding-a-detector)
 - [Commits and pull requests](#commits-and-pull-requests)
+- [Versioning and releases](#versioning-and-releases)
 - [Licensing and the CLA](#licensing-and-the-cla)
 - [Where the documentation lives](#where-the-documentation-lives)
 
@@ -82,7 +83,7 @@ Two known-noise baselines, so you can tell your output from the existing state:
   containing module`. Anything beyond that is yours.
 - **`pnpm run check`** reports 0 errors and 8 warnings, all
   `state_referenced_locally` in `EditProjectForm.svelte`. They are a documented
-  false positive — see `PI-003` in [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md).
+  false positive — see `PI-003` in [`docs/app/KNOWN-ISSUES.md`](docs/app/KNOWN-ISSUES.md).
 
 **Neither CI nor the hook launches the app.** They compile it and test it, which
 says nothing about whether the window actually appears — `PI-005` compiled,
@@ -94,15 +95,19 @@ touches startup, the tray, or anything platform-specific, run the real thing.
 ```
 crates/core/     indexer-core — all domain logic, orchestration, persistence
   src/tests/       its unit tests, mirroring the module tree
-crates/cli/      indexer-cli — stub for the observer CLI (see ROADMAP.md)
+crates/cli/      indexer-cli — the command-line tool (not started; see its README)
 src-tauri/       the desktop app: Tauri commands, adapters, startup
 src/             SvelteKit frontend
   src/tests/       its vitest suites, mirroring the modules they cover
-docs/            architecture, knowledgebase, checklist, handoffs
+docs/            shared: architecture, knowledgebase, accomplishments, handoffs, specs
+  app/             the desktop app's roadmap, usage guide, checklist, known issues
+  cli/             the CLI's roadmap and checklist
 ```
 
 `indexer-core` is where the behaviour lives. `src-tauri` is a thin adapter over
-it: each `#[tauri::command]` is a ~3-line pass-through to `ProjectService`.
+it: each `#[tauri::command]` is a ~3-line pass-through to `ProjectService`. The
+CLI will be the second adapter, under the same rule — see
+[`crates/cli/README.md`](crates/cli/README.md).
 
 **Tests live beside the tree they cover, not inside it.** A test for
 `crates/core/src/domain/scan.rs` goes in `crates/core/src/tests/domain/scan.rs`;
@@ -219,9 +224,37 @@ use their old enum variant names, `"Git"` and `"Unreal"`.
 - **Branch off `main`** and open a PR against it. Keep unrelated changes in
   separate commits — a formatting sweep should not ride along with a behaviour
   change.
-- **Update the docs in the same PR.** `docs/checklist.md` for feature status,
-  `docs/accomplishments.md` for what landed, `CHANGELOG.md` under `[Unreleased]`
-  for anything user-visible.
+- **Update the docs in the same PR.** The product's checklist
+  (`docs/app/checklist.md` or `docs/cli/checklist.md`) for feature status,
+  `docs/accomplishments.md` for what landed, and that product's changelog under
+  `[Unreleased]` for anything user-visible — the root `CHANGELOG.md` for the app,
+  `crates/cli/CHANGELOG.md` for the CLI.
+
+## Versioning and releases
+
+The desktop app and the command-line tool are **released independently**, from
+this one repository.
+
+| | Desktop app | CLI |
+|---|---|---|
+| Version lives in | `src-tauri/Cargo.toml`, `crates/core/Cargo.toml`, `package.json`, `src-tauri/tauri.conf.json` | `crates/cli/Cargo.toml` |
+| Changelog | `CHANGELOG.md` | `crates/cli/CHANGELOG.md` |
+| Tag | `v<version>` | `cli-v<version>` |
+
+- **An app release does not bump the CLI, and a CLI release does not bump the
+  app.** `indexer-core` is internal (`publish = false`) and moves with the app's
+  version.
+- **A schema bump ships with a CLI release that understands it.** Both products
+  open the same `projects.db`, and `SqliteRepository::open` refuses a database
+  written by a newer schema. So a pull request that changes
+  `CURRENT_SCHEMA_VERSION` says so in its description, and a CLI release follows.
+- The release workflow reacts only to `v*` tags. The CLI gets its own workflow
+  when packaging starts; until then nothing builds CLI releases.
+
+The reasoning is recorded in
+[`docs/superpowers/specs/2026-09-14-cli-design.md`](docs/superpowers/specs/2026-09-14-cli-design.md)
+and in `docs/architecture.md` → *One repository, two products, released
+separately*.
 
 ## Licensing and the CLA
 
@@ -246,13 +279,15 @@ CLA, record that against your GitHub account, and never ask you again.
 | Document | What it is for |
 |---|---|
 | [`README.md`](README.md) | what the app is, install, Linux notes |
-| [`docs/USAGE.md`](docs/USAGE.md) | how to actually use it, feature by feature |
-| [`ROADMAP.md`](ROADMAP.md) | what is planned, and what was deliberately declined |
+| [`docs/app/USAGE.md`](docs/app/USAGE.md) | how to actually use the app, feature by feature |
+| [`ROADMAP.md`](ROADMAP.md) | the overview: headline plans for both products, what they share, what was declined |
+| [`docs/app/ROADMAP.md`](docs/app/ROADMAP.md), [`docs/cli/ROADMAP.md`](docs/cli/ROADMAP.md) | each product's detailed plans |
 | [`docs/architecture.md`](docs/architecture.md) | invariants, recorded decisions, quality backlog |
 | [`docs/knowledgebase.md`](docs/knowledgebase.md) | how each piece works, module by module |
-| [`docs/checklist.md`](docs/checklist.md) | feature status |
+| [`docs/app/checklist.md`](docs/app/checklist.md), [`docs/cli/checklist.md`](docs/cli/checklist.md) | feature status, per product |
 | [`docs/accomplishments.md`](docs/accomplishments.md) | dated log of what landed |
-| [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md) | triaged issues from platform passes |
+| [`docs/app/KNOWN-ISSUES.md`](docs/app/KNOWN-ISSUES.md) | triaged issues from platform passes |
+| [`crates/cli/README.md`](crates/cli/README.md) | the CLI crate: status, rules, where its design lives |
 | [`docs/handoffs/`](docs/handoffs/) | briefings for work not yet started |
 
 Read `docs/architecture.md` before a structural change. It records not only what
