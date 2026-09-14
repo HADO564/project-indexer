@@ -85,7 +85,7 @@ impl ProjectService {
     /// scan whose result is thrown away. The observer CLI calls this on
     /// directories it has already registered far more often than on new ones.
     pub fn ensure_project(&self, directory: &str) -> Result<Project, ProjectError> {
-        if let Some(existing) = self.find_by_directory(directory)? {
+        if let Some(existing) = self.find_by_directory(directory)?.filter(|p| !p.is_deleted) {
             return Ok(existing);
         }
         let trackers = self.preview_detection(directory);
