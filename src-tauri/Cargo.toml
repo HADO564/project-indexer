@@ -37,3 +37,13 @@ rfd = { version = "0.16", default-features = false, features = ["common-controls
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
+
+# Only for waiting on `NSWindowDidExitFullScreenNotification` when the main
+# window is closed in fullscreen (see `tray::watch_fullscreen_exit`). All four
+# are already in the tree via tao; default features are off because they would
+# enable the whole of AppKit and Foundation.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSNotification", "NSString", "NSOperation", "block2"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSWindow"] }

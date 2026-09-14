@@ -17,7 +17,7 @@ mod startup;
 mod tray;
 
 use startup::{fatal_startup_error, icon_store, open_repository};
-use tray::{setup_tray_or_warn, show_main_window, TRAY_AVAILABLE};
+use tray::{hide_main_window, setup_tray_or_warn, show_main_window, TRAY_AVAILABLE};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -75,6 +75,8 @@ pub fn run() {
             app.manage(Arc::new(icons));
 
             TRAY_AVAILABLE.store(setup_tray_or_warn(app.handle()), Ordering::Relaxed);
+            #[cfg(target_os = "macos")]
+            tray::watch_fullscreen_exit(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -82,10 +84,15 @@ pub fn run() {
             // so the app keeps running in the background. "Quit" on the tray
             // menu is the real exit — so when there is no tray, let the close
             // through rather than hiding the window beyond reach.
+            //
+            // On macOS a fullscreen window can't simply be hidden — its Space
+            // would stay open and black — so `hide_main_window` leaves
+            // fullscreen first, and `tray::watch_fullscreen_exit` (registered
+            // in `setup`) hides the window once the transition has finished.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" && TRAY_AVAILABLE.load(Ordering::Relaxed) {
                     api.prevent_close();
-                    let _ = window.hide();
+                    hide_main_window(window);
                 }
             }
         })
