@@ -1,4 +1,8 @@
+use anyhow::bail;
 use clap::Args;
+
+use indexer_core::domain::matching::{resolve, Resolution};
+use indexer_core::domain::sorting::SortOptions;
 
 use super::Outcome;
 use crate::context::Context;
@@ -10,6 +14,14 @@ pub struct ShowArgs {
 }
 
 pub fn run(args: ShowArgs, ctx: &Context) -> anyhow::Result<Outcome> {
-    let project = ctx.projects.get(&args.project)?;
-    Ok(Outcome::Project(Box::new(project)))
+    let projects = ctx.projects.list(SortOptions::default())?;
+    let result = resolve(&projects, &args.project);
+
+    match result {
+        Resolution::Found(project) => Ok(Outcome::Project(Box::new(project.clone()))),
+        Resolution::NotFound => bail!("no project matches \"{}\"", args.project),
+        Resolution::Ambiguous(matches) => {
+            bail!("{} projects match \"{}\"", matches.len(), args.project)
+        }
+    }
 }
