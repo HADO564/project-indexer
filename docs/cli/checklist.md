@@ -38,7 +38,12 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
   - [x] `list` — aligned name and directory columns, the folder name coloured in a terminal only (respects `NO_COLOR`)
   - [x] `show <id>` — basic human output: name, directory, id
   - [ ] `show` — a richer view: dates, favourite, tags, properties, group name, per-tracker details (git branch, dirty, remote)
-  - [ ] Resolve a project by name or directory, not only by id
+  - [x] `show <query>` finds a project by part of its name, ignoring case (`domain::matching::resolve` in core); no match is an error, exit 1
+  - [ ] **Check the several-matches case by hand.** Only one project was tracked when this landed, so `show` with a query matching two or more projects has never been run. Add a second project whose name shares a word with the first and confirm `show <word>` reports the count and exits 1
+  - [ ] List several matches with enough to tell them apart — short id, name, last opened, path, and **every detected tracker** on the project (not only git) — instead of only a count. One short label per tracker from `project.trackers`: git as its branch plus `*` when dirty, Unreal as its engine version, and any kind without a specific label as its `Tracker::kind()` name, so a new detector shows up without a CLI change
+  - [ ] Exact rules before name matching: exact name, full id and 8-character short id, a directory path (`show .`), several words matched against the path in order (zoxide's rule); `show <id>` stopped working when `show` switched to name matching
+  - [ ] Rank several matches best first, ties to the most recently opened
+  - [ ] Tests for `domain::matching` in `crates/core/src/tests/domain/matching.rs`
 - [x] `config folder-color [COLOR] [--reset]` — 50 colours (16 standard + 34 named 24-bit); saved in `cli-settings.json` beside `projects.db`, never in the database; `--folder-color` overrides it for one run
 - [ ] Groups, the bin (restore and purge), scan
 - [ ] Destructive commands confirm through a confirmer (`--yes` in a shell)
