@@ -21,6 +21,10 @@ pub struct Settings {
     /// The folder colour used when `--folder-color` is not given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder_color: Option<Color>,
+
+    /// The table header colour used when `--header-color` is not given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header_color: Option<Color>,
 }
 
 pub fn load() -> anyhow::Result<Settings> {

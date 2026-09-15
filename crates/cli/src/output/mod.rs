@@ -26,11 +26,19 @@ impl Format {
     }
 }
 
-/// `folder_color` only affects human output; `--json` is never coloured.
-pub fn print(outcome: &Outcome, format: Format, folder_color: Color) -> anyhow::Result<()> {
+/// The colours human output uses, each already resolved from its flag, the
+/// settings file, or the built-in default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Colors {
+    pub folder: Color,
+    pub header: Color,
+}
+
+/// `colors` only affects human output; `--json` is never coloured.
+pub fn print(outcome: &Outcome, format: Format, colors: Colors) -> anyhow::Result<()> {
     let mut out = std::io::stdout().lock();
     match format {
-        Format::Human => human::write(&mut out, outcome, folder_color)?,
+        Format::Human => human::write(&mut out, outcome, colors)?,
         Format::Json => json::write(&mut out, outcome)?,
     }
     out.flush()?;

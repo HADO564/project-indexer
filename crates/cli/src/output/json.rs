@@ -23,7 +23,11 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
     match outcome {
         Outcome::Projects(projects) => emit(out, projects),
         Outcome::Project(project) => emit(out, project),
-        Outcome::FolderColor(color) => emit(out, &serde_json::json!({ "folder_color": color })),
+        Outcome::Color { setting, color } => {
+            let mut data = serde_json::Map::new();
+            data.insert(setting.key().to_string(), serde_json::to_value(color)?);
+            emit(out, &data)
+        }
         Outcome::Done => emit(out, &serde_json::Value::Null),
     }
 }
