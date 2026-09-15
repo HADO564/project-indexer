@@ -6,6 +6,7 @@
 //! reach the public API, which would mean widening it to suit tests.
 
 mod group;
+mod matching;
 mod naming;
 mod normalize;
 mod palette;
