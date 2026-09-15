@@ -577,12 +577,15 @@ Named here so the seams aren't rediscovered. Full designs are in the spec
 (`docs/superpowers/specs/2026-09-02-frontend-agnostic-core-design.md`).
 
 - **The CLI.** Designed in `docs/superpowers/specs/2026-09-14-cli-design.md` and
-  planned in `docs/cli/ROADMAP.md`; `crates/cli` is still a stub. An observer
-  (`indexer <cmd>` wraps a real command, matches argv + cwd + exit code against
-  recognizers, and records facts through `ProjectService` — `ensure_project` /
-  `find_by_directory` / `refresh_trackers`, already added), plain subcommands
-  with `--json`, and a view-only TUI. No IPC with the GUI — both open the same
-  `projects.db`.
+  planned in `docs/cli/ROADMAP.md`. Started 2026-09-14: `crates/cli` builds, and
+  `list`, `show` and `config` run against the shared database; the rest is
+  stubs. Still to come: an observer (`indexer <cmd>` wraps a real command,
+  matches argv + cwd + exit code against recognizers, and records facts through
+  `ProjectService` — `ensure_project` / `find_by_directory` / `refresh_trackers`,
+  already added), the remaining subcommands with `--json`, and a keyboard-driven
+  TUI whose every change goes through a command. No IPC with the GUI — both open
+  the same `projects.db`. The desktop app will also provide `indexer` from its
+  own binary (`docs/handoffs/2026-09-15-gui-provides-indexer.md`).
 - **devmon.** A separate activity tracker that `ATTACH`es `projects.db`
   read-only for activity attribution. The persistence contract that keeps this
   possible is a Recorded decision above; do not regress it.

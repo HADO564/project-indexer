@@ -372,3 +372,44 @@ the project given the scaffolding a published release needs.
   issues moved into `docs/app/`, and the CLI gained its own checklist. Moving the
   roadmap also caught a stale claim in *Agent access*: it said no SQLite busy
   timeout was set, but every connection sets `busy_timeout = 5000`.
+
+## 2026-09-15 — The CLI's first commands, and finding a project by typing part of its name
+
+- **`list`, `show` and `config` run against the real database**, the same
+  `projects.db` the app writes, with no restart and no pairing — the premise the
+  whole CLI rests on, now demonstrated rather than designed. The scaffold, the
+  first commands and the matching went in as PRs #6 and #7.
+- **One matcher in core, four rules** (`domain::matching::resolve`): an exact
+  name, then a full id or an 8-character prefix, then a `/`-containing query
+  matched against the **end** of the directory (`show work/app`), then part of a
+  name — ranked by name prefix, ties to the most recently opened. Zoxide's
+  space-separated words were considered and dropped: typing back the
+  `parent/folder` the table already prints is more predictable and needs no rule
+  to learn. Ids come last in usefulness and first in precision: nobody types one
+  from memory, but a script or a copy from the table is exact, which is why an
+  id is only recognised when the query is hex digits and dashes.
+- **Trying it by hand caught what the tests did not.** Two projects may share a
+  name — `~/work/app` and `~/play/app` — and `resolve` was quietly returning the
+  first. It now lists both. Run against a throwaway database under a temporary
+  `HOME`, so the real one was never touched.
+- **One table, two callers.** `output::human::project_table` renders `list` and
+  `show`'s several-matches error alike: bordered, with NAME, DIRECTORY
+  (`parent/folder`), TRACKERS and LAST OPENED. In a terminal it grows to at
+  least 70% of the width and is centred; piped or inside an error it stays as
+  narrow as its cells, uncoloured. Padding is measured on the plain text, so
+  colour codes never shift a column, and widths count characters rather than
+  bytes.
+- **Colour is the user's, and saved outside the database.** 50 colours (16
+  standard, 34 named 24-bit) for the folder name and the header row, in
+  `cli-settings.json` beside `projects.db` — never in it, which is the devmon
+  contract. A broken settings file is reported and ignored rather than stopping
+  `list` from listing, and `--reset` still works on one.
+- **The TUI stopped being "view-only" before a line of it was written.** Letter
+  shortcuts and a per-project action menu are worth having; forms and dialogs
+  are not. The rule that survives is the one that matters: keys and menus only
+  run or pre-fill commands, so a command is still defined once.
+- **The app will provide `indexer` itself.** Measured rather than guessed: a
+  bundled second copy would add ~1.7 MB compressed to every download, while the
+  whole TUI adds ~0.15 MB — so the CLI is not split from the TUI, and the app
+  serves the command from its own binary instead
+  (`docs/handoffs/2026-09-15-gui-provides-indexer.md`).

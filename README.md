@@ -340,7 +340,7 @@ changed between releases.
 
 The next initiative is a command-line tool: an observer that wraps a real
 command, notices what it did and registers the project automatically, plain
-subcommands for most of what the app does, and a view-only TUI — sharing the
+subcommands for most of what the app does, and a keyboard-driven TUI — sharing the
 app's database with no pairing, and released on its own cycle. Alongside it: more
 detectors (Unity, Blender), macOS completeness, and in-app update notifications.
 
