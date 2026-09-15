@@ -25,7 +25,7 @@ pub fn run(args: ShowArgs, ctx: &Context) -> anyhow::Result<Outcome> {
     "{} projects match \"{}\"; add a folder from the path, like parent/folder, to narrow it down:\n{}",
     matches.len(),
     args.project,
-    human::match_list(&matches)
+    human::project_table(&matches, None)
 ),
     }
 }

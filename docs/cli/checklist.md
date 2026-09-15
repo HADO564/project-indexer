@@ -36,7 +36,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 - [ ] Trackers in `--json` as `{"kind": "git", …}` rather than serde's default `{"Git": {…}}` — `--json` currently serialises `Project` as-is, so the variant name leaks as the key. Fix with an output DTO in `output/json.rs` before anyone scripts against it
 - [ ] `show`, `add`, `open`, `untrack`
   - [x] `list` — aligned name and directory columns, the folder name coloured in a terminal only (respects `NO_COLOR`)
-  - [ ] `list` prints the same table as `show`'s several matches — `NAME  DIRECTORY  TRACKERS  LAST OPENED` — as the CLI's default view, like the GUI's main list. `list` is the table and `show` is one project's details (docker `ps`/`inspect`, kubectl `get`/`describe`), rather than a `-s` flag switching `show` between the two
+  - [x] `list` prints the same table as `show`'s several matches (`output::human::project_table`, the folder coloured in a terminal with padding worked out on the plain text; tests in `src/tests/output/human.rs`) — `NAME  DIRECTORY  TRACKERS  LAST OPENED` — as the CLI's default view, like the GUI's main list. `list` is the table and `show` is one project's details (docker `ps`/`inspect`, kubectl `get`/`describe`), rather than a `-s` flag switching `show` between the two
   - [ ] `list [query]` filters the table with the same matching rules — needs a core `matches(projects, query) -> Vec<&Project>` that `resolve` then picks from. Zero matches is an empty table, exit 0
   - [x] `show <id>` — basic human output: name, directory, id
   - [ ] `show` — a richer view: dates, favourite, tags, properties, group name (per-tracker details come with `--tracker`, below)
