@@ -2,7 +2,7 @@
 //! else; prose and errors go to stderr.
 
 pub mod color;
-mod human;
+pub mod human;
 mod json;
 
 use std::io::Write;
