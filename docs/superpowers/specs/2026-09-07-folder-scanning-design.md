@@ -5,7 +5,7 @@ look, and import everything it finds in one pass. The single biggest adoption
 gap: somebody with two hundred projects on disk currently adds them one at a
 time, which is where they stop.
 
-Settled design lives in `ROADMAP.md` → *Scanning a folder for projects*; this
+Settled design lives in `docs/app/ROADMAP.md` → *Scanning a folder for projects*; this
 document is the implementation contract. **Vocabulary, restated because it is
 load-bearing:** "autorunner" and "looping detector" both mean *this* feature —
 user-triggered, bounded, finite. Nothing here runs unprompted. Background

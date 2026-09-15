@@ -1,6 +1,7 @@
 # Project Indexer — Architecture & Quality
 
-Companion to `checklist.md`. That file tracks *features*; this one tracks the
+Companion to the per-product checklists, `app/checklist.md` and
+`cli/checklist.md`. Those track *features*; this one tracks the
 *shape* of the system — the load-bearing decisions worth protecting, and the
 quality work that keeps adding the next detector/platform/view cheap rather
 than progressively more expensive.
@@ -450,6 +451,29 @@ this only bites when running from a dev shell, but it's a whole class of
 Bare command names and the system-default open keep the opener plugin, which
 resolves them via the registry's App Paths / PATHEXT.
 
+### One repository, two products, released separately
+
+The desktop app and the command-line tool live in one repository and one Cargo
+workspace — `src-tauri` and `crates/cli` over `crates/core` — and are versioned,
+tagged (`v*` / `cli-v*`) and changelogged independently. Every crate is
+`publish = false`.
+
+*Why one repository:* the CLI is almost entirely calls into `indexer-core`, and
+both products open the one `projects.db` whose schema core owns. A schema
+change, its migration and both consumers land in one pull request under one CI
+run. Split across repositories, every core change becomes a tag, a dependency
+bump and a second pull request, with nothing stopping core from breaking the
+CLI.
+
+*Why separate releases anyway:* the products have different audiences and
+cadences, and the CLI is installed through package managers. What ties them is
+the database: `SqliteRepository::open` refuses a newer schema, so **a schema
+bump ships with a CLI release that understands it.**
+
+*Revisit when:* `indexer-core` becomes a published library with its own semver
+promise, or the CLI gains maintainers separate from the app's. Full reasoning in
+`docs/superpowers/specs/2026-09-14-cli-design.md`.
+
 ## Quality backlog
 
 Curated and reordered from a broader architectural review. Prioritized by
@@ -544,7 +568,7 @@ Curated and reordered from a broader architectural review. Prioritized by
   Detectors are independent (invariant 7); there's no contention to arbitrate.
   Revisit only if two detectors genuinely need to coordinate, which none do.
 - **Reworking the contributors deferral.** Already correctly deferred
-  (`checklist.md`); the plan (revwalk → `Vec<Contributor>`, with caching)
+  (`app/checklist.md`); the plan (revwalk → `Vec<Contributor>`, with caching)
   already accounts for the cost. No change needed now.
 
 ## Cross-app & updates — next initiatives
@@ -552,21 +576,22 @@ Curated and reordered from a broader architectural review. Prioritized by
 Named here so the seams aren't rediscovered. Full designs are in the spec
 (`docs/superpowers/specs/2026-09-02-frontend-agnostic-core-design.md`).
 
-- **Observer CLI (Spec 2).** `crates/cli` is a stub today. Spec 2 fills it in:
-  `indexer <cmd>` wraps a real command, then matches argv + cwd + exit code
-  against recognizers (`git init`, `git clone`, `cargo new`, …) and records
-  inferred project facts through the same `ProjectService`
-  (`ensure_project` / `find_by_directory` / `refresh_trackers`, already added).
-  Plain subcommands (`indexer list`, …) too. No IPC with the GUI — both open the
-  same `projects.db`.
+- **The CLI.** Designed in `docs/superpowers/specs/2026-09-14-cli-design.md` and
+  planned in `docs/cli/ROADMAP.md`; `crates/cli` is still a stub. An observer
+  (`indexer <cmd>` wraps a real command, matches argv + cwd + exit code against
+  recognizers, and records facts through `ProjectService` — `ensure_project` /
+  `find_by_directory` / `refresh_trackers`, already added), plain subcommands
+  with `--json`, and a view-only TUI. No IPC with the GUI — both open the same
+  `projects.db`.
 - **devmon.** A separate activity tracker that `ATTACH`es `projects.db`
   read-only for activity attribution. The persistence contract that keeps this
   possible is a Recorded decision above; do not regress it.
-- **Self-update fast-follows** (all deferred, not started): `tauri-plugin-updater`
-  wiring, a shared `core::updates::latest_stable(repo)` helper, a dismissible
-  GUI "▲ vX.Y.Z" release-notification chip, the CLI `self-update` command + a
-  throttled stderr hint, the GUI's on-demand "download & install the CLI"
-  action (minisign-verified), and the tag → signed-bundle → GitHub-Release CI.
+- **App update fast-follows** (all deferred, not started): `tauri-plugin-updater`
+  wiring, a `core::updates::latest_stable(repo)` helper that considers only `v*`
+  tags, a dismissible GUI "▲ vX.Y.Z" release-notification chip, and the tag →
+  signed-bundle → GitHub-Release CI. The CLI `self-update` command and the GUI's
+  on-demand CLI download were dropped on 2026-09-14: the CLI is installed and
+  updated through package managers (`docs/cli/ROADMAP.md`).
   This refactor's only obligation to them — a safe schema-migration path
   (version-skew guard + tested `user_version` steps) — is met (invariant 11,
   "Migration fixtures" above).

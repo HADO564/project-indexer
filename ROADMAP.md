@@ -4,9 +4,20 @@ Where Project Indexer is going, why, and — just as usefully — what has been
 considered and ruled out. Nothing here carries a date. Items move when the work
 that unblocks them lands, not when a quarter ends.
 
-For fine-grained feature status see [`docs/checklist.md`](docs/checklist.md); for
-the non-feature quality backlog see
-[`docs/architecture.md`](docs/architecture.md).
+The repository holds two products over one shared core, and each keeps its own
+detailed roadmap. This file is the overview.
+
+| Roadmap | Covers |
+|---|---|
+| **This file** | where things stand, the headline plans for both products, and everything they share through `indexer-core` — licensing, detection, git, storage, plugins, what was declined |
+| [`docs/app/ROADMAP.md`](docs/app/ROADMAP.md) | the desktop app — folder scanning, project linking, the global shortcut, app updates |
+| [`docs/cli/ROADMAP.md`](docs/cli/ROADMAP.md) | the command-line tool — the observer, subcommands and `--json`, the TUI, agent access, distribution |
+
+Feature status is tracked per product, in
+[`docs/app/checklist.md`](docs/app/checklist.md) and
+[`docs/cli/checklist.md`](docs/cli/checklist.md); the non-feature quality backlog
+is in [`docs/architecture.md`](docs/architecture.md). The CLI's design contract is
+[`docs/superpowers/specs/2026-09-14-cli-design.md`](docs/superpowers/specs/2026-09-14-cli-design.md).
 
 ## Where things stand
 
@@ -26,12 +37,49 @@ remembered for the next one.
 
 The Rust backend has been restructured so that all logic lives in
 `indexer-core`, a library crate the compiler forbids from importing Tauri —
-which is what makes everything in the next section possible without touching the
-backend. Storage is SQLite behind numbered `user_version` migrations, currently
+which is what lets the CLI share it without touching the backend. Storage is SQLite behind numbered `user_version` migrations, currently
 at version 3.
 
 Windows and Linux are both built and tested in CI. macOS builds in the release
 workflow but is not yet functionally complete (see below).
+
+The command-line tool is still a stub in `crates/cli`, but its direction is
+settled — see [its roadmap](docs/cli/ROADMAP.md). It is released on its own
+cycle, separately from the app.
+
+## Highlights
+
+**Desktop app** — [full roadmap](docs/app/ROADMAP.md)
+
+- **Project linking** — explicit, navigable edges between projects, and a graph
+  view over them.
+- **Updates** — `tauri-plugin-updater` and a dismissible release notification.
+- **Global shortcut** — registered but unbound; deciding what it does is the
+  open part.
+
+**Command-line tool** — [full roadmap](docs/cli/ROADMAP.md)
+
+- **The observer** — `indexer git init` runs the real command and records the
+  project it created. This is what makes the CLI more than a second GUI.
+- **Plain subcommands and `--json`** — most of what the GUI does, scriptable,
+  with an output contract settled before the code.
+- **A view-only TUI** — keybinds and a `:` command line, LazyVim-style; every
+  change is a CLI command.
+- **Package-manager installs** — Homebrew, winget and the like. After the
+  package itself works.
+
+**Shared — `indexer-core`**, detailed below
+
+- **The re-detect sweep, then Unity and Blender.** The sweep's backend half
+  shipped in 0.3.1 and nothing triggers it yet; Unity must not ship before it
+  does.
+- **Deeper git support** — ahead/behind upstream first.
+- **Plugins** — themes as data first, then backend-only detectors as
+  WebAssembly.
+- **macOS completeness** — installed-application discovery, which both
+  frontends need.
+- **Storage reporting** — what a project costs on disk, reported rather than
+  cleaned.
 
 ## Licensing
 
@@ -78,104 +126,6 @@ binary, provided it is not passed off as official, carries the licence, and
 says what it was built from. Source distribution stays the norm — this is a
 developer tool and "clone, add the crate, build" is a low bar here — but the
 permission means a plugin author is not forced into it.
-
-## Next — the `indexer` command-line tool
-
-The single largest planned piece, and the one the last refactor was for. It has
-two halves, and only the first is designed in detail.
-
-### Observing
-
-`indexer git init` runs the real `git init`, untouched, propagates its exit code,
-and *notices* what happened — then records the project through the same
-`ProjectService` the GUI uses. It never reimplements the tools it wraps. Because
-both frontends open the same SQLite database, installing the CLI later connects
-it to the GUI with no pairing and no IPC.
-
-The backend seams already exist: `ensure_project` and `find_by_directory` have no
-GUI caller and were added purely for this, and `projects.directory_normalized` is
-indexed so directory lookup is not a table scan.
-
-What is *not* yet decided — deliberately — includes which commands are recognised
-first, how the project directory is derived from arguments and working directory
-per recognizer, what happens when a directory's inferred name collides with an
-existing project, and whether plain subcommands (`indexer list`, `indexer open`)
-ship alongside the observer or after it.
-
-The full briefing, including the open questions, is in
-[`docs/handoffs/2026-09-04-observer-cli.md`](docs/handoffs/2026-09-04-observer-cli.md).
-
-### Plain subcommands
-
-The unglamorous half: `indexer list`, `show`, `add`, `open`, `untrack`. Each maps
-almost one-to-one onto a `ProjectService` method that already exists, so these
-are cheap — the work is argument parsing and output formatting, not behaviour.
-
-One thing is genuinely undecided: whether they ship with the observer or after
-it, since they are separable.
-
-`indexer list` printing real rows from the shared database is the suggested first
-vertical slice for the whole initiative. It proves the premise — same database,
-no backend changes — in about twenty lines.
-
-#### The `--json` contract
-
-Human-readable tables are the default. `--json` is a different thing: the moment
-it exists, other people's scripts depend on its shape, so it is settled here
-rather than by accident at the keyboard.
-
-- **A versioned envelope.** Every response is `{"schema": 1, "data": …}`. One
-  integer, bumped only for a change that breaks a reader.
-- **Additive-only within a version.** New fields may appear at any time and
-  consumers must ignore ones they do not recognise. Nothing is removed or
-  retyped without bumping `schema`.
-- **An unknown tracker serialises; it does not fail.** `Tracker` is a closed enum
-  today (`Git`, `Unreal`) and every new project type widens it. A reader written
-  against `schema: 1` has to keep working when a kind it has never heard of turns
-  up — so `kind` is a string and the payload is a map, which is exactly the shape
-  the UI's generic renderer already consumes. This matters more once trackers can
-  come from [plugins](#plugins).
-- **stdout is data, stderr is prose.** Under `--json`, stdout carries the
-  document and nothing else, so `indexer list --json | jq` needs no filtering.
-  Errors go to stderr and the exit code — never into stdout as an error object.
-
-The cost is one wrapper struct and a documented rule. The cost of skipping it is
-a breaking change the first time somebody adds a project type.
-
-## Agent access — MCP, or a CLI plus a skill
-
-Drive the app from an agent instead of a window. The premise is the same one the
-CLI rests on: `indexer-core` has no Tauri dependency, so an agent surface is a
-*fourth frontend* over the same `ProjectService` and the same SQLite file, not a
-new backend.
-
-**Whether it needs to be MCP is the actual question, and it is open.** Once
-[plain subcommands](#plain-subcommands) and the `--json` contract above exist, an
-agent skill is a markdown file that documents `indexer list --json` — no crate,
-no protocol, no server lifetime, and no second output shape to keep in step with
-the first. MCP buys typed tool schemas and a discovery handshake, and charges a
-`crates/mcp` crate, a transport, and a parallel contract that will drift from
-`--json` the first time one of them changes.
-
-That settles the order rather than the outcome: **plain subcommands and `--json`
-first, then judge.** If a skill over the CLI proves sufficient, MCP is never
-built and nothing is lost. If it does not, MCP is then built over a JSON shape
-already proved against a real consumer, which is the cheaper way round.
-
-Three things have to be answered before either ships.
-
-- **Concurrent writers.** Exactly one process writes today. A GUI, a CLI and a
-  long-lived agent server means three. SQLite in WAL takes many readers and one
-  writer; the second writer gets `SQLITE_BUSY` unless a busy timeout is set, and
-  none is set today. An agent is the first consumer likely to write *while* the
-  GUI is open, so this stops being theoretical the moment this work starts.
-- **What an agent is allowed to do.** Reading and registering are
-  uncontroversial. `delete_project_directory` reached from a tool call is not.
-  The defensible default is that the agent surface is read-plus-register, and
-  destructive operations stay behind a human — the same argument that gives
-  [storage](#storage--what-a-project-costs-on-disk) its review step.
-- **Whether the GUI remains the primary face.** Asked plainly, because if the
-  answer is no, that reorders most of this document rather than adding to it.
 
 ## More project types
 
@@ -231,166 +181,6 @@ land without waiting for anything. Contributors is the one that forces the
 fast-versus-deep detection split described under [Deferred](#deferred--gated-on-a-trigger-not-a-date),
 and it should stay behind it.
 
-## Scanning a folder for projects
-
-**Shipped.** Point the app at `~/code` and it finds everything inside, instead
-of adding projects one directory at a time. This closed the single biggest
-usability gap for anyone adopting the app with an existing disk full of
-work — and adoption is exactly when the manual path was most painful.
-
-The mechanics that had to be decided:
-
-- ~~**Where to stop.**~~ **Settled 2026-09-07: two scans, and a depth the user
-  picks.** A **quick scan** looks only one level below the chosen directory —
-  the `~/code` case, where every child is a project and nothing deeper needs
-  visiting. A **deep scan** descends to *n* levels, with *n* chosen by the user
-  rather than hardcoded, because the right depth is a property of how somebody
-  organises their disk and no default is right for everyone.
-
-  Directories that are conventionally gitignored — `node_modules`, `target`,
-  `.venv`, `build`, `dist` — are skipped by default, with a checkbox to include
-  them. Default-on because those trees are enormous and never projects;
-  overridable because "never" is not quite true and the person scanning knows
-  their own disk better than the pruning list does.
-
-  Still holds regardless of mode: stop descending once a directory *is* a
-  project. A repository inside a repository is usually vendored or a submodule,
-  not a separate thing to track.
-- ~~**Which detectors run.**~~ **Settled 2026-09-07: the user checks the ones to
-  scan for, and the check decides *whether to register*, not what gets
-  recorded.** Pointing the scanner at `~/projects` with only git ticked imports
-  the code repositories and leaves the Unity and Godot ones alone — the intent
-  is "import my repos, not my games", which is a selection criterion rather
-  than a performance knob.
-
-  Once a directory is being kept, **every** installed detector runs against it.
-  A directory that is both git and Unity registers **once**, carrying both
-  trackers — `Project.trackers` is a `Vec<Tracker>` and `create` already stores
-  every match, so this needs no new machinery. Recording only the ticked
-  detectors would instead leave permanently half-detected records that fix
-  themselves only if somebody remembers to refresh them, and it would buy
-  nothing: a detector that does not match costs a couple of `stat` calls and no
-  allocation.
-
-  **Vocabulary.** "Autorunner" and "looping detector" both mean *this* — the
-  user-triggered bulk import — and neither implies a background process. The
-  word **background** is reserved for work that actually runs unprompted, and
-  the only such idea here is *background rescanning* under *Rescanning* below.
-  They are different features and must not merge under one name: this one is
-  user-triggered, bounded and finite.
-- **Review before committing.** A scan that silently registers two hundred
-  entries is hostile. Find, present, let the user deselect, then add. Registering
-  a project is a durable act; a bulk one should be a deliberate one.
-- ~~**Name collisions.**~~ **Settled 2026-09-07: qualify by parent, editable in
-  review, one function shared with `ensure_project`.** `domain::naming::
-  disambiguate(preferred, parent_dir, taken)` returns `api` if free, else
-  `work/api`, else `work/api (2)` as the terminating fallback. `taken` holds
-  existing project names *plus* the names already assigned earlier in the same
-  scan, which is what stops two rows of one report colliding with each other.
-  Rows whose name was changed are flagged in the review list and editable.
-
-  `ensure_project` uses the same function, which is the "solve it once" the
-  question asked for — and fixes a real bug, since it currently hands an
-  underived name to `create` and fails with `DuplicateName` the second time the
-  observer CLI meets an `api` folder.
-- ~~**Rescanning.**~~ **Settled 2026-09-07: a pre-filled form, not a stored
-  entity.** The last scan's settings — root, mode, depth, detectors, pruning —
-  persist in `localStorage` and pre-fill the scan form, written on commit rather
-  than on scan. Rescanning is then: open the modal, press Scan. Already-tracked
-  directories are filtered out, so what comes back is only what is new.
-
-  **A `scan_roots` table was designed and cut.** The reasoning is worth keeping,
-  because it is the argument that killed it: the *path* was never the friction —
-  anybody scanning `~/projects` knows where `~/projects` is, so a remembered
-  root does not save them anything a text field would not. And a rescan cannot
-  skip the disk regardless, since a project that appeared yesterday is
-  discoverable only by looking. What is actually worth remembering is the
-  **settings**, because a rescan that quietly ran depth 2 instead of depth 4
-  gives a different answer with nothing on screen saying why — and a pre-filled
-  form solves exactly that for none of the cost of a table, two ports, root CRUD
-  and a schema migration. It also keeps a list of one user's scan folders out of
-  `projects.db`, which the devmon cross-app contract prefers.
-
-  **What brings the table back:** several distinct scan locations —
-  `~/projects`, `~/work`, `D:\clients` — each wanting its own settings and its
-  own rescan. One set of defaults cannot serve three roots; a list can. Until
-  somebody has that disk it is speculative, and nothing blocks adding it later,
-  since the settings are already one serialisable struct — the migration would
-  move where it is stored, not invent its shape.
-
-  An mtime cache that skips unchanged subtrees was considered and declined
-  separately: up to 50,000 stored rows to optimise a walk that is already
-  milliseconds, when the expensive part is detection, which only runs on
-  directories that survive pruning.
-
-  Watching a root live is a further step and still not the first one.
-- **Background rescanning — open, and not yet agreed.** The idea: traverse for
-  projects unprompted rather than when asked. (Filed here as "an autorunner"
-  before that word was pinned to the bulk scan above; it is *not* that feature.)
-  The appeal is obvious; three things have to be answered before it is worth
-  building.
-
-  What it does on a find. Auto-registering contradicts the review step directly
-  below — a bulk registration is meant to be a deliberate act — so realistically
-  it queues finds and badges them for review, which is *rescan on a timer plus a
-  notification*, a much smaller feature wearing a bigger name.
-
-  What it costs. A loop walking the filesystem is the classic background-indexer
-  complaint, and it is paid on battery. Filesystem watching (`notify`) is far
-  cheaper than polling, but it is a background task with its own failure modes —
-  the same objection that settled theme reloading as restart-to-apply, at
-  considerably larger scale.
-
-  Where it looks. It needs remembered roots; scanning the disk is not an option.
-  Which means it is gated on rescanning above, not a parallel feature.
-
-  The cheap version worth building first: rescan remembered roots on demand and
-  optionally at startup, surfacing "12 new projects found" as a review queue.
-  That is most of the value with none of the loop, and it is the honest thing to
-  try before deciding continuous scanning is needed.
-
-Two seams already exist for this. `find_by_directory` plus the indexed
-`directory_normalized` column make "do we already track this?" cheap enough to
-ask once per candidate, and detection is already resilient — one detector failing
-on one directory does not abort a sweep.
-
-Four things the implementation met, all known in advance because they were
-written down here first:
-
-- **`ensure_project(directory)` is the scanner's entry point**, not `create`.
-  `create` calls `check_for_duplicate_name_or_dir` and returns
-  `DuplicateDirectory` for a path already tracked, so re-scanning a folder — or
-  scanning one containing projects added by hand — would fail per directory.
-  `ensure_project` is get-or-create, is indexed, and was built for the observer
-  CLI with no GUI caller yet.
-- **Detector selection needs a set, and no such filter exists.** `create` runs
-  everything via `detect_project`; the only filtering available is
-  `inspect(path, only: Option<&str>)`, a *single* kind, for per-tracker
-  re-detect. Selection wants `Option<&[&str]>` or equivalent. Note the
-  single-kind form stays necessary for the re-detect sweep — both shapes are
-  real.
-- **Never `refresh_trackers` in the bulk path.** It uses `into_result()`, which
-  is deliberately all-or-nothing: one failing detector discards everything.
-  Right for a user pressing refresh on one project, wrong across two hundred
-  directories where a single corrupt repository would abort the sweep. Use
-  `create`'s best-effort pattern — `trackers()` plus logged errors.
-- **A scan is where name collisions actually bite**, not a theoretical concern:
-  `~/code/api` and `~/work/api` collide on the first run. Same unresolved
-  question as `ensure_project`'s, and it should be answered once for both.
-
-The performance shape was worth getting right early: walking is I/O bound and
-cheap, running full detection on every directory is not. Detection is gated
-behind a cheap marker test — does a `.git` or `.uproject` even exist here —
-which is the fast-versus-deep split again, arriving from a second direction.
-
-**All four held.** `ScanService::scan` and `ScanService::import` sit over
-`ProjectService::ensure_project`; the set filter shipped as
-`DetectorRunner::inspect_kinds(path, Option<&[&str]>)`, with the single-kind
-`inspect` reimplemented over it rather than retired; `import` collects
-per-row failures instead of calling `refresh_trackers` or `into_result()`; and
-`domain::naming::disambiguate` is what resolves `~/code/api` against
-`~/work/api`, shared with `ensure_project` as predicted.
-
 ## Storage — what a project costs on disk
 
 The index already knows where every project is, so it is most of the way to
@@ -443,7 +233,7 @@ report or a separate axis alongside size; whether it covers only tracked project
 or arbitrary directories, the latter making it a general disk tool and a far
 larger thing than an index feature; and whether it surfaces as a GUI view, a CLI
 subcommand, or only through the
-[agent surface](#agent-access--mcp-or-a-cli-plus-a-skill).
+[agent surface](docs/cli/ROADMAP.md#agent-access--mcp-or-a-cli-plus-a-skill).
 
 ### Prior art — TreeMap Disk Visualizer
 
@@ -485,39 +275,6 @@ in breadth-first order, ~52 bytes per file — walked by a threadpool capped at
 sixteen threads. The lesson transfers even though the code does not: size a tree
 in one pass into flat arrays rather than building a tree of owned structs, and
 cap concurrency rather than spawning per directory.
-
-## Project linking
-
-Connect one project to another the way Obsidian connects notes — an explicit,
-navigable edge between two entries, and a graph view over the whole set. The
-project list answers "what do I have"; links answer "what did I build this
-*out of*", which is the question that turns a list into a knowledgebase.
-
-The value shows up where a flat list is weakest: a tool and the game that uses
-it, a fork and its upstream, a client engagement and the three repositories it
-spans. Groups already give one exclusive band per project — links are the
-non-exclusive, many-to-many relation that groups deliberately are not.
-
-The graph is drawn with **Svelte Flow** (`@xyflow/svelte`), the SvelteKit
-counterpart to React Flow from the same authors. It has to be a bundled
-dependency rather than anything CDN-loaded — the content security policy
-forbids fetching code at runtime, and that is a property worth keeping.
-
-What needs deciding:
-
-- **Are links typed, and are they directed?** "depends on" and "forked from"
-  have a direction that "related to" does not. Untyped and undirected is the
-  cheap start; adding a type later is additive, adding direction later is not.
-- **Where links live.** A many-to-many edge does not fit the JSON project blob
-  the way a scalar field does, so this is a real table and a schema step. It
-  should land on the same migration machinery the groups work builds, not
-  invent a second one.
-- **Whether the graph is a view or the view.** A focused neighbourhood around
-  one project is a panel on the project page. A whole-set canvas is a route of
-  its own. They are different features wearing one name.
-- **What a link does when a project is deleted.** Soft-deleted projects stay in
-  the bin, so their edges should presumably persist and grey out rather than
-  vanish — otherwise restoring a project silently loses its connections.
 
 ## Plugins
 
@@ -673,31 +430,14 @@ and compiled in, and trust is established the way it is for any other dependency
 
 ## Platform completeness
 
+The global shortcut, which only the app has, is in the
+[app's roadmap](docs/app/ROADMAP.md#global-shortcut).
+
 - **macOS.** Installed-application discovery returns an empty list, so the "open
   with" picker has nothing to offer and launching falls through to the generic
   opener. This is also the natural moment to put `list_installed_apps` behind a
   trait: a third implementation is what makes that seam pay for itself, and until
   then a plain function is honest.
-- **Global shortcut.** The plugin is registered but no shortcut is bound to
-  anything. Deciding what it should *do* is the open part.
-
-## Updates and distribution
-
-Designed but not built. All of it is fast-follow work on top of the release
-pipeline that already exists.
-
-- `tauri-plugin-updater` wiring, with a shared `core::updates::latest_stable`
-  helper so the GUI and CLI agree on what "latest" means.
-- A dismissible in-app release notification, rather than an interrupting dialog.
-- `indexer self-update` for the CLI, plus a throttled hint on stderr.
-- An on-demand "download and install the CLI" action in the GUI, minisign
-  verified, so the CLI need not be bundled with the installer.
-- Tag → signed bundle → GitHub Release in CI.
-
-The obligation this places on the current code — a safe schema-migration path, so
-a newer binary opening an older database is routine rather than dangerous — is
-already met: migrations are numbered `user_version` steps and `open` refuses a
-database written by a newer binary.
 
 ## Deferred — gated on a trigger, not a date
 
@@ -709,19 +449,12 @@ These are not "someday". Each has a specific condition that should start it.
   parsing.
 - **Structured detection logging.** Low value at two to six detectors. Trigger:
   detection getting slow enough to need debugging.
-- **Frontend page-state extraction.** `+page.svelte` was around 250 lines before
-  the views work and is 362 now. Watch it; don't pre-split it.
-- **Portfolio and résumé export.** Turn tracked projects into the raw material
-  for a CV or a GitHub profile: what each one is, what it is built with, when it
-  was worked on, and how much of it is yours. The app should not write the prose
-  — an agent or the user does — so its job is to hand over structured facts,
-  which makes this a *consumer* of the [`--json` contract](#the---json-contract)
-  and the [agent surface](#agent-access--mcp-or-a-cli-plus-a-skill) rather than a
-  feature with machinery of its own. Trigger: **deep detection**, because the
-  facts that make the output worth having — commit range, contributors, language
-  mix — are exactly the expensive ones, which is why `GitInfo.contributors` is
-  deliberately empty today. Until then an export would say little that the folder
-  name does not.
+
+Deferred items that belong to one product live in its own roadmap: frontend
+page-state extraction in the
+[app's](docs/app/ROADMAP.md#deferred--gated-on-a-trigger-not-a-date), and
+portfolio export in the
+[CLI's](docs/cli/ROADMAP.md#deferred--gated-on-a-trigger-not-a-date).
 
 ## Considered and declined
 

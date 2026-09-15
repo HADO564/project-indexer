@@ -59,7 +59,7 @@ there.
   the frontend over the list already fetched. Project counts are small, and a
   `get_projects_in_group` command would be a second source of truth for
   something `getAllProjects` already returns.
-- **Project linking / the graph view.** Recorded in `ROADMAP.md` under *Project
+- **Project linking / the graph view.** Recorded in `docs/app/ROADMAP.md` under *Project
   linking*, and explicitly not built here.
 - **UI plugins / themes.** Parked mid-brainstorm; the two settled decisions are
   recorded, and this spec is written so it does not contradict them.
@@ -520,4 +520,4 @@ Ordered so each step is independently verifiable.
 | Retiring the modals loses behaviour | Bin and Favourites are folded in as separate late tasks (15, 16), each verified against the modal it replaces, rather than rewritten alongside everything else |
 | The component split regresses list mode | Task 12 is explicitly a no-behaviour-change refactor, verified before any new mode or view is added |
 | Eight swatches are too few | Additive — more tokens, no stored-data change, because the stored value is a name |
-| Scope creep into project linking | Recorded in `ROADMAP.md` as separate work with its own open questions |
+| Scope creep into project linking | Recorded in `docs/app/ROADMAP.md` as separate work with its own open questions |

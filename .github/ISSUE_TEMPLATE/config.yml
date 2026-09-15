@@ -4,7 +4,7 @@ contact_links:
     url: https://github.com/HADO564/project-indexer/security/advisories/new
     about: Report privately instead of opening a public issue.
   - name: How to use the app
-    url: https://github.com/HADO564/project-indexer/blob/main/docs/USAGE.md
+    url: https://github.com/HADO564/project-indexer/blob/main/docs/app/USAGE.md
     about: The usage guide covers most "how do I …" questions.
   - name: What's planned
     url: https://github.com/HADO564/project-indexer/blob/main/ROADMAP.md

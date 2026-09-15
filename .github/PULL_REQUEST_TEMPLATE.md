@@ -24,7 +24,7 @@ Platforms tried: <!-- Windows / Linux / macOS -->
 ## Docs
 
 - [ ] `CHANGELOG.md` under `[Unreleased]`, if this is user-visible
-- [ ] `docs/checklist.md`, if this changes feature status
+- [ ] the product's checklist (`docs/app/checklist.md` or `docs/cli/checklist.md`), if this changes feature status
 - [ ] `docs/accomplishments.md`, for what landed
 - [ ] Not needed
 

@@ -1,8 +1,8 @@
 # Using Project Indexer
 
 A walkthrough of the app as you actually meet it. For what it is and how to
-install it, see the [README](../README.md); for how to work on it, see
-[CONTRIBUTING](../CONTRIBUTING.md).
+install it, see the [README](../../README.md); for how to work on it, see
+[CONTRIBUTING](../../CONTRIBUTING.md).
 
 ## Contents
 
@@ -202,7 +202,7 @@ normal window. The Dock icon stays while the window is hidden.
 app still runs and prints a message naming the package — and in that case closing
 the window genuinely quits, since there would be no tray to restore it from. The
 per-distribution package is in the README's
-[Linux notes](../README.md#linux-notes).
+[Linux notes](../../README.md#linux-notes).
 
 ## Where your data lives
 

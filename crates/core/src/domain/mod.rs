@@ -1,5 +1,6 @@
 pub mod group;
 pub mod installed_app;
+pub mod matching;
 pub mod naming;
 pub mod normalize;
 pub mod palette;

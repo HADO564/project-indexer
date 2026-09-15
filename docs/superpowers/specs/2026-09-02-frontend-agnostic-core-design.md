@@ -583,6 +583,10 @@ Small and non-blocking, matching the terminal aesthetic:
 
 ### CLI — updates (fast-follow, lands with the CLI itself)
 
+> **Superseded 2026-09-14.** The CLI is installed and updated through package
+> managers and released independently of the app; see
+> `docs/superpowers/specs/2026-09-14-cli-design.md` and `docs/cli/ROADMAP.md`.
+
 - **`indexer self-update`** — the `self_update` crate: checks GitHub Releases,
   downloads the asset for the current target, replaces the running binary.
 - **Passive hint** — on any other command, if `core::updates::latest_stable`
@@ -595,6 +599,10 @@ Small and non-blocking, matching the terminal aesthetic:
   download.
 
 ### GUI installs the CLI on demand — download, not bundle (fast-follow)
+
+> **Superseded 2026-09-14.** The CLI is installed and updated through package
+> managers and released independently of the app; see
+> `docs/superpowers/specs/2026-09-14-cli-design.md` and `docs/cli/ROADMAP.md`.
 
 The GUI bundle does **not** contain the CLI binary. Instead the GUI offers to
 fetch it:
