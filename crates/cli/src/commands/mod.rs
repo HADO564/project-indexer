@@ -40,10 +40,40 @@ pub enum Command {
 pub enum Outcome {
     Projects(Vec<Project>),
     Project(Box<Project>),
-    /// The default folder colour now in effect.
-    FolderColor(Color),
+    /// A colour setting now in effect, after `config` showed or changed it.
+    Color {
+        setting: ColorSetting,
+        color: Color,
+    },
     /// Succeeded with nothing to show.
     Done,
+}
+
+/// The colours a user can set with `indexer config`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColorSetting {
+    /// Each project's folder name in a table.
+    Folder,
+    /// A table's header row.
+    Header,
+}
+
+impl ColorSetting {
+    /// The key in `cli-settings.json`, and in `--json` output.
+    pub fn key(self) -> &'static str {
+        match self {
+            ColorSetting::Folder => "folder_color",
+            ColorSetting::Header => "header_color",
+        }
+    }
+
+    /// The colour used when nothing has been set.
+    pub fn default_color(self) -> Color {
+        match self {
+            ColorSetting::Folder => Color::DEFAULT_FOLDER,
+            ColorSetting::Header => Color::DEFAULT_HEADER,
+        }
+    }
 }
 
 pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {

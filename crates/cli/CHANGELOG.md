@@ -14,5 +14,6 @@ Nothing released yet.
 
 ### Added
 
-- `indexer list` prints tracked projects as a table — name, `parent/folder`, trackers, last opened — and `indexer config folder-color` sets the colour of each project's folder name.
+- `indexer list` prints tracked projects as a bordered table — name, `parent/folder`, trackers, last opened — that fills at least 70% of the terminal and sits centred in it.
+- `indexer config folder-color` and `indexer config header-color` set the colour of each project's folder name and of the table's header row; `--folder-color` and `--header-color` override them for one run.
 - `indexer show <query>` shows one project: an exact name first, then a full id or an id prefix of 8 or more characters, then a `parent/folder` path ending, then part of a name (ignoring case). When several match, it prints a table of them — name, `parent/folder`, trackers, last opened — and exits 1.

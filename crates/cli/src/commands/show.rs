@@ -26,7 +26,7 @@ pub fn run(args: ShowArgs, ctx: &Context) -> anyhow::Result<Outcome> {
              to narrow it down:\n{}",
             matches.len(),
             args.project,
-            human::project_table(&matches, None)
+            human::project_table(&matches, &human::TableStyle::default())
         ),
     }
 }

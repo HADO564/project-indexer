@@ -37,6 +37,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 - [ ] `show`, `add`, `open`, `untrack`
   - [x] `list` — aligned name and directory columns, the folder name coloured in a terminal only (respects `NO_COLOR`)
   - [x] `list` prints the same table as `show`'s several matches (`output::human::project_table`, the folder coloured in a terminal with padding worked out on the plain text; tests in `src/tests/output/human.rs`) — `NAME  DIRECTORY  TRACKERS  LAST OPENED` — as the CLI's default view, like the GUI's main list. `list` is the table and `show` is one project's details (docker `ps`/`inspect`, kubectl `get`/`describe`), rather than a `-s` flag switching `show` between the two
+  - [x] The table is bordered (rounded box-drawing corners) with a coloured header row. In a terminal it grows to at least 70% of the width, sharing the extra space between columns, and is centred (`terminal_size`); piped, or inside `show`'s error, it is only as wide as its cells and not indented. Tests pin the plain layout, the stretch and centring, and that colour moves no column
   - [ ] `list [query]` filters the table with the same matching rules — needs a core `matches(projects, query) -> Vec<&Project>` that `resolve` then picks from. Zero matches is an empty table, exit 0
   - [x] `show <id>` — basic human output: name, directory, id
   - [ ] `show` — a richer view: dates, favourite, tags, properties, group name (per-tracker details come with `--tracker`, below)
@@ -54,6 +55,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
   - [ ] *Later:* pick from several matches interactively (arrow keys or a number) when stdin is a terminal, instead of printing the list and exiting 1. Scripts and pipes keep the list and the exit code
   - [ ] *Later, not this branch:* `show .` resolves the project in the current directory
 - [x] `config folder-color [COLOR] [--reset]` — 50 colours (16 standard + 34 named 24-bit); saved in `cli-settings.json` beside `projects.db`, never in the database; `--folder-color` overrides it for one run
+- [x] `config header-color [COLOR] [--reset]` — the same colours for a table's header row, default magenta; `--header-color` overrides it for one run. Both settings share one `Outcome::Color { setting, color }`, so `--json` reports `{"header_color": …}` or `{"folder_color": …}`
 - [ ] Groups, the bin (restore and purge), scan
 - [ ] Destructive commands confirm through a confirmer (`--yes` in a shell)
 - [ ] A Tauri-free `AppLauncher` for `open` — in `core::platform` or the CLI, decided at this milestone

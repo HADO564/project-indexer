@@ -29,7 +29,7 @@ use crate::commands::Command;
 use crate::confirm::StdinConfirmer;
 use crate::context::Context;
 use crate::output::color::Color;
-use crate::output::Format;
+use crate::output::{Colors, Format};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -51,6 +51,11 @@ struct Cli {
     /// applies, else cyan. `indexer config folder-color --help` lists the colours.
     #[arg(long, value_enum, global = true, hide_possible_values = true)]
     folder_color: Option<Color>,
+
+    /// The colour of table headers, for this run only. Without it, the default
+    /// set by `indexer config header-color` applies, else magenta.
+    #[arg(long, value_enum, global = true, hide_possible_values = true)]
+    header_color: Option<Color>,
 
     #[command(subcommand)]
     invocation: Option<Invocation>,
@@ -89,8 +94,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Some(Invocation::Command(command)) => {
             let ctx = Context::open(Box::new(StdinConfirmer::new(cli.yes)))?;
             let outcome = commands::run(command, &ctx)?;
-            let folder_color = resolve_folder_color(cli.folder_color);
-            output::print(&outcome, Format::from_json_flag(cli.json), folder_color)?;
+            let colors = resolve_colors(cli.folder_color, cli.header_color);
+            output::print(&outcome, Format::from_json_flag(cli.json), colors)?;
             Ok(ExitCode::SUCCESS)
         }
         // The observer opens the database itself, *after* the wrapped command
@@ -99,17 +104,26 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     }
 }
 
-/// The flag if given, else the saved default, else `Color::DEFAULT`.
+/// Each colour's flag if given, else its saved default, else the built-in one.
 ///
 /// A broken settings file is reported and skipped: a colour preference must
-/// never stop `indexer list` from listing.
-fn resolve_folder_color(flag: Option<Color>) -> Color {
-    if let Some(color) = flag {
-        return color;
-    }
-    let saved = settings::load().unwrap_or_else(|e| {
-        eprintln!("indexer: ignoring settings: {e:#}");
+/// never stop `indexer list` from listing. It is only read when a flag leaves
+/// something to look up.
+fn resolve_colors(folder: Option<Color>, header: Option<Color>) -> Colors {
+    let saved = if folder.is_some() && header.is_some() {
         settings::Settings::default()
-    });
-    saved.folder_color.unwrap_or(Color::DEFAULT)
+    } else {
+        settings::load().unwrap_or_else(|e| {
+            eprintln!("indexer: ignoring settings: {e:#}");
+            settings::Settings::default()
+        })
+    };
+    Colors {
+        folder: folder
+            .or(saved.folder_color)
+            .unwrap_or(Color::DEFAULT_FOLDER),
+        header: header
+            .or(saved.header_color)
+            .unwrap_or(Color::DEFAULT_HEADER),
+    }
 }

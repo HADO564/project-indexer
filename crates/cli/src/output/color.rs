@@ -91,7 +91,10 @@ pub enum Color {
 
 impl Color {
     /// Used when neither `--folder-color` nor a saved setting picks one.
-    pub const DEFAULT: Color = Color::Cyan;
+    pub const DEFAULT_FOLDER: Color = Color::Cyan;
+
+    /// Used when neither `--header-color` nor a saved setting picks one.
+    pub const DEFAULT_HEADER: Color = Color::Magenta;
 
     /// The name a user types for this colour, e.g. `"hot-pink"`.
     pub fn name(self) -> String {

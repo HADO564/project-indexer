@@ -9,11 +9,12 @@ fn a_missing_file_is_all_defaults() {
 }
 
 #[test]
-fn a_saved_folder_color_loads_back() {
+fn saved_colors_load_back() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("nested").join("cli-settings.json");
     let saved = Settings {
         folder_color: Some(Color::HotPink),
+        header_color: Some(Color::Gold),
     };
     save_to(&path, &saved).unwrap();
 
