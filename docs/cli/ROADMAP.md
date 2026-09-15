@@ -17,7 +17,7 @@ database, not a version number — see
 ## The `indexer` command
 
 The single largest planned piece, and the one the last refactor was for: an
-observer, plain subcommands, and a view-only TUI over both.
+observer, plain subcommands, and a keyboard-driven TUI over both.
 
 ### Observing
 
@@ -77,18 +77,27 @@ rather than by accident at the keyboard.
 The cost is one wrapper struct and a documented rule. The cost of skipping it is
 a breaking change the first time somebody adds a project type.
 
-### The TUI — for looking, not for editing
+### The TUI — every change is a command
 
 `indexer` with no arguments opens a terminal view of the same database. It is
 deliberately **not** a terminal copy of the GUI: no forms, no buttons, no
-dialogs. It shows things; every change goes through a command.
+dialogs. Keys and menus are shortcuts; every change goes through a command.
 
-- **Read-only panes.** The sidebar views — All, Favourites, each group,
-  Ungrouped, Bin — with counts, the project list, and the selected project's
-  detail: its identity and per-detector status, the same data `inspect` returns.
+- **Panes.** The sidebar views — All, Favourites, each group, Ungrouped, Bin —
+  with counts, the project list, and the selected project's detail: its
+  identity and per-detector status, the same data `inspect` returns.
 - **Keybinds for movement.** `j`/`k`, `gg`/`G`, `/` to search, `Tab` between
-  panes, `Enter` to focus a project. Mouse support is incidental, not a design
-  goal.
+  panes, `Enter` to focus a project.
+- **Letter shortcuts for common commands.** `o` runs `:open` on the selected
+  project, `d` runs `:untrack` (with its `y/n`), and `n` opens the `:` line with
+  `:add ` already typed — the current directory pre-filled, `Tab` completing
+  paths.
+- **An action menu per project**, LazyVim / which-key style, on `Space` and on
+  right-click where the terminal reports mouse events: Open, Favourite, Move to
+  group…, Untrack. Choosing an entry runs, or pre-fills, that command. The menu
+  is built from the `Command` definitions, so a new command appears in it
+  without menu code. Every entry also has a key, because not every terminal or
+  SSH session passes the mouse through.
 - **A `:` command line for everything else.** `:add ~/code/foo`, `:open`,
   `:group work`. The line is parsed by the same definitions as the shell, so
   `:open` and `indexer open` are one command rather than two that happen to
@@ -151,6 +160,16 @@ Three things have to be answered before either ships.
 
 **Packaging comes after the package.** Nothing here is started, and none of it
 blocks building the CLI.
+
+- **The desktop app provides `indexer` too, from its own binary.** Someone who
+  installs only the app still gets the command — and so does any AI assistant
+  on their machine. The app's binary runs the CLI when invoked as `indexer`,
+  before Tauri starts, and an "Install command-line tool" action puts that name
+  on `PATH`. Not a bundled sidecar: `indexer` is ~1.7 MB compressed, almost all
+  of it core and SQLite the app already has, while the TUI adds only ~0.15 MB,
+  so it isn't split out either (measured 2026-09-15). The brief, with the
+  Windows console and startup-time pitfalls, is
+  [`../handoffs/2026-09-15-gui-provides-indexer.md`](../handoffs/2026-09-15-gui-provides-indexer.md).
 
 - **Installed through package managers, never downloaded by hand** — Homebrew,
   winget, and likely Scoop; Linux channels are undecided. Homebrew means the

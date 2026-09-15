@@ -9,7 +9,8 @@ demand* sections this document supersedes.
 
 The CLI is the second frontend over `indexer-core`. It records projects as you
 create them, exposes most of what the desktop app does as commands, and offers a
-view-only TUI — and it works whether or not the app is installed.
+keyboard-driven TUI over those commands — and it works whether or not the app is
+installed.
 
 This document is the contract for how the CLI is **organised and structured**.
 The per-feature detail of each command, the observer's recognizers and the TUI's
@@ -46,14 +47,23 @@ Product-level plans live in [`docs/cli/ROADMAP.md`](../../cli/ROADMAP.md).
    layer the observer and the TUI both run through, so they are built before
    either.
 
-5. **The TUI is view-only.** Panes, keybinds and a `:` command line, in the manner
-   of LazyVim — no forms, buttons or dialogs. Every change goes through a
-   command.
+5. **Every change in the TUI goes through a command.** Panes, keybinds and a `:`
+   command line, in the manner of LazyVim. Letter shortcuts (`n` to add, `o` to
+   open) and a per-project action menu (on a key, and on right-click where the
+   terminal reports it) are shortcuts that run or pre-fill commands — no forms,
+   buttons or dialogs, and nothing that changes data without a command behind
+   it. Anything that needs typing happens on the `:` line. *Revised 2026-09-15
+   from "view-only", which ruled out the shortcuts and the menu along with the
+   forms.*
 
 6. **Distribution is through package managers, and comes after the package.**
    Homebrew, winget and similar; users never download a binary by hand.
    `indexer self-update` and the GUI downloading the CLI are dropped: both
-   duplicate or fight the package manager.
+   duplicate or fight the package manager. *Added 2026-09-15:* the desktop app
+   also provides `indexer` **from its own binary** — nothing downloaded, no second
+   copy bundled — so a GUI-only install still has the command, for people and AI
+   assistants alike. Planned in
+   [`docs/handoffs/2026-09-15-gui-provides-indexer.md`](../../handoffs/2026-09-15-gui-provides-indexer.md).
 
 7. **`indexer` is a placeholder binary name.** It is set in one place,
    `[[bin]] name` in `crates/cli/Cargo.toml`, and will change.
@@ -98,11 +108,11 @@ crates/cli/src/
     mod.rs             the Command enum; run(command, &Context) -> Result<Outcome>
   output/            renders an Outcome for a shell: human tables, or the --json envelope
   observe/           the observer: spawn the wrapped command, then recognizers
-  tui/               the view-only TUI
+  tui/               the TUI
     app.rs             state: current view, selection, query, mode
-    keys.rs            normal-mode keybinds
+    keys.rs            normal-mode keybinds, including shortcuts that run or pre-fill commands
     cmdline.rs         the `:` line — parsed into the same Command the shell uses
-    ui/                read-only panes
+    ui/                panes, and the per-project action menu
 ```
 
 **Scaffolded 2026-09-14.** The whole layout exists up front, rather than each
@@ -114,8 +124,7 @@ placeholder `AppLauncher`) and `confirm.rs` (the confirmer) sit beside
 `crates/cli/src/tests/`, mirroring the module paths.
 
 The TUI is a module of the CLI crate rather than a crate of its own, because a
-view-only TUI whose every action is a CLI command is inseparable from the command
-layer. Split it out only if it grows a consumer other than the `indexer` binary.
+TUI whose every action is a CLI command is inseparable from the command layer. Split it out only if it grows a consumer other than the `indexer` binary.
 
 ### One command layer, three entry points
 
@@ -254,7 +263,8 @@ builds macOS), and path filters so a CLI-only change need not rebuild the app.
    each returning an `Outcome`; human and `--json` rendering. `views.ts` and
    `scanSettings.ts` logic moves into core as these need it.
 4. **The observer.** Spawn-and-passthrough, then the first recognizers.
-5. **The TUI.** Read-only panes, keybinds, the `:` line over the same commands,
+5. **The TUI.** Panes, keybinds, the `:` line over the same commands, letter
+   shortcuts and the action menu that run or pre-fill those commands,
    `data_version` refresh.
 
 Packaging and package managers follow, as their own piece of work.
@@ -263,8 +273,9 @@ Packaging and package managers follow, as their own piece of work.
 
 - Package-manager distribution and a CLI release workflow — after the package
   works.
-- `indexer self-update`, and the GUI downloading or installing the CLI —
-  superseded by package managers.
+- `indexer self-update`, and the GUI downloading a separate CLI — superseded by
+  package managers. (The app providing `indexer` from its own binary is planned;
+  see decision 6.)
 - An MCP server. `docs/cli/ROADMAP.md` → *Agent access* orders it: subcommands and
   `--json` first, then judge.
 - Editing in the TUI through forms or dialogs.

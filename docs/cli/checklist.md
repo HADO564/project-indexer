@@ -72,14 +72,24 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 ## 5. The TUI
 
 - [ ] `indexer` with no arguments opens it
-- [ ] Read-only panes: sidebar views with counts, the project list, project detail
+- [ ] Panes: sidebar views with counts, the project list, project detail
 - [ ] Keybinds for movement and search
 - [ ] A `:` command line parsed into the same `Command` as the shell, defaulting to the selected project
+- [ ] Letter shortcuts that run commands on the selected project (`o` open, `d` untrack, …)
+- [ ] `n` opens the `:` line with `:add ` pre-filled — the current directory, `Tab` completing paths
+- [ ] A per-project action menu (LazyVim / which-key style) on `Space` and on right-click, built from the `Command` definitions; every entry also reachable by key
+- [ ] A hint line or `?` help overlay showing the keys
 - [ ] `y/n` confirmation on the command line for destructive commands
 - [ ] Refreshes when another process writes, via `PRAGMA data_version`
 
 ## Later — packaging
 
 - [ ] A CLI release workflow: `-p indexer-cli` per target, none of the app's system dependencies, on `cli-v*` tags
+- [ ] **The desktop app provides `indexer` from its own binary** — brief: [`../handoffs/2026-09-15-gui-provides-indexer.md`](../handoffs/2026-09-15-gui-provides-indexer.md)
+  - [ ] `indexer-cli` gains a library entry point; the TUI goes behind a default-on `tui` feature
+  - [ ] The app's `main` runs the CLI when invoked as `indexer`, before Tauri starts — never opens a window
+  - [ ] "Install command-line tool" in the app: puts `indexer` on `PATH` (macOS symlink, Windows, deb/rpm), detects an existing `indexer` rather than overwriting it, and can remove it
+  - [ ] Windows console output decided and working (release builds use the `windows` subsystem)
+  - [ ] `indexer list` through the app's binary starts within a measured budget (~100 ms)
 - [ ] Homebrew tap, winget manifest, Scoop bucket; Linux channels decided
 - [ ] Anything asking GitHub for "the latest release" filters by tag prefix
