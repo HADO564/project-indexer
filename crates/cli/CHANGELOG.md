@@ -15,4 +15,4 @@ Nothing released yet.
 ### Added
 
 - `indexer list` prints tracked projects, and `indexer config folder-color` sets the colour of each project's folder name.
-- `indexer show <query>` shows one project: an exact name first, then a `parent/folder` path ending, then part of a name (ignoring case). When several match, it prints a table of them — name, `parent/folder`, trackers, last opened — and exits 1.
+- `indexer show <query>` shows one project: an exact name first, then a full id or an id prefix of 8 or more characters, then a `parent/folder` path ending, then part of a name (ignoring case). When several match, it prints a table of them — name, `parent/folder`, trackers, last opened — and exits 1.
