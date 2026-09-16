@@ -14,3 +14,6 @@ vite.config.ts.timestamp-*
 
 # Cargo workspace
 /target/
+
+# graphify knowledge graph output
+/graphify-out/
