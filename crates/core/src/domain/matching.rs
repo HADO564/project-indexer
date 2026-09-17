@@ -1,4 +1,5 @@
-//! Finding the project a typed query means — `indexer show app`.
+//! Matching a typed query against projects: [`resolve`] finds the one project
+//! `indexer show app` means, and [`filter`] every row `indexer list app` shows.
 
 use crate::domain::Project;
 
@@ -25,7 +26,9 @@ pub enum Resolution<'a> {
 /// 4. part of a name, those starting with the query first, then the most
 ///    recently opened.
 ///
-/// An empty query, or one no rule matches, is [`Resolution::NotFound`].
+/// Rules 3 and 4 are [`filter`], so `show` and `list` never disagree about
+/// what a path or part of a name matches. An empty query, or one no rule
+/// matches, is [`Resolution::NotFound`].
 pub fn resolve<'a>(projects: &'a [Project], query: &str) -> Resolution<'a> {
     let query = query.to_lowercase();
     if query.is_empty() {
@@ -41,10 +44,32 @@ pub fn resolve<'a>(projects: &'a [Project], query: &str) -> Resolution<'a> {
             return pick(by_id);
         }
     }
-    if query.contains('/') {
-        return pick(matches_path(projects, &query));
+
+    pick(filter(projects, &query))
+}
+
+/// Every project `query` matches, best first, ignoring case — the rows
+/// `indexer list <query>` shows.
+///
+/// These are rules 3 and 4 of [`resolve`], not all four:
+///
+/// - a query containing `/` matches the end of the directory, whole folder
+///   names only (`work/app` matches `~/work/app`);
+/// - anything else matches part of a name, ranked the exact name first, then
+///   names starting with it, then the rest, each most recently opened first.
+///
+/// So `app` lists `app-gateway` and `my-app` beneath the projects named
+/// `app`, where `resolve` would stop at the exact name. An empty query, or
+/// one nothing matches, returns an empty `Vec`.
+pub fn filter<'a>(projects: &'a [Project], query: &str) -> Vec<&'a Project> {
+    let query = query.to_lowercase();
+    if query.is_empty() {
+        return Vec::new();
     }
-    pick(matches_name(projects, &query))
+    if query.contains('/') {
+        return matches_path(projects, &query);
+    }
+    matches_name(projects, &query)
 }
 
 fn pick(matches: Vec<&Project>) -> Resolution<'_> {
@@ -101,20 +126,24 @@ fn matches_path<'a>(projects: &'a [Project], query: &str) -> Vec<&'a Project> {
         .collect()
 }
 
-/// Rule 4: projects whose name contains `query`, those starting with it
-/// first, then the most recently opened.
+/// Rule 4: projects whose name contains `query`, ranked: the exact name,
+/// then names starting with it, then the rest, each most recently opened
+/// first.
 fn matches_name<'a>(projects: &'a [Project], query: &str) -> Vec<&'a Project> {
     let mut by_name: Vec<&Project> = projects
         .iter()
         .filter(|p| p.name.to_lowercase().contains(query))
         .collect();
     by_name.sort_by_key(|p| {
-        let starts = if p.name.to_lowercase().starts_with(query) {
+        let name = p.name.to_lowercase();
+        let ranking = if name == query {
             0
-        } else {
+        } else if name.starts_with(query) {
             1
+        } else {
+            2
         };
-        (starts, std::cmp::Reverse(p.last_opened_at))
+        (ranking, std::cmp::Reverse(p.last_opened_at))
     });
     by_name
 }

@@ -13,9 +13,13 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
     let terminal = std::io::stdout().is_terminal();
     let color = terminal && std::env::var_os("NO_COLOR").is_none();
     match outcome {
-        Outcome::Projects(projects) => {
+        Outcome::Projects { projects, query } => {
             if projects.is_empty() {
-                eprintln!("indexer: no projects tracked yet");
+                // stderr, so a script reading stdout sees no rows either way.
+                match query {
+                    Some(query) => eprintln!("indexer: no projects match \"{query}\""),
+                    None => eprintln!("indexer: no projects tracked yet"),
+                }
                 return Ok(());
             }
             let projects: Vec<&Project> = projects.iter().collect();

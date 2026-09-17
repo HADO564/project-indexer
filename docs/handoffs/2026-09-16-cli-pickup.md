@@ -25,7 +25,7 @@ Merged as PRs #6 and #7 on 2026-09-15.
 
 ## Pick up here, in this order
 
-1. **`list [query]`** — filter the table: a name containing the query, or a
+1. ~~**`list [query]`**~~ *(done 2026-09-17, branch `feat/cli-list-query`)* — filter the table: a name containing the query, or a
    path ending with it when the query has a `/`, exact names ranked first.
    Needs a core `filter(projects, query) -> Vec<&Project>`, which `resolve`
    then ends with, so `list` and `show` share rules 3–4; zero matches is an

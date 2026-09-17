@@ -123,7 +123,9 @@ impl Serialize for TrackerJson<'_> {
 
 pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
     match outcome {
-        Outcome::Projects(projects) => {
+        // No match is an empty array, not an error: `data` is the same shape
+        // whether or not a query was given.
+        Outcome::Projects { projects, .. } => {
             let projects: Vec<ProjectJson> = projects.iter().map(ProjectJson::from).collect();
             emit(out, &projects)
         }

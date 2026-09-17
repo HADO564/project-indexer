@@ -42,10 +42,23 @@ fn render_error(error: anyhow::Error) -> Value {
 
 #[test]
 fn results_are_wrapped_in_the_versioned_envelope() {
-    let doc = render(&Outcome::Projects(vec![project("app", json!([]))]));
+    let doc = render(&Outcome::Projects {
+        projects: vec![project("app", json!([]))],
+        query: None,
+    });
     assert_eq!(doc["schema"], 1);
     assert_eq!(doc["data"][0]["name"], "app");
     assert_eq!(doc["data"][0]["directory"], "/home/me/work/app");
+}
+
+#[test]
+fn a_query_matching_nothing_is_an_empty_array_not_an_error() {
+    let doc = render(&Outcome::Projects {
+        projects: Vec::new(),
+        query: Some("nothing".into()),
+    });
+    assert_eq!(doc["data"], json!([]));
+    assert!(doc.get("error").is_none());
 }
 
 #[test]
