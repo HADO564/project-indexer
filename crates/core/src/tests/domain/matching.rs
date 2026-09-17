@@ -267,3 +267,72 @@ fn a_hex_looking_name_is_still_found_by_name() {
         "6c5d931e-45f9-4a0b-b2aa-539f435197e9"
     );
 }
+
+/// The ids `filter` returned, in order.
+fn filtered<'a>(projects: &'a [Project], query: &str) -> Vec<&'a str> {
+    filter(projects, query)
+        .into_iter()
+        .map(|p| p.id.as_str())
+        .collect()
+}
+
+#[test]
+fn filter_lists_names_containing_the_query_not_just_the_exact_name() {
+    let projects = [
+        project("work", "app", "/home/me/work/app", Some(30)),
+        project("gateway", "app-gateway", "/home/me/work/app-gateway", None),
+        project("mine", "my-app", "/home/me/play/my-app", None),
+        project("notes", "notes", "/home/me/docs/notes", None),
+    ];
+
+    assert_eq!(filtered(&projects, "app"), ["work", "gateway", "mine"]);
+}
+
+#[test]
+fn filter_ranks_exact_names_then_prefixes_then_the_rest_over_recency() {
+    let projects = [
+        project("contains", "my-app", "/work/my-app", Some(1)),
+        project("starts", "app-gateway", "/work/app-gateway", Some(2)),
+        project("exact", "app", "/work/app", Some(60)),
+    ];
+
+    assert_eq!(filtered(&projects, "app"), ["exact", "starts", "contains"]);
+}
+
+#[test]
+fn filter_ignores_case() {
+    let projects = [project(
+        "a",
+        "Project-Indexer",
+        "/hobby/project-indexer",
+        None,
+    )];
+
+    assert_eq!(filtered(&projects, "INDEXER"), ["a"]);
+}
+
+#[test]
+fn filter_with_a_slash_matches_the_end_of_the_path_only() {
+    let projects = [
+        project("work", "app", "/home/me/work/app", None),
+        project("play", "app", "/home/me/play/app", None),
+        project("billing", "billing", "/home/me/work/app/billing", None),
+    ];
+
+    assert_eq!(filtered(&projects, "work/app"), ["work"]);
+}
+
+#[test]
+fn filter_without_a_slash_does_not_match_folder_names() {
+    let projects = [project("billing", "billing", "/home/me/app", None)];
+
+    assert!(filtered(&projects, "app").is_empty());
+}
+
+#[test]
+fn filter_returns_nothing_for_an_empty_query_or_no_match() {
+    let projects = [project("a", "app", "/work/app", None)];
+
+    assert!(filtered(&projects, "").is_empty());
+    assert!(filtered(&projects, "zebra").is_empty());
+}

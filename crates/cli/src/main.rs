@@ -73,12 +73,13 @@ enum Invocation {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    let format = Format::from_json_flag(cli.json);
     match run(cli) {
         Ok(code) => code,
         Err(e) => {
-            // `{:#}` prints the whole cause chain, so core's own message —
-            // the version-skew guard above all — reaches the user intact.
-            eprintln!("indexer: {e:#}");
+            // The whole cause chain is printed, so core's own message — the
+            // version-skew guard above all — reaches the user intact.
+            output::print_error(&e, format);
             ExitCode::FAILURE
         }
     }

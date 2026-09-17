@@ -5,7 +5,8 @@ stand, the headline plans for both products, and everything shared through
 `indexer-core`. The design contract is
 [`2026-09-14-cli-design.md`](../superpowers/specs/2026-09-14-cli-design.md).
 
-**Status: not started.** `crates/cli` is a stub. The binary is called `indexer`
+**Status: the first commands work** — `list`, `show`, `config` and `--json`; see
+[`checklist.md`](checklist.md). The binary is called `indexer`
 throughout; that name is a placeholder and will change.
 
 **Released on its own cycle.** The CLI is versioned and tagged (`cli-v*`)
@@ -70,9 +71,20 @@ rather than by accident at the keyboard.
   up — so `kind` is a string and the payload is a map, which is exactly the shape
   the UI's generic renderer already consumes. This matters more once trackers can
   come from [plugins](../../ROADMAP.md#plugins).
-- **stdout is data, stderr is prose.** Under `--json`, stdout carries the
-  document and nothing else, so `indexer list --json | jq` needs no filtering.
-  Errors go to stderr and the exit code — never into stdout as an error object.
+- **A tracker is `{"kind": "git", …its fields}`.** The kind sits under one fixed
+  key beside the tracker's own fields, not serde's default `{"Git": {…}}`, and
+  it is built from the tracker's serde shape rather than a `match`, so a new
+  detector needs no change here.
+- **stdout is data, stderr is everything else.** Under `--json`, stdout carries
+  the document and nothing else, so `indexer list --json | jq` needs no
+  filtering. A failure never reaches stdout: it goes to stderr and the exit code.
+- **Failures are documents too.** Under `--json`, stderr gets
+  `{"schema": 1, "error": {"kind", "message", …}}` instead of prose, so a script
+  can tell `not_found` from `ambiguous` (which carries the candidates) without
+  parsing a sentence. Anything without a kind of its own is `error`. Usage
+  errors from argument parsing stay prose, with exit code 2.
+
+The shapes, field by field, are in [`agents.md`](agents.md).
 
 The cost is one wrapper struct and a documented rule. The cost of skipping it is
 a breaking change the first time somebody adds a project type.

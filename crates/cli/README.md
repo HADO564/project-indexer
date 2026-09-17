@@ -14,7 +14,7 @@ app's database; `add`, `open`, `untrack`, the observer and the TUI still return
 indexer list                     every project, as a table
 indexer show <query>             one project — exact name, id, parent/folder, or part of a name
 indexer config folder-color ...  the folder colour in that table; header-color likewise
-indexer <anything> --json        the {"schema": 1, "data": …} envelope
+indexer <anything> --json        {"schema": 1, "data": …} on stdout, or {"schema": 1, "error": …} on stderr
 ```
 
 ```
@@ -39,6 +39,7 @@ src/
 |---|---|
 | [`docs/superpowers/specs/2026-09-14-cli-design.md`](../../docs/superpowers/specs/2026-09-14-cli-design.md) | the design contract: structure, the command layer, releases, milestones |
 | [`docs/cli/ROADMAP.md`](../../docs/cli/ROADMAP.md) | what is planned for the CLI, and why |
+| [`docs/cli/agents.md`](../../docs/cli/agents.md) | the `--json` output, field by field, for scripts and LLM agents |
 | [`docs/handoffs/2026-09-04-observer-cli.md`](../../docs/handoffs/2026-09-04-observer-cli.md) | the backend it builds on, and the shared-database details |
 
 ## Rules

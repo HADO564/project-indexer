@@ -25,9 +25,13 @@ Merged as PRs #6 and #7 on 2026-09-15.
 
 ## Pick up here, in this order
 
-1. **`list [query]`** — filter the table with the same rules. Needs a core
-   `matches(projects, query) -> Vec<&Project>` that `resolve` then picks from;
-   zero matches is an empty table and exit 0.
+1. ~~**`list [query]`**~~ *(done 2026-09-17, branch `feat/cli-list-query`)* — filter the table: a name containing the query, or a
+   path ending with it when the query has a `/`, exact names ranked first.
+   Needs a core `filter(projects, query) -> Vec<&Project>`, which `resolve`
+   then ends with, so `list` and `show` share rules 3–4; zero matches is an
+   empty table and exit 0. *(Revised 2026-09-17: an earlier plan had `list`
+   use all four of `show`'s rules through a public `matches`, but then
+   `list app` hid `app-gateway`.)*
 2. **`--tracker <kind>` / `-t`** — a clap `ValueEnum` (`git`, `unreal`) that
    filters by `Tracker::is` *before* `resolve`, turns TRACKERS into that
    tracker's own columns (git: BRANCH, CHANGES) and gives `show` a section for

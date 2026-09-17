@@ -32,13 +32,16 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 ## 3. Plain subcommands
 
 - [x] `Command` enum + `run(command, &Context) -> Outcome`, with rendering kept out of `run`
-- [ ] Human-readable tables, and `--json` under the settled contract (`ROADMAP.md` → *The `--json` contract*)
-- [ ] Trackers in `--json` as `{"kind": "git", …}` rather than serde's default `{"Git": {…}}` — `--json` currently serialises `Project` as-is, so the variant name leaks as the key. Fix with an output DTO in `output/json.rs` before anyone scripts against it
+- [x] Human-readable tables, and `--json` under the settled contract (`ROADMAP.md` → *The `--json` contract*)
+- [x] Trackers in `--json` as `{"kind": "git", …}` rather than serde's default `{"Git": {…}}` — an output DTO in `output/json.rs` (`ProjectJson`, `TrackerJson`), so a rename in core can't change the documented shape by accident
+- [x] Failures under `--json` as `{"schema": 1, "error": {"kind", "message", …}}` on stderr — `not_found` and `ambiguous` (with the candidates) come from `commands::Failure`; anything else is `error`
+- [x] [`agents.md`](agents.md): every command's `--json` output, the project and tracker shapes, errors and exit codes, for scripts and LLM agents
 - [ ] `show`, `add`, `open`, `untrack`
   - [x] `list` — aligned name and directory columns, the folder name coloured in a terminal only (respects `NO_COLOR`)
   - [x] `list` prints the same table as `show`'s several matches (`output::human::project_table`, the folder coloured in a terminal with padding worked out on the plain text; tests in `src/tests/output/human.rs`) — `NAME  DIRECTORY  TRACKERS  LAST OPENED` — as the CLI's default view, like the GUI's main list. `list` is the table and `show` is one project's details (docker `ps`/`inspect`, kubectl `get`/`describe`), rather than a `-s` flag switching `show` between the two
   - [x] The table is bordered (rounded box-drawing corners) with a coloured header row. In a terminal it grows to at least 70% of the width, sharing the extra space between columns, and is centred (`terminal_size`); piped, or inside `show`'s error, it is only as wide as its cells and not indented. Tests pin the plain layout, the stretch and centring, and that colour moves no column
-  - [ ] `list [query]` filters the table with the same matching rules — needs a core `matches(projects, query) -> Vec<&Project>` that `resolve` then picks from. Zero matches is an empty table, exit 0
+  - [x] `resolve`'s four rules split into private helpers in `domain::matching` (`matches_exact`, `matches_id`, `matches_path`, `matches_name`), with `resolve` keeping the order between them. A public `matches` returning every match was tried and folded back in: nothing but `resolve` needed it, and `Resolution::Ambiguous` already carries the list
+  - [x] `list [query]` filters the table — a name containing the query, or a path ending with it when the query has a `/` (rules 3–4 of `show`, not all four, so `list app` still shows `app-gateway`). A core `filter(projects, query) -> Vec<&Project>`, ranked exact name, then starts with, then contains, then most recently opened; `resolve` ends with `pick(filter(…))`, so the two can't disagree. Zero matches is an empty table, exit 0, with `no projects match "…"` rather than "no projects tracked yet"
   - [x] `show <id>` — basic human output: name, directory, id
   - [ ] `show` — a richer view: dates, favourite, tags, properties, group name (per-tracker details come with `--tracker`, below)
   - [x] `show <query>` finds a project by part of its name, ignoring case (`domain::matching::resolve` in core); no match is an error, exit 1

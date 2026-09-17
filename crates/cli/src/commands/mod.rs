@@ -7,6 +7,7 @@
 
 mod add;
 mod config;
+mod failure;
 mod list;
 mod open;
 mod show;
@@ -18,6 +19,8 @@ use indexer_core::Project;
 
 use crate::context::Context;
 use crate::output::color::Color;
+
+pub use failure::Failure;
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
@@ -38,7 +41,12 @@ pub enum Command {
 /// What a command produced. Add variants as commands need them.
 #[derive(Debug)]
 pub enum Outcome {
-    Projects(Vec<Project>),
+    /// Projects to list. `query` is what they were filtered by, if anything,
+    /// so an empty list can say "nothing matched" rather than "nothing tracked".
+    Projects {
+        projects: Vec<Project>,
+        query: Option<String>,
+    },
     Project(Box<Project>),
     /// A colour setting now in effect, after `config` showed or changed it.
     Color {
