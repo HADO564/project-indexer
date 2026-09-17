@@ -16,4 +16,10 @@ Nothing released yet.
 
 - `indexer list` prints tracked projects as a bordered table — name, `parent/folder`, trackers, last opened — that fills at least 70% of the terminal and sits centred in it.
 - `indexer config folder-color` and `indexer config header-color` set the colour of each project's folder name and of the table's header row; `--folder-color` and `--header-color` override them for one run.
+- `--json` failures: under `--json`, a failed command writes `{"schema": 1, "error": {"kind", "message", …}}` to stderr instead of prose. `show` reports `not_found`, or `ambiguous` with the matching projects; anything else is `error`. The format is documented for scripts and LLM agents in `docs/cli/agents.md`.
 - `indexer show <query>` shows one project: an exact name first, then a full id or an id prefix of 8 or more characters, then a `parent/folder` path ending, then part of a name (ignoring case). When several match, it prints a table of them — name, `parent/folder`, trackers, last opened — and exits 1.
+
+### Changed
+
+- `--json` writes each tracker as `{"kind": "git", …its fields}` instead of `{"Git": {…}}`.
+- When several projects match, `show` now says "multiple matches found, which one did you mean?" above the table.

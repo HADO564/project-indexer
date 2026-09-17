@@ -7,6 +7,7 @@
 
 mod add;
 mod config;
+mod failure;
 mod list;
 mod open;
 mod show;
@@ -18,6 +19,8 @@ use indexer_core::Project;
 
 use crate::context::Context;
 use crate::output::color::Color;
+
+pub use failure::Failure;
 
 #[derive(Debug, Subcommand)]
 pub enum Command {

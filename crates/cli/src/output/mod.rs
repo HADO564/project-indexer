@@ -3,7 +3,7 @@
 
 pub mod color;
 pub mod human;
-mod json;
+pub mod json;
 
 use std::io::Write;
 
@@ -43,4 +43,19 @@ pub fn print(outcome: &Outcome, format: Format, colors: Colors) -> anyhow::Resul
     }
     out.flush()?;
     Ok(())
+}
+
+/// Reports a failed command on stderr: prose, or under `--json` the
+/// `{"schema": 1, "error": …}` document, so a script can tell a query that
+/// matched nothing from one that matched several without parsing prose.
+pub fn print_error(error: &anyhow::Error, format: Format) {
+    match format {
+        Format::Human => eprintln!("indexer: {error:#}"),
+        Format::Json => {
+            let mut err = std::io::stderr().lock();
+            if json::write_error(&mut err, error).is_err() {
+                eprintln!("indexer: {error:#}");
+            }
+        }
+    }
 }
