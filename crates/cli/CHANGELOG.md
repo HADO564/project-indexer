@@ -15,6 +15,7 @@ Nothing released yet.
 ### Added
 
 - `indexer list` prints tracked projects as a bordered table — name, `parent/folder`, trackers, last opened — that fills at least 70% of the terminal and sits centred in it.
+- `--tracker <kind>` (short `-t`) on `list` and `show` keeps only the projects carrying that tracker, before the query is matched — so `show app --tracker git` finds the git `app` where `show app` alone reports several matches. `git` and `unreal` are the kinds; anything else is rejected with the list of valid ones.
 - `indexer list <query>` lists only the projects whose name contains the query — the exact name first, then names starting with it, then the rest — or, for a query with a `/` like `work/app`, whose path ends with it. Nothing matching prints `no projects match "…"` and exits 0.
 - `indexer config folder-color` and `indexer config header-color` set the colour of each project's folder name and of the table's header row; `--folder-color` and `--header-color` override them for one run.
 - `--json` failures: under `--json`, a failed command writes `{"schema": 1, "error": {"kind", "message", …}}` to stderr instead of prose. `show` reports `not_found`, or `ambiguous` with the matching projects; anything else is `error`. The format is documented for scripts and LLM agents in `docs/cli/agents.md`.

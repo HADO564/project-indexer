@@ -32,9 +32,11 @@ Merged as PRs #6 and #7 on 2026-09-15.
    empty table and exit 0. *(Revised 2026-09-17: an earlier plan had `list`
    use all four of `show`'s rules through a public `matches`, but then
    `list app` hid `app-gateway`.)*
-2. **`--tracker <kind>` / `-t`** — a clap `ValueEnum` (`git`, `unreal`) that
-   filters by `Tracker::is` *before* `resolve`, turns TRACKERS into that
-   tracker's own columns (git: BRANCH, CHANGES) and gives `show` a section for
+2. **`--tracker <kind>` / `-t`** — *(the flag and the filtering are done,
+   2026-09-18, branch `feat/cli-tracker-filter`: a clap `ValueEnum` plus
+   `commands::with_tracker`, which narrows the corpus before `resolve` and
+   `filter`.)* What remains is the rendering: turn TRACKERS into that
+   tracker's own columns (git: BRANCH, CHANGES) and give `show` a section for
    it. Match every `Tracker` variant with no `_` arm.
 3. **`...` in a path query** — `show work/.../app` spans any number of folders.
    Split query and path on `/` and compare from the end; no regex. `...` rather
