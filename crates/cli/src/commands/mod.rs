@@ -14,7 +14,7 @@ mod show;
 mod untrack;
 
 use anyhow::anyhow;
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
 use indexer_core::Project;
 
 use crate::context::Context;
@@ -81,6 +81,45 @@ impl ColorSetting {
             ColorSetting::Folder => Color::DEFAULT_FOLDER,
             ColorSetting::Header => Color::DEFAULT_HEADER,
         }
+    }
+}
+
+/// The tracker kinds `--tracker` accepts, as `git` and `unreal` on the
+/// command line.
+///
+/// One flag taking a value, rather than a `--git` and a `--unreal` flag, so a
+/// new detector adds a variant here instead of a flag and the rules for
+/// combining it with the others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum TrackerKind {
+    Git,
+    Unreal,
+}
+
+impl TrackerKind {
+    /// The kind as [`indexer_core::Tracker::is`] compares it — lowercase, the
+    /// spelling the user types and `--json` prints.
+    pub fn kind(self) -> &'static str {
+        match self {
+            TrackerKind::Git => "git",
+            TrackerKind::Unreal => "unreal",
+        }
+    }
+}
+
+/// Keeps only the projects carrying `kind`, or every project when no
+/// `--tracker` was given.
+///
+/// Commands narrow the corpus with this *before* matching a query, so
+/// `show app --tracker git` finds the git `app` rather than reporting it as
+/// ambiguous with an Unreal one and then dropping half the answer.
+pub fn with_tracker(projects: Vec<Project>, kind: Option<TrackerKind>) -> Vec<Project> {
+    match kind {
+        Some(kind) => projects
+            .into_iter()
+            .filter(|p| p.trackers.iter().any(|t| t.is(kind.kind())))
+            .collect(),
+        None => projects,
     }
 }
 
