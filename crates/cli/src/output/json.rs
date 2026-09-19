@@ -129,7 +129,9 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
             let projects: Vec<ProjectJson> = projects.iter().map(ProjectJson::from).collect();
             emit(out, &projects)
         }
-        Outcome::Project(project) => emit(out, &ProjectJson::from(project.as_ref())),
+        // The kinds only pick columns for the human table; JSON always carries
+        // every tracker in full.
+        Outcome::Project { project, .. } => emit(out, &ProjectJson::from(project.as_ref())),
         Outcome::Color { setting, color } => {
             let mut data = serde_json::Map::new();
             data.insert(setting.key().to_string(), serde_json::to_value(color)?);
@@ -149,7 +151,7 @@ pub fn write_error(out: &mut impl Write, error: &anyhow::Error) -> anyhow::Resul
             query: Some(query),
             matches: None,
         },
-        Some(failure @ Failure::Ambiguous { query, matches }) => ErrorJson {
+        Some(failure @ Failure::Ambiguous { query, matches, .. }) => ErrorJson {
             kind: "ambiguous",
             message: failure.summary(),
             query: Some(query),

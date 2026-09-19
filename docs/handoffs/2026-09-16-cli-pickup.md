@@ -32,12 +32,12 @@ Merged as PRs #6 and #7 on 2026-09-15.
    empty table and exit 0. *(Revised 2026-09-17: an earlier plan had `list`
    use all four of `show`'s rules through a public `matches`, but then
    `list app` hid `app-gateway`.)*
-2. **`--tracker <kind>` / `-t`** — *(the flag and the filtering are done,
-   2026-09-18, branch `feat/cli-tracker-filter`: a clap `ValueEnum` plus
-   `commands::with_tracker`, which narrows the corpus before `resolve` and
-   `filter`.)* What remains is the rendering: turn TRACKERS into that
-   tracker's own columns (git: BRANCH, CHANGES) and give `show` a section for
-   it. Match every `Tracker` variant with no `_` arm.
+2. ~~**`--tracker <kind>` / `-t`**~~ *(done: the flag and filtering on
+   2026-09-18 (`feat/cli-tracker-filter`), the columns, detail sections and
+   several-kinds support on 2026-09-19 (`feat/cli-tracker-columns`).)* The
+   table's columns and `show`'s sections now come from the kinds named;
+   `kind_cells` and `kind_details` in `output/human.rs` match every `Tracker`
+   variant with no `_` arm, so a new detector fails the build there first.
 3. **`...` in a path query** — `show work/.../app` spans any number of folders.
    Split query and path on `/` and compare from the end; no regex. `...` rather
    than `*`, which the shell expands before `indexer` ever runs.

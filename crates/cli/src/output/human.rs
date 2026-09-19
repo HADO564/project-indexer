@@ -5,7 +5,9 @@ use std::path::Path;
 
 use indexer_core::domain::Project;
 
-use crate::commands::Outcome;
+use indexer_core::Tracker;
+
+use crate::commands::{Outcome, TrackerKind};
 use crate::output::color::Color;
 use crate::output::Colors;
 
@@ -13,7 +15,11 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
     let terminal = std::io::stdout().is_terminal();
     let color = terminal && std::env::var_os("NO_COLOR").is_none();
     match outcome {
-        Outcome::Projects { projects, query } => {
+        Outcome::Projects {
+            projects,
+            query,
+            tracker,
+        } => {
             if projects.is_empty() {
                 // stderr, so a script reading stdout sees no rows either way.
                 match query {
@@ -27,13 +33,24 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
                 folder_color: color.then_some(colors.folder),
                 header_color: color.then_some(colors.header),
                 width: if terminal { terminal_width() } else { None },
+                tracker: tracker.clone(),
             };
             write!(out, "{}", project_table(&projects, &style))?;
         }
-        Outcome::Project(project) => {
+        Outcome::Project { project, tracker } => {
             writeln!(out, "{}", project.name)?;
             writeln!(out, "  directory  {}", project.directory)?;
             writeln!(out, "  id         {}", project.id)?;
+            for kind in tracker {
+                let details = kind_details(project, *kind);
+                if details.is_empty() {
+                    continue;
+                }
+                writeln!(out, "  {}", kind.kind())?;
+                for (label, value) in details {
+                    writeln!(out, "    {label:<9}{value}")?;
+                }
+            }
         }
         Outcome::Color { color: chosen, .. } => {
             let name = chosen.name();
@@ -55,22 +72,167 @@ fn terminal_width() -> Option<usize> {
 /// How [`project_table`] is drawn. The default is plain — no colour and no
 /// terminal width, so the table is only as wide as its cells and not centred —
 /// which suits anything that isn't a terminal, like an error message or a pipe.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 pub struct TableStyle {
     pub folder_color: Option<Color>,
     pub header_color: Option<Color>,
     /// The terminal's width in columns, when known.
     pub width: Option<usize>,
+    /// The tracker kinds whose columns the table shows, in order; empty for
+    /// the default TRACKERS column.
+    pub tracker: Vec<TrackerKind>,
 }
 
 /// With a known terminal width, a narrower table grows to this share of it.
 const MIN_WIDTH_PERCENT: usize = 70;
 
-const HEADERS: [&str; 4] = ["NAME", "DIRECTORY", "TRACKERS", "LAST OPENED"];
+/// The column headers for `trackers`: NAME and DIRECTORY, then each kind's
+/// own columns in the order asked for, then LAST OPENED.
+///
+/// Without `--tracker` the middle is TRACKERS, every kind the project has.
+/// With one or more, the kinds are already known, so the space goes to those
+/// trackers' own detail instead.
+fn headers(trackers: &[TrackerKind]) -> Vec<&'static str> {
+    let mut headers = vec!["NAME", "DIRECTORY"];
+    if trackers.is_empty() {
+        headers.push("TRACKERS");
+    }
+    for kind in trackers {
+        headers.extend(kind_headers(*kind));
+    }
+    headers.push("LAST OPENED");
+    headers
+}
+
+/// One kind's own columns. Paired with [`kind_cells`]: both must stay the
+/// same length, or a row would not line up with its headers.
+fn kind_headers(kind: TrackerKind) -> Vec<&'static str> {
+    match kind {
+        TrackerKind::Git => vec!["BRANCH", "CHANGES"],
+        TrackerKind::Unreal => vec!["ENGINE"],
+    }
+}
+
+/// One project's cells for the middle columns, matching [`headers`] for the
+/// same trackers.
+fn middle_cells(project: &Project, trackers: &[TrackerKind]) -> Vec<String> {
+    if trackers.is_empty() {
+        let kinds: Vec<&str> = project.trackers.iter().map(|t| t.kind()).collect();
+        let joined = kinds.join(", ");
+        return vec![if joined.is_empty() {
+            "-".to_string()
+        } else {
+            joined
+        }];
+    }
+    trackers
+        .iter()
+        .flat_map(|kind| kind_cells(project, *kind))
+        .collect()
+}
+
+/// One kind's cells for one project, in the order [`kind_headers`] lists them.
+///
+/// A project without that tracker shows `-` in each of its columns: with one
+/// kind `with_tracker` has already dropped those, but `--tracker git,unreal`
+/// keeps a project carrying either, so the gaps are real and have to be
+/// filled. The `match` over `Tracker` names every variant, so a new detector
+/// fails the build here until someone decides what it shows.
+fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
+    match kind {
+        TrackerKind::Git => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Git(git) => Some(git),
+                Tracker::Unreal(_) => None,
+            });
+            match info {
+                Some(info) => {
+                    let branch = if info.detached_head {
+                        "detached".to_string()
+                    } else {
+                        info.curr_branch.clone().unwrap_or_else(|| "-".to_string())
+                    };
+                    let changes = if info.dirty { "dirty" } else { "clean" };
+                    vec![branch, changes.to_string()]
+                }
+                None => vec!["-".to_string(), "-".to_string()],
+            }
+        }
+        TrackerKind::Unreal => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Unreal(unreal) => Some(unreal),
+                Tracker::Git(_) => None,
+            });
+            match info {
+                Some(info) => vec![info
+                    .engine_association
+                    .clone()
+                    .unwrap_or_else(|| "-".to_string())],
+                None => vec!["-".to_string()],
+            }
+        }
+    }
+}
+
+/// One kind's details for `show`, as label/value pairs — the same facts the
+/// table's columns hold, with room for what does not fit a column.
+///
+/// Empty when the project has no tracker of that kind, so `show` prints no
+/// section for it rather than a heading with nothing under it. The `match`
+/// names every `Tracker` variant, as [`kind_cells`] does.
+fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, String)> {
+    match kind {
+        TrackerKind::Git => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Git(git) => Some(git),
+                Tracker::Unreal(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            let mut details = vec![(
+                "branch",
+                if info.detached_head {
+                    "detached".to_string()
+                } else {
+                    info.curr_branch.clone().unwrap_or_else(|| "-".to_string())
+                },
+            )];
+            details.push((
+                "changes",
+                if info.dirty { "dirty" } else { "clean" }.to_string(),
+            ));
+            if let Some(remote) = info.web_url.clone().or_else(|| info.repo_url.clone()) {
+                details.push(("remote", remote));
+            }
+            details
+        }
+        TrackerKind::Unreal => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Unreal(unreal) => Some(unreal),
+                Tracker::Git(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            let mut details = vec![("project", info.project_name.clone())];
+            if let Some(engine) = info.engine_association.clone() {
+                details.push(("engine", engine));
+            }
+            if let Some(vcs) = info.vcs_provider.clone() {
+                details.push(("vcs", vcs));
+            }
+            details
+        }
+    }
+}
+
+/// The one column whose text is part-coloured: `parent/` plain, the folder in
+/// the folder colour.
+const DIRECTORY_COLUMN: usize = 1;
 
 /// A bordered table of projects — `list`'s view, and `show`'s when a query
-/// matches several — with the columns NAME, DIRECTORY, TRACKERS and LAST
-/// OPENED.
+/// matches several. The columns come from [`headers`]: NAME, DIRECTORY,
+/// TRACKERS and LAST OPENED by default, or those trackers' own columns when
+/// `style.tracker` names any.
 ///
 /// DIRECTORY is only `parent/folder`, the part `show parent/folder` takes
 /// back. Given a terminal width, the table grows to at least
@@ -78,9 +240,12 @@ const HEADERS: [&str; 4] = ["NAME", "DIRECTORY", "TRACKERS", "LAST OPENED"];
 /// and is centred. Padding is always worked out on the plain text, so colour
 /// codes never push a column out of line.
 pub fn project_table(projects: &[&Project], style: &TableStyle) -> String {
-    let rows: Vec<Row> = projects.iter().map(|p| Row::of(p)).collect();
-
-    let mut widths = HEADERS.map(text_width);
+    let rows: Vec<Row> = projects
+        .iter()
+        .map(|p| Row::of(p, &style.tracker))
+        .collect();
+    let headers = headers(&style.tracker);
+    let mut widths: Vec<usize> = headers.iter().map(|h| text_width(h)).collect();
     for row in &rows {
         for (width, cell) in widths.iter_mut().zip(row.cells()) {
             *width = (*width).max(text_width(&cell));
@@ -96,10 +261,13 @@ pub fn project_table(projects: &[&Project], style: &TableStyle) -> String {
         }
     }
 
-    let header = HEADERS.map(|h| Cell {
-        plain: h.to_string(),
-        shown: paint(style.header_color, h),
-    });
+    let header: Vec<Cell> = headers
+        .iter()
+        .map(|h| Cell {
+            plain: h.to_string(),
+            shown: paint(style.header_color, h),
+        })
+        .collect();
 
     let mut lines = vec![
         rule(&widths, ['╭', '┬', '╮']),
@@ -107,16 +275,23 @@ pub fn project_table(projects: &[&Project], style: &TableStyle) -> String {
         rule(&widths, ['├', '┼', '┤']),
     ];
     for row in &rows {
-        let [name, directory, trackers, last_opened] = row.cells();
-        let cells = [
-            Cell::plain(name),
-            Cell {
-                shown: format!("{}{}", row.parent, paint(style.folder_color, &row.folder)),
-                plain: directory,
-            },
-            Cell::plain(trackers),
-            Cell::plain(last_opened),
-        ];
+        // Only the folder is coloured, and only the plain text is measured, so
+        // the colour codes never push a column out of line.
+        let cells: Vec<Cell> = row
+            .cells()
+            .into_iter()
+            .enumerate()
+            .map(|(column, text)| {
+                if column == DIRECTORY_COLUMN {
+                    Cell {
+                        shown: format!("{}{}", row.parent, paint(style.folder_color, &row.folder)),
+                        plain: text,
+                    }
+                } else {
+                    Cell::plain(text)
+                }
+            })
+            .collect();
         lines.push(cells_line(&cells, &widths));
     }
     lines.push(rule(&widths, ['╰', '┴', '╯']));
@@ -134,14 +309,15 @@ struct Row {
     /// root of the filesystem.
     parent: String,
     folder: String,
-    /// Every tracker's kind, joined with `, `; `-` when there are none.
-    trackers: String,
+    /// The columns between DIRECTORY and LAST OPENED — one cell per header
+    /// [`headers`] chose for this tracker.
+    middle: Vec<String>,
     /// `YYYY-MM-DD`, or `never`.
     last_opened: String,
 }
 
 impl Row {
-    fn of(project: &Project) -> Self {
+    fn of(project: &Project, tracker: &[TrackerKind]) -> Self {
         let path = Path::new(&project.directory);
         let parent = path
             .parent()
@@ -153,16 +329,6 @@ impl Row {
             .map(|f| f.to_string_lossy().into_owned())
             .unwrap_or_else(|| project.directory.clone());
 
-        let mut trackers = project
-            .trackers
-            .iter()
-            .map(|t| t.kind())
-            .collect::<Vec<_>>()
-            .join(", ");
-        if trackers.is_empty() {
-            trackers = "-".to_string();
-        }
-
         let last_opened = match project.last_opened_at {
             Some(date) => date.format("%Y-%m-%d").to_string(),
             None => "never".to_string(),
@@ -172,19 +338,17 @@ impl Row {
             name: project.name.clone(),
             parent,
             folder,
-            trackers,
+            middle: middle_cells(project, tracker),
             last_opened,
         }
     }
 
-    /// The four cells in column order.
-    fn cells(&self) -> [String; 4] {
-        [
-            self.name.clone(),
-            format!("{}{}", self.parent, self.folder),
-            self.trackers.clone(),
-            self.last_opened.clone(),
-        ]
+    /// The cells in column order, one per header.
+    fn cells(&self) -> Vec<String> {
+        let mut cells = vec![self.name.clone(), format!("{}{}", self.parent, self.folder)];
+        cells.extend(self.middle.iter().cloned());
+        cells.push(self.last_opened.clone());
+        cells
     }
 }
 
@@ -205,7 +369,7 @@ impl Cell {
 }
 
 /// `│ a │ b │ … │`, each cell padded to its column's width.
-fn cells_line(cells: &[Cell; 4], widths: &[usize; 4]) -> String {
+fn cells_line(cells: &[Cell], widths: &[usize]) -> String {
     let mut line = String::from("│");
     for (cell, width) in cells.iter().zip(widths) {
         let padding = " ".repeat(width - text_width(&cell.plain));
@@ -216,7 +380,7 @@ fn cells_line(cells: &[Cell; 4], widths: &[usize; 4]) -> String {
 
 /// A horizontal border: `left`, a run of `─` over each column (and its two
 /// spaces of padding), `middle` between columns, then `right`.
-fn rule(widths: &[usize; 4], [left, middle, right]: [char; 3]) -> String {
+fn rule(widths: &[usize], [left, middle, right]: [char; 3]) -> String {
     let runs: Vec<String> = widths.iter().map(|w| "─".repeat(w + 2)).collect();
     format!("{left}{}{right}", runs.join(&middle.to_string()))
 }
@@ -230,7 +394,7 @@ fn table_width(widths: &[usize]) -> usize {
 /// Widens the columns until the table is `target` wide, sharing the extra
 /// evenly and giving any remainder to the leftmost columns. A table already
 /// that wide is left alone.
-fn stretch(widths: &mut [usize; 4], target: usize) {
+fn stretch(widths: &mut [usize], target: usize) {
     let current = table_width(widths);
     if current >= target {
         return;

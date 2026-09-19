@@ -1,8 +1,10 @@
 use indexer_core::domain::Project;
 use serde_json::json;
 
+use crate::commands::{Outcome, TrackerKind};
 use crate::output::color::Color;
-use crate::output::human::{project_table, TableStyle};
+use crate::output::human::{project_table, write, TableStyle};
+use crate::output::Colors;
 
 /// A project from its stored JSON shape, so the test needs neither `chrono`
 /// nor every detector's info struct spelled out.
@@ -130,6 +132,7 @@ fn colour_paints_the_header_and_folder_without_moving_any_column() {
         folder_color: Some(Color::Cyan),
         header_color: Some(Color::Magenta),
         width: Some(120),
+        ..Default::default()
     };
 
     let coloured = table(&two_projects(), style);
@@ -155,4 +158,95 @@ fn a_directory_at_the_root_shows_just_its_folder() {
 
     let row = output.lines().nth(3).unwrap();
     assert!(row.starts_with("│ top  │ top "), "{output}");
+}
+
+/// A table of [`two_projects`] showing `trackers`' own columns.
+fn tracker_table(trackers: Vec<TrackerKind>) -> String {
+    table(
+        &two_projects(),
+        TableStyle {
+            tracker: trackers,
+            ..Default::default()
+        },
+    )
+}
+
+#[test]
+fn a_kind_replaces_the_trackers_column_with_its_own() {
+    let rendered = tracker_table(vec![TrackerKind::Git]);
+
+    assert!(rendered.contains("BRANCH"), "{rendered}");
+    assert!(rendered.contains("CHANGES"), "{rendered}");
+    assert!(!rendered.contains("TRACKERS"), "{rendered}");
+    // `two_projects`'s git tracker is on `main` with no uncommitted changes.
+    assert!(rendered.contains("main"), "{rendered}");
+    assert!(rendered.contains("clean"), "{rendered}");
+}
+
+#[test]
+fn several_kinds_show_their_columns_in_the_order_given() {
+    let rendered = tracker_table(vec![TrackerKind::Unreal, TrackerKind::Git]);
+    let header = rendered.lines().nth(1).expect("a header row");
+
+    let engine = header.find("ENGINE").expect("an ENGINE column");
+    let branch = header.find("BRANCH").expect("a BRANCH column");
+    assert!(engine < branch, "{header}");
+}
+
+#[test]
+fn a_project_without_the_kind_shows_a_dash_in_each_of_its_columns() {
+    // `app-gateway` carries no tracker at all, so every tracker column is `-`.
+    let rendered = tracker_table(vec![TrackerKind::Git, TrackerKind::Unreal]);
+    let row = rendered
+        .lines()
+        .find(|line| line.contains("app-gateway"))
+        .expect("a row for app-gateway");
+
+    let cells: Vec<&str> = row.split('│').map(str::trim).collect();
+    assert_eq!(&cells[3..6], ["-", "-", "-"], "{row}");
+}
+
+/// `show`'s detail view for one project, as `write` renders it.
+fn detail(project: Project, trackers: Vec<TrackerKind>) -> String {
+    let outcome = Outcome::Project {
+        project: Box::new(project),
+        tracker: trackers,
+    };
+    let mut out = Vec::new();
+    write(
+        &mut out,
+        &outcome,
+        Colors {
+            folder: Color::DEFAULT_FOLDER,
+            header: Color::DEFAULT_HEADER,
+        },
+    )
+    .unwrap();
+    String::from_utf8(out).unwrap()
+}
+
+#[test]
+fn a_kind_adds_a_section_to_the_detail_view() {
+    let rendered = detail(two_projects().remove(0), vec![TrackerKind::Git]);
+
+    assert!(rendered.contains("\n  git\n"), "{rendered}");
+    assert!(rendered.contains("branch"), "{rendered}");
+    assert!(rendered.contains("changes"), "{rendered}");
+}
+
+#[test]
+fn no_kind_leaves_the_detail_view_as_it_was() {
+    let rendered = detail(two_projects().remove(0), Vec::new());
+
+    assert!(!rendered.contains("git"), "{rendered}");
+    assert_eq!(rendered.lines().count(), 3, "{rendered}");
+}
+
+#[test]
+fn a_kind_the_project_lacks_prints_no_section() {
+    // The second project carries no trackers at all.
+    let rendered = detail(two_projects().remove(1), vec![TrackerKind::Unreal]);
+
+    assert!(!rendered.contains("unreal"), "{rendered}");
+    assert_eq!(rendered.lines().count(), 3, "{rendered}");
 }

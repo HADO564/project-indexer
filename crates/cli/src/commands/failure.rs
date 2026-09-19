@@ -7,6 +7,7 @@ use std::fmt;
 
 use indexer_core::Project;
 
+use super::TrackerKind;
 use crate::output::human;
 
 #[derive(Debug)]
@@ -17,6 +18,7 @@ pub enum Failure {
     Ambiguous {
         query: String,
         matches: Vec<Project>,
+        tracker: Vec<TrackerKind>,
     },
 }
 
@@ -36,13 +38,21 @@ impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Failure::NotFound { .. } => write!(f, "{}", self.summary()),
-            Failure::Ambiguous { matches, .. } => {
+            Failure::Ambiguous {
+                matches, tracker, ..
+            } => {
                 let matches: Vec<&Project> = matches.iter().collect();
+                // Plain apart from the tracker: an error is not a terminal
+                // view, so no colour and no stretching to the terminal's width.
+                let style = human::TableStyle {
+                    tracker: tracker.clone(),
+                    ..Default::default()
+                };
                 write!(
                     f,
                     "{}\n{}add a folder from the path, like parent/folder, to narrow it down",
                     self.summary(),
-                    human::project_table(&matches, &human::TableStyle::default())
+                    human::project_table(&matches, &style)
                 )
             }
         }

@@ -45,6 +45,7 @@ fn results_are_wrapped_in_the_versioned_envelope() {
     let doc = render(&Outcome::Projects {
         projects: vec![project("app", json!([]))],
         query: None,
+        tracker: Vec::new(),
     });
     assert_eq!(doc["schema"], 1);
     assert_eq!(doc["data"][0]["name"], "app");
@@ -56,6 +57,7 @@ fn a_query_matching_nothing_is_an_empty_array_not_an_error() {
     let doc = render(&Outcome::Projects {
         projects: Vec::new(),
         query: Some("nothing".into()),
+        tracker: Vec::new(),
     });
     assert_eq!(doc["data"], json!([]));
     assert!(doc.get("error").is_none());
@@ -63,7 +65,10 @@ fn a_query_matching_nothing_is_an_empty_array_not_an_error() {
 
 #[test]
 fn a_tracker_carries_its_kind_under_one_key_beside_its_fields() {
-    let doc = render(&Outcome::Project(Box::new(project("app", json!([git()])))));
+    let doc = render(&Outcome::Project {
+        project: Box::new(project("app", json!([git()]))),
+        tracker: Vec::new(),
+    });
     let tracker = &doc["data"]["trackers"][0];
     assert_eq!(tracker["kind"], "git");
     assert_eq!(tracker["curr_branch"], "main");
@@ -95,6 +100,7 @@ fn several_matches_are_listed_as_projects_with_a_one_line_message() {
         Failure::Ambiguous {
             query: "app".into(),
             matches: vec![project("app", json!([])), project("app-gateway", json!([]))],
+            tracker: Vec::new(),
         }
         .into(),
     );

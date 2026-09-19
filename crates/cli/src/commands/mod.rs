@@ -46,13 +46,16 @@ pub enum Outcome {
     Projects {
         projects: Vec<Project>,
         query: Option<String>,
+        tracker: Vec<TrackerKind>,
     },
-    Project(Box<Project>),
+    /// One project's details. `tracker` is the kinds `--tracker` asked to
+    /// expand, so the view can show a section per kind.
+    Project {
+        project: Box<Project>,
+        tracker: Vec<TrackerKind>,
+    },
     /// A colour setting now in effect, after `config` showed or changed it.
-    Color {
-        setting: ColorSetting,
-        color: Color,
-    },
+    Color { setting: ColorSetting, color: Color },
     /// Succeeded with nothing to show.
     Done,
 }
@@ -107,20 +110,40 @@ impl TrackerKind {
     }
 }
 
-/// Keeps only the projects carrying `kind`, or every project when no
-/// `--tracker` was given.
+/// Keeps the projects carrying any of `kinds`, or every project when no
+/// `--tracker` was given (an empty `kinds`).
+///
+/// Any rather than all: `--tracker git,unreal` reads as "these are the kinds
+/// I care about", so it widens the view. Requiring every kind would instead
+/// hide all but the projects that happen to be both.
 ///
 /// Commands narrow the corpus with this *before* matching a query, so
 /// `show app --tracker git` finds the git `app` rather than reporting it as
 /// ambiguous with an Unreal one and then dropping half the answer.
-pub fn with_tracker(projects: Vec<Project>, kind: Option<TrackerKind>) -> Vec<Project> {
-    match kind {
-        Some(kind) => projects
-            .into_iter()
-            .filter(|p| p.trackers.iter().any(|t| t.is(kind.kind())))
-            .collect(),
-        None => projects,
+pub fn with_tracker(projects: Vec<Project>, kinds: &[TrackerKind]) -> Vec<Project> {
+    if kinds.is_empty() {
+        return projects;
     }
+    projects
+        .into_iter()
+        .filter(|p| {
+            p.trackers
+                .iter()
+                .any(|t| kinds.iter().any(|kind| t.is(kind.kind())))
+        })
+        .collect()
+}
+
+/// The kinds in the order given, without repeats — `-t git -t git` must not
+/// print BRANCH and CHANGES twice.
+pub fn unique_kinds(kinds: &[TrackerKind]) -> Vec<TrackerKind> {
+    let mut unique: Vec<TrackerKind> = Vec::new();
+    for kind in kinds {
+        if !unique.contains(kind) {
+            unique.push(*kind);
+        }
+    }
+    unique
 }
 
 pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {
