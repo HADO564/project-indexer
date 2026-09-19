@@ -1,3 +1,5 @@
+
+
 # Project Indexer
 
 A desktop app that keeps track of the projects scattered across your disk — what
@@ -215,7 +217,7 @@ pnpm run check             # svelte-check
 pnpm test                  # frontend unit tests
 ```
 
-CI runs all of these on Windows and Linux for every push and pull request.
+CI runs the Rust checks on Windows and Linux, and the frontend checks on Linux, for every push and pull request.
 
 ## Linux notes
 
