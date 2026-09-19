@@ -61,12 +61,13 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
   - [ ] *Later, not this branch:* `show .` resolves the project in the current directory
 - [x] `config folder-color [COLOR] [--reset]` — 50 colours (16 standard + 34 named 24-bit); saved in `cli-settings.json` beside `projects.db`, never in the database; `--folder-color` overrides it for one run
 - [x] `config header-color [COLOR] [--reset]` — the same colours for a table's header row, default magenta; `--header-color` overrides it for one run. Both settings share one `Outcome::Color { setting, color }`, so `--json` reports `{"header_color": …}` or `{"folder_color": …}`
-- [ ] `scan <dir>` — **first-release work, not "later with groups"**: it is how a corpus gets populated at all. Someone arriving with 40 project folders cannot `add` them one at a time, and the GUI's scan is the only way to bulk-register today
-  - [ ] `ScanService::scan` then `import`, the same two steps the GUI uses: the walk registers nothing, so the review step stays deliberate
-  - [ ] Review by default: print the candidates as a table (directory, suggested name, kinds, already-tracked) and register nothing. `--import` (or `--yes`) performs the import; `--json` emits the report
-  - [ ] `--depth <n>` maps to `ScanMode` (1 = `Quick`), `--include-ignored` widens the prune list, `--tracker <kinds>` restricts `ScanRequest::detectors` (empty finds nothing, deliberately — so the CLI defaults to every kind `detector_kinds()` reports)
-  - [ ] `stopped_early` (the `MAX_DIRECTORIES` bound) is surfaced, not swallowed, so an incomplete scan never reads as "nothing more to find"
-  - [ ] The `ImportReport`'s `skipped` and `failures` are reported per row; a failed row never fails the whole command
+- [x] `scan <dir>` — **first-release work, not "later with groups"**: it is how a corpus gets populated at all. Someone arriving with 40 project folders cannot `add` them one at a time
+  - [x] `ScanService::scan` then `import`, the same two steps the GUI uses: the walk registers nothing, so the review step stays deliberate
+  - [x] Review by default: the candidates as a table (directory relative to the scanned folder, suggested name with `(renamed)` when disambiguation changed it, kinds, already-tracked), then the summary and the ready-made `--import` command. `--json` emits the `ScanReport`
+  - [x] `--depth <n>` maps to `ScanMode` (1 = `Quick`), `--include-ignored` widens the prune list, `--tracker <kinds>` restricts `ScanRequest::detectors` — matched case-insensitively against `detector_kinds()`, since a detector spells its own kind (`Git`) and the scan compares exactly
+  - [x] `stopped_early` (the `MAX_DIRECTORIES` bound) is surfaced, not swallowed, so an incomplete scan never reads as "nothing more to find"
+  - [x] The `ImportReport`'s `skipped` and `failures` are reported per row; a failed row never fails the whole command
+  - [ ] *Later:* pick which candidates to import when stdin is a terminal, instead of all-or-nothing. Same interaction as picking from `show`'s several matches
 - [ ] Groups, the bin (restore and purge)
 - [ ] Destructive commands confirm through a confirmer (`--yes` in a shell)
 - [ ] A Tauri-free `AppLauncher` for `open` — in `core::platform` or the CLI, decided at this milestone

@@ -41,11 +41,11 @@ Merged as PRs #6 and #7 on 2026-09-15.
 3. **`...` in a path query** — `show work/.../app` spans any number of folders.
    Split query and path on `/` and compare from the end; no regex. `...` rather
    than `*`, which the shell expands before `indexer` ever runs.
-4. **`scan <dir>`** — moved up the order (2026-09-19): a corpus has to be
-   populated before any of the read commands are worth running, and `add` one
-   directory at a time is not that. Core is ready (`ScanService::scan` /
-   `import` / `detector_kinds`), so this is argument parsing plus rendering
-   the report. Review by default, `--import` to register, `--json` for both.
+4. ~~**`scan <dir>`**~~ *(done 2026-09-20, branch `feat/cli-scan`.)* Review by
+   default, `--import` to register, `--json` for both. What is left is picking
+   *which* candidates to import when stdin is a terminal — the same
+   interaction as picking from `show`'s several matches, so worth doing once,
+   for both.
 5. **The rest of milestone 3** — `add`, `open`, `untrack`, groups, the bin;
    the confirmer for destructive commands; a Tauri-free `AppLauncher`;
    `views.ts` and `scanSettings.ts` logic into core.

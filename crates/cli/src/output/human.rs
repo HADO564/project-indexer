@@ -5,6 +5,7 @@ use std::path::Path;
 
 use indexer_core::domain::Project;
 
+use indexer_core::domain::scan::Candidate;
 use indexer_core::Tracker;
 
 use crate::commands::{Outcome, TrackerKind};
@@ -58,6 +59,55 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
                 writeln!(out, "{}", chosen.paint(&name))?;
             } else {
                 writeln!(out, "{name}")?;
+            }
+        }
+        Outcome::Imported { report } => {
+            // A summary, not a table: what matters is the counts and the rows
+            // that failed. Prose, so it goes to stderr like every other
+            // message that is not data.
+            eprintln!(
+                "indexer: registered {}, skipped {} already tracked",
+                report.imported.len(),
+                report.skipped
+            );
+            for failure in &report.failures {
+                // Listed, never fatal: one bad directory must not cost the run.
+                eprintln!("indexer: failed {}: {}", failure.directory, failure.message);
+            }
+        }
+        Outcome::Scanned { root, report } => {
+            if report.candidates.is_empty() {
+                eprintln!("indexer: no projects found under {root}");
+            } else {
+                let style = TableStyle {
+                    folder_color: color.then_some(colors.folder),
+                    header_color: color.then_some(colors.header),
+                    width: if terminal { terminal_width() } else { None },
+                    tracker: Vec::new(),
+                };
+                write!(out, "{}", candidate_table(&report.candidates, root, &style))?;
+            }
+            // Prose on stderr, so `indexer scan … | wc -l` counts rows only.
+            let tracked = report
+                .candidates
+                .iter()
+                .filter(|c| c.already_tracked)
+                .count();
+            eprintln!(
+                "indexer: {} found under {root}, {tracked} already tracked, {} directories visited",
+                report.candidates.len(),
+                report.visited
+            );
+            if !report.candidates.is_empty() {
+                eprintln!("indexer: re-run with --import to register them:");
+                eprintln!("  indexer scan {root} --import");
+            }
+            if report.stopped_early {
+                // Never silent: an incomplete walk must not read as an empty disk.
+                eprintln!(
+                    "indexer: stopped at the {}-directory limit — results are incomplete",
+                    indexer_core::domain::scan::MAX_DIRECTORIES
+                );
             }
         }
         Outcome::Done => {}
@@ -244,11 +294,96 @@ pub fn project_table(projects: &[&Project], style: &TableStyle) -> String {
         .iter()
         .map(|p| Row::of(p, &style.tracker))
         .collect();
-    let headers = headers(&style.tracker);
+    let cells: Vec<Vec<Cell>> = rows
+        .iter()
+        .map(|row| {
+            // Only the folder is coloured, and only the plain text is measured,
+            // so the colour codes never push a column out of line.
+            row.cells()
+                .into_iter()
+                .enumerate()
+                .map(|(column, text)| {
+                    if column == DIRECTORY_COLUMN {
+                        Cell {
+                            shown: format!(
+                                "{}{}",
+                                row.parent,
+                                paint(style.folder_color, &row.folder)
+                            ),
+                            plain: text,
+                        }
+                    } else {
+                        Cell::plain(text)
+                    }
+                })
+                .collect()
+        })
+        .collect();
+
+    table(&headers(&style.tracker), cells, style)
+}
+
+/// A bordered table of scan candidates — directory, the name it would get,
+/// what matched, and whether it is already tracked.
+///
+/// Directories are shown relative to `root`, the folder that was scanned:
+/// absolute paths are mostly the same prefix repeated, and the summary line
+/// names the root anyway.
+pub fn candidate_table(candidates: &[Candidate], root: &str, style: &TableStyle) -> String {
+    let rows: Vec<Vec<Cell>> = candidates
+        .iter()
+        .map(|candidate| {
+            let relative = candidate
+                .directory
+                .strip_prefix(root)
+                .map(|rest| rest.trim_start_matches(['/', '\\']))
+                .filter(|rest| !rest.is_empty())
+                .unwrap_or(&candidate.directory);
+            let path = Path::new(relative);
+            let folder = path
+                .file_name()
+                .map(|f| f.to_string_lossy().into_owned())
+                .unwrap_or_else(|| relative.to_string());
+            let parent = relative
+                .strip_suffix(&folder)
+                .unwrap_or_default()
+                .to_string();
+            vec![
+                Cell {
+                    shown: format!("{}{}", parent, paint(style.folder_color, &folder)),
+                    plain: format!("{parent}{folder}"),
+                },
+                // A renamed candidate is flagged: the scan qualified it to
+                // avoid colliding with a name already in use.
+                Cell::plain(if candidate.disambiguated {
+                    format!("{} (renamed)", candidate.suggested_name)
+                } else {
+                    candidate.suggested_name.clone()
+                }),
+                Cell::plain(candidate.matched_kinds.join(", ")),
+                Cell::plain(
+                    if candidate.already_tracked {
+                        "yes"
+                    } else {
+                        "-"
+                    }
+                    .to_string(),
+                ),
+            ]
+        })
+        .collect();
+
+    table(&["DIRECTORY", "NAME", "KINDS", "TRACKED"], rows, style)
+}
+
+/// Draws `rows` under `headers`: one column per header, padded to the widest
+/// cell, bordered, and — given a terminal width — stretched to
+/// [`MIN_WIDTH_PERCENT`] of it and centred.
+fn table(headers: &[&str], rows: Vec<Vec<Cell>>, style: &TableStyle) -> String {
     let mut widths: Vec<usize> = headers.iter().map(|h| text_width(h)).collect();
     for row in &rows {
-        for (width, cell) in widths.iter_mut().zip(row.cells()) {
-            *width = (*width).max(text_width(&cell));
+        for (width, cell) in widths.iter_mut().zip(row) {
+            *width = (*width).max(text_width(&cell.plain));
         }
     }
 
@@ -275,24 +410,7 @@ pub fn project_table(projects: &[&Project], style: &TableStyle) -> String {
         rule(&widths, ['├', '┼', '┤']),
     ];
     for row in &rows {
-        // Only the folder is coloured, and only the plain text is measured, so
-        // the colour codes never push a column out of line.
-        let cells: Vec<Cell> = row
-            .cells()
-            .into_iter()
-            .enumerate()
-            .map(|(column, text)| {
-                if column == DIRECTORY_COLUMN {
-                    Cell {
-                        shown: format!("{}{}", row.parent, paint(style.folder_color, &row.folder)),
-                        plain: text,
-                    }
-                } else {
-                    Cell::plain(text)
-                }
-            })
-            .collect();
-        lines.push(cells_line(&cells, &widths));
+        lines.push(cells_line(row, &widths));
     }
     lines.push(rule(&widths, ['╰', '┴', '╯']));
 

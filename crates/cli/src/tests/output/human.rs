@@ -1,9 +1,10 @@
+use indexer_core::domain::scan::Candidate;
 use indexer_core::domain::Project;
 use serde_json::json;
 
 use crate::commands::{Outcome, TrackerKind};
 use crate::output::color::Color;
-use crate::output::human::{project_table, write, TableStyle};
+use crate::output::human::{candidate_table, project_table, write, TableStyle};
 use crate::output::Colors;
 
 /// A project from its stored JSON shape, so the test needs neither `chrono`
@@ -249,4 +250,58 @@ fn a_kind_the_project_lacks_prints_no_section() {
 
     assert!(!rendered.contains("unreal"), "{rendered}");
     assert_eq!(rendered.lines().count(), 3, "{rendered}");
+}
+
+fn candidate(directory: &str, name: &str, tracked: bool, renamed: bool) -> Candidate {
+    Candidate {
+        directory: directory.to_string(),
+        suggested_name: name.to_string(),
+        matched_kinds: vec!["git".to_string()],
+        already_tracked: tracked,
+        disambiguated: renamed,
+    }
+}
+
+#[test]
+fn scan_candidates_are_listed_relative_to_the_folder_scanned() {
+    let candidates = [
+        candidate("/home/me/code/alpha", "alpha", false, false),
+        candidate("/home/me/code/nested/beta", "beta", false, false),
+    ];
+
+    let rendered = candidate_table(&candidates, "/home/me/code", &TableStyle::default());
+
+    assert!(rendered.contains("│ alpha       │"), "{rendered}");
+    assert!(rendered.contains("│ nested/beta │"), "{rendered}");
+    assert!(!rendered.contains("/home/me/code/alpha"), "{rendered}");
+}
+
+#[test]
+fn a_candidate_outside_the_scanned_folder_keeps_its_full_path() {
+    let candidates = [candidate("/elsewhere/gamma", "gamma", false, false)];
+
+    let rendered = candidate_table(&candidates, "/home/me/code", &TableStyle::default());
+
+    assert!(rendered.contains("/elsewhere/gamma"), "{rendered}");
+}
+
+#[test]
+fn an_already_tracked_candidate_and_a_renamed_one_are_both_flagged() {
+    let candidates = [
+        candidate("/home/me/code/alpha", "alpha", true, false),
+        candidate("/home/me/code/beta", "code/beta", false, true),
+    ];
+
+    let rendered = candidate_table(&candidates, "/home/me/code", &TableStyle::default());
+    let alpha = rendered
+        .lines()
+        .find(|line| line.contains("alpha"))
+        .expect("a row for alpha");
+    let beta = rendered
+        .lines()
+        .find(|line| line.contains("beta"))
+        .expect("a row for beta");
+
+    assert!(alpha.contains("yes"), "{alpha}");
+    assert!(beta.contains("code/beta (renamed)"), "{beta}");
 }

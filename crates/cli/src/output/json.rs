@@ -137,6 +137,12 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
             data.insert(setting.key().to_string(), serde_json::to_value(color)?);
             emit(out, &data)
         }
+        // Both scan documents are the core report as-is: `ImportReport` here,
+        // `ScanReport` below.
+        Outcome::Imported { report } => emit(out, report),
+        // `ScanReport` is the document: candidates, how many directories were
+        // visited, and whether the walk hit its limit.
+        Outcome::Scanned { report, .. } => emit(out, report),
         Outcome::Done => emit(out, &serde_json::Value::Null),
     }
 }

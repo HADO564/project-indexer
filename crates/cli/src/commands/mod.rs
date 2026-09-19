@@ -10,11 +10,14 @@ mod config;
 mod failure;
 mod list;
 mod open;
+pub mod scan;
 mod show;
 mod untrack;
 
 use anyhow::anyhow;
 use clap::{Subcommand, ValueEnum};
+use indexer_core::application::ImportReport;
+use indexer_core::domain::scan::ScanReport;
 use indexer_core::Project;
 
 use crate::context::Context;
@@ -34,6 +37,8 @@ pub enum Command {
     Open(open::OpenArgs),
     /// Stop tracking a project, leaving its files alone.
     Untrack(untrack::UntrackArgs),
+    /// Find projects under a directory, and optionally register them.
+    Scan(scan::ScanArgs),
     /// Show or change the CLI's settings.
     Config(config::ConfigArgs),
 }
@@ -54,6 +59,12 @@ pub enum Outcome {
         project: Box<Project>,
         tracker: Vec<TrackerKind>,
     },
+    /// What a scan registered: the projects created, how many directories
+    /// were already tracked, and the rows that failed.
+    Imported { report: ImportReport },
+    /// What a scan found, and the folder it looked in. Nothing is registered:
+    /// importing is a second, deliberate run.
+    Scanned { root: String, report: ScanReport },
     /// A colour setting now in effect, after `config` showed or changed it.
     Color { setting: ColorSetting, color: Color },
     /// Succeeded with nothing to show.
@@ -153,6 +164,7 @@ pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {
         Command::Add(args) => add::run(args, ctx),
         Command::Open(args) => open::run(args, ctx),
         Command::Untrack(args) => untrack::run(args, ctx),
+        Command::Scan(args) => scan::run(args, ctx),
         Command::Config(args) => config::run(args, ctx),
     }
 }
