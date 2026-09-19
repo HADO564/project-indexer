@@ -54,6 +54,21 @@ they are the layer the observer and the TUI both run through.
 vertical slice for the whole initiative. It proves the premise — same database,
 no backend changes — in about twenty lines.
 
+#### Scanning is part of the first release
+
+`indexer scan ~/code` is how somebody with a disk full of projects gets a
+corpus at all; `add` one directory at a time is not a substitute. It was
+originally grouped with groups and the bin as "the rest of milestone 3", and
+moved up on 2026-09-19 for that reason.
+
+It is two steps in core already — `ScanService::scan` walks and registers
+nothing, `import` registers a reviewed selection — and the CLI keeps that
+split rather than collapsing it: **the walk prints what it found and exits;
+registering takes `--import`.** Bulk registration is durable and a terminal
+gives nothing back if it is wrong, so the deliberate step stays. The
+`MAX_DIRECTORIES` bound is reported rather than swallowed, and a row that
+fails to import is listed without failing the command.
+
 #### The `--json` contract
 
 Human-readable tables are the default. `--json` is a different thing: the moment

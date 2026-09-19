@@ -41,8 +41,13 @@ Merged as PRs #6 and #7 on 2026-09-15.
 3. **`...` in a path query** — `show work/.../app` spans any number of folders.
    Split query and path on `/` and compare from the end; no regex. `...` rather
    than `*`, which the shell expands before `indexer` ever runs.
-4. **The rest of milestone 3** — `add`, `open`, `untrack`, groups, the bin,
-   scan; the confirmer for destructive commands; a Tauri-free `AppLauncher`;
+4. **`scan <dir>`** — moved up the order (2026-09-19): a corpus has to be
+   populated before any of the read commands are worth running, and `add` one
+   directory at a time is not that. Core is ready (`ScanService::scan` /
+   `import` / `detector_kinds`), so this is argument parsing plus rendering
+   the report. Review by default, `--import` to register, `--json` for both.
+5. **The rest of milestone 3** — `add`, `open`, `untrack`, groups, the bin;
+   the confirmer for destructive commands; a Tauri-free `AppLauncher`;
    `views.ts` and `scanSettings.ts` logic into core.
 
 Two things are decided but unwritten, and are worth doing before the TUI:
