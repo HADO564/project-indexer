@@ -37,7 +37,7 @@ code is `crates/cli/src/output/json.rs`, and its tests are in
 |---|---|
 | `indexer list --json` | an array of [projects](#a-project), in the default sort order |
 | `indexer list <query> --json` | an array of the projects whose name contains `query` (exact names first, then names starting with it, then the rest), or whose path ends with it when `query` contains `/`. An empty array, exit 0, when nothing matches |
-| `indexer list --tracker <kind> --json`, `indexer show <query> --tracker <kind> --json` | the same, narrowed to projects carrying that tracker (`git` or `unreal`) before the query is matched. An unknown kind is a usage error, exit 2 |
+| `indexer list --tracker <kind> --json`, `indexer show <query> --tracker <kind> --json` | the same, narrowed to projects carrying that tracker (`git` or `unreal`) before the query is matched. Name several by repeating the flag or with commas (`-t git,unreal`) to keep projects carrying any of them. An unknown kind is a usage error, exit 2. The flag picks columns and detail sections in human output; the JSON document is the same with or without it, and always carries every tracker in full |
 | `indexer show <query> --json` | one [project](#a-project). `query` is an exact name, a full id, an id prefix of 8+ characters, a `parent/folder` path ending, or part of a name, tried in that order. No match or several matches is an [error](#errors) |
 | `indexer config folder-color --json` | `{"folder_color": "cyan"}` — the colour in effect after the command |
 | `indexer config header-color --json` | `{"header_color": "magenta"}` |
