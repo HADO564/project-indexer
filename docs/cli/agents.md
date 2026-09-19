@@ -39,8 +39,13 @@ code is `crates/cli/src/output/json.rs`, and its tests are in
 | `indexer list <query> --json` | an array of the projects whose name contains `query` (exact names first, then names starting with it, then the rest), or whose path ends with it when `query` contains `/`. An empty array, exit 0, when nothing matches |
 | `indexer list --tracker <kind> --json`, `indexer show <query> --tracker <kind> --json` | the same, narrowed to projects carrying that tracker (`git` or `unreal`) before the query is matched. Name several by repeating the flag or with commas (`-t git,unreal`) to keep projects carrying any of them. An unknown kind is a usage error, exit 2. The flag picks columns and detail sections in human output; the JSON document is the same with or without it, and always carries every tracker in full |
 | `indexer show <query> --json` | one [project](#a-project). `query` is an exact name, a full id, an id prefix of 8+ characters, a `parent/folder` path ending, or part of a name, tried in that order. No match or several matches is an [error](#errors) |
+| `indexer scan <dir> --json` | `{"candidates": [{"directory", "suggested_name", "matched_kinds", "already_tracked", "disambiguated"}], "visited", "stopped_early"}`. Nothing is registered. `stopped_early` means the walk hit its 50,000-directory limit and the list is incomplete |
+| `indexer scan <dir> --import --json` | `{"imported": [projects], "skipped", "failures": [{"directory", "message"}]}`. Registers every candidate; an already-tracked directory counts in `skipped`, and a row that fails is listed in `failures` without failing the command (exit 0) |
 | `indexer config folder-color --json` | `{"folder_color": "cyan"}` — the colour in effect after the command |
 | `indexer config header-color --json` | `{"header_color": "magenta"}` |
+
+`scan` takes `--depth <n>` (1, the default, visits only the folder's
+children), `--include-ignored` and `-t/--tracker` to narrow what it looks for.
 
 `add`, `open`, `untrack`, the observer and the TUI are not written yet. They
 fail with an error of kind `error`.
