@@ -104,6 +104,40 @@ The shapes, field by field, are in [`agents.md`](agents.md).
 The cost is one wrapper struct and a documented rule. The cost of skipping it is
 a breaking change the first time somebody adds a project type.
 
+#### Interactive picking
+
+Three commands want the same thing, and it is **one component with three
+callers**, not three features:
+
+- `show app` where several projects match — choose, instead of printing the
+  table and exiting 1
+- `scan ~/code` — choose which candidates to import, instead of all or nothing
+- `list --pick` — choose a project from the table, filtering as you type
+
+Built once as "draw a list, filter, return the selection". Three bespoke
+prompts would end up disagreeing about the keys and about what `Esc` does, and
+that is the kind of disagreement nobody notices until a user hits it.
+
+**It follows `fzf`'s split, which the [`--json` contract](#the---json-contract)
+already sets.** The interface is drawn on stderr and the *selection alone* goes
+to stdout, so picking composes with everything else:
+
+```
+indexer open "$(indexer list --pick)"
+cd "$(indexer list --pick --print path)"
+```
+
+Gated on a terminal: with stdin piped, each of these keeps today's behaviour —
+the table, the exit code, all-or-nothing — because a script cannot answer a
+prompt, and reading its input as an answer would be worse than refusing. The
+same rule `confirm.rs` already follows.
+
+**Open: whether this overlaps the TUI**, which is already a list with `/`
+search and `Enter` to focus. The distinction to hold onto is that a picker is
+composed *inside* another command and then exits, while the TUI is somewhere
+the user stays. Both can exist — but decided by default rather than
+deliberately, it leaves the project with two project lists to keep in step.
+
 ### The TUI — every change is a command
 
 `indexer` with no arguments opens a terminal view of the same database. It is

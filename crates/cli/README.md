@@ -6,13 +6,18 @@ exposes most of what the desktop app does as commands, and offers a
 keyboard-driven TUI. It opens the same database as the app, so the two stay in
 step with no pairing — and it works without the app installed.
 
-**Status: the first commands work.** `list`, `show` and `config` run against the
-app's database; `add`, `open`, `untrack`, the observer and the TUI still return
-"not implemented". The binary name `indexer` is a placeholder.
+**Status: every plain subcommand works.** `list`, `show`, `add`, `open`,
+`untrack`, `scan` and `config` all run against the app's database; the observer
+and the TUI still return "not implemented". Groups and the bin have no commands
+yet. The binary name `indexer` is a placeholder.
 
 ```
 indexer list                     every project, as a table
 indexer show <query>             one project — exact name, id, parent/folder, or part of a name
+indexer add [dir]                track a directory, or the current one
+indexer open <query>             open a project in its application
+indexer untrack <query>          forget a project, leaving its files alone (asks first; --yes)
+indexer scan <dir>               find projects under a folder; --import registers them
 indexer config folder-color ...  the folder colour in that table; header-color likewise
 indexer <anything> --json        {"schema": 1, "data": …} on stdout, or {"schema": 1, "error": …} on stderr
 ```
@@ -23,7 +28,7 @@ src/
   paths.rs       the shared projects.db (pinned by src/tests/paths.rs)
   context.rs     opens the database and builds the core services
   confirm.rs     confirmation for destructive commands (--yes in a shell)
-  launcher.rs    placeholder AppLauncher until the `open` milestone
+  launcher.rs    AppLauncher over the system opener, Tauri-free
   commands/      one module per command: clap Args + run() -> Outcome
   output/        human rendering, and the --json envelope
   observe/       the observer

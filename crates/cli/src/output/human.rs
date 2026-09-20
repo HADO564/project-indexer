@@ -61,6 +61,36 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
                 writeln!(out, "{name}")?;
             }
         }
+        // These four report an action rather than return data, so their human
+        // output is prose on stderr and stdout stays empty — the same split
+        // `Imported` uses below. A script that wants the project itself asks
+        // for `--json`.
+        Outcome::Added {
+            project,
+            already_tracked,
+        } => {
+            if *already_tracked {
+                eprintln!(
+                    "indexer: already tracking \"{}\" at {}",
+                    project.name, project.directory
+                );
+            } else {
+                eprintln!(
+                    "indexer: tracking \"{}\" at {}",
+                    project.name, project.directory
+                );
+            }
+        }
+        Outcome::Untracked { project } => {
+            eprintln!(
+                "indexer: stopped tracking \"{}\" — {} is untouched",
+                project.name, project.directory
+            );
+        }
+        Outcome::Opened { project } => {
+            eprintln!("indexer: opening \"{}\"", project.name);
+        }
+        Outcome::Cancelled => eprintln!("indexer: cancelled"),
         Outcome::Imported { report } => {
             // A summary, not a table: what matters is the counts and the rows
             // that failed. Prose, so it goes to stderr like every other
@@ -110,7 +140,6 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
                 );
             }
         }
-        Outcome::Done => {}
     }
     Ok(())
 }

@@ -14,6 +14,9 @@ Nothing released yet.
 
 ### Added
 
+- `indexer add [dir]` starts tracking a directory, defaulting to the current one — `indexer add` inside a project folder is the common case. The path is resolved to an absolute one before it is stored, so `add .` and `add ../app` record where they actually point; a path that does not exist, or that is a file, is refused. A directory that is already tracked is reported as such rather than duplicated or treated as an error.
+- `indexer open <query>` opens a project in its application — the one in `open_with`, or the system default — and records that it was opened. A directory that has been deleted or moved, or an `open_with` app that is no longer installed, is reported before anything is launched.
+- `indexer untrack <query>` forgets a project's metadata and leaves its directory on disk alone. It asks for confirmation first; `--yes` answers in advance, and with stdin piped it refuses rather than reading a script's input as consent. Answering no prints `cancelled` and exits 0.
 - `indexer list` prints tracked projects as a bordered table — name, `parent/folder`, trackers, last opened — that fills at least 70% of the terminal and sits centred in it.
 - `indexer scan <dir>` walks a folder for projects and prints what it found — directory, the name it would get, what matched, and whether it is already tracked — registering nothing. `--import` performs the registration as a second run, `--depth <n>` looks further than the immediate children, `--include-ignored` looks inside `node_modules`, `target` and dot-directories, and `-t/--tracker` restricts the detectors. A walk that hits the 50,000-directory limit says so rather than reading as an empty disk, and a row that fails to import is reported without failing the command.
 - `--tracker <kind>` (short `-t`) on `list` and `show` keeps only the projects carrying that tracker, before the query is matched — so `show app --tracker git` finds the git `app` where `show app` alone reports several matches. `git` and `unreal` are the kinds; anything else is rejected with the list of valid ones. Name several by repeating the flag or with commas (`-t git,unreal`), and a project carrying any of them is kept.
@@ -25,5 +28,6 @@ Nothing released yet.
 
 ### Changed
 
+- `show`, `open` and `untrack` resolve their query through one shared `find_one`, so the same query finds the same project whichever verb is in front of it. `open` and `untrack` accept `-t/--tracker` for the same reason `show` does.
 - `--json` writes each tracker as `{"kind": "git", …its fields}` instead of `{"Git": {…}}`.
 - When several projects match, `show` now says "multiple matches found, which one did you mean?" above the table.

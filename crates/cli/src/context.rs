@@ -7,13 +7,17 @@ use anyhow::Context as _;
 use indexer_core::{DetectorRunner, GroupService, ProjectService, ScanService, SqliteRepository};
 
 use crate::confirm::Confirmer;
-use crate::launcher::UnsupportedLauncher;
+use crate::launcher::SystemLauncher;
 use crate::paths;
 
 /// Everything a command needs. In the TUI this will also carry the selected
 /// project, which commands default to when none is given.
 pub struct Context {
     pub projects: Arc<ProjectService>,
+    /// Built for every run, and unused until the group commands exist. Kept
+    /// here rather than created on demand so `Context` stays the one place
+    /// that wires core's services, exactly as the app's `lib.rs` does.
+    #[allow(dead_code)]
     pub groups: Arc<GroupService>,
     pub scan: Arc<ScanService>,
     pub confirmer: Box<dyn Confirmer>,
@@ -35,7 +39,7 @@ impl Context {
         let detectors = Arc::new(DetectorRunner::default());
         let projects = Arc::new(ProjectService::new(
             repo.clone(),
-            Arc::new(UnsupportedLauncher),
+            Arc::new(SystemLauncher),
             detectors.clone(),
             repo.clone(),
         ));

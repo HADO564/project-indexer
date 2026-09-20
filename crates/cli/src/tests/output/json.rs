@@ -128,3 +128,54 @@ fn any_other_failure_is_a_plain_error_with_its_cause_chain() {
         "could not open projects.db: database is locked"
     );
 }
+
+#[test]
+fn add_reports_the_project_and_whether_it_was_already_tracked() {
+    // The one fact `ensure_project` will not tell a caller, so a script can
+    // tell a new registration from a no-op without diffing the database.
+    let doc = render(&Outcome::Added {
+        project: Box::new(project("app", json!([]))),
+        already_tracked: false,
+    });
+    assert_eq!(doc["schema"], 1);
+    assert_eq!(doc["data"]["project"]["name"], "app");
+    assert_eq!(doc["data"]["already_tracked"], false);
+
+    let doc = render(&Outcome::Added {
+        project: Box::new(project("app", json!([]))),
+        already_tracked: true,
+    });
+    assert_eq!(doc["data"]["already_tracked"], true);
+}
+
+#[test]
+fn untrack_and_open_report_the_project_itself() {
+    let doc = render(&Outcome::Untracked {
+        project: Box::new(project("app", json!([]))),
+    });
+    // The row is gone from the database by now, so this document is the only
+    // record of what was removed.
+    assert_eq!(doc["data"]["name"], "app");
+    assert_eq!(doc["data"]["id"], "app-id");
+
+    let doc = render(&Outcome::Opened {
+        project: Box::new(project("app", git_tracker_project())),
+    });
+    assert_eq!(doc["data"]["name"], "app");
+    assert_eq!(doc["data"]["trackers"][0]["kind"], "git");
+}
+
+#[test]
+fn declining_a_confirmation_is_data_not_an_error() {
+    // Nothing went wrong, so it is a successful run with `data` — a reader
+    // must not have to treat "you said no" as a failure.
+    let doc = render(&Outcome::Cancelled);
+    assert_eq!(doc["schema"], 1);
+    assert_eq!(doc["data"]["cancelled"], true);
+    assert!(doc.get("error").is_none());
+}
+
+/// A project carrying one git tracker, for the shape assertions above.
+fn git_tracker_project() -> Value {
+    json!([git()])
+}

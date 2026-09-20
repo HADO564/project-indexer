@@ -1,9 +1,6 @@
 use clap::Args;
 
-use indexer_core::domain::matching::{resolve, Resolution};
-use indexer_core::domain::sorting::SortOptions;
-
-use super::{unique_kinds, with_tracker, Failure, Outcome, TrackerKind};
+use super::{find_one, unique_kinds, Outcome, TrackerKind};
 use crate::context::Context;
 
 #[derive(Debug, Args)]
@@ -18,25 +15,12 @@ pub struct ShowArgs {
 }
 
 pub fn run(args: ShowArgs, ctx: &Context) -> anyhow::Result<Outcome> {
-    let projects = ctx.projects.list(SortOptions::default())?;
     let tracker = unique_kinds(&args.tracker);
-    let projects = with_tracker(projects, &tracker);
-    let result = resolve(&projects, &args.project);
-
-    match result {
-        Resolution::Found(project) => Ok(Outcome::Project {
-            project: Box::new(project.clone()),
-            tracker,
-        }),
-        Resolution::NotFound => Err(Failure::NotFound {
-            query: args.project,
-        }
-        .into()),
-        Resolution::Ambiguous(matches) => Err(Failure::Ambiguous {
-            query: args.project,
-            matches: matches.into_iter().cloned().collect(),
-            tracker,
-        }
-        .into()),
-    }
+    // Cloned because `find_one` keeps the kinds for the table it puts in an
+    // ambiguous failure, and `show` needs them again for its detail sections.
+    let project = find_one(ctx, args.project, tracker.clone())?;
+    Ok(Outcome::Project {
+        project: Box::new(project),
+        tracker,
+    })
 }

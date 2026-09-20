@@ -5,7 +5,7 @@
 //! returns an [`Outcome`] without printing anything — rendering belongs to the
 //! caller (`output/` for a shell, the message line for the TUI).
 
-mod add;
+pub mod add;
 mod config;
 mod failure;
 mod list;
@@ -14,10 +14,11 @@ pub mod scan;
 mod show;
 mod untrack;
 
-use anyhow::anyhow;
 use clap::{Subcommand, ValueEnum};
 use indexer_core::application::ImportReport;
+use indexer_core::domain::matching::{resolve, Resolution};
 use indexer_core::domain::scan::ScanReport;
+use indexer_core::domain::sorting::SortOptions;
 use indexer_core::Project;
 
 use crate::context::Context;
@@ -59,6 +60,19 @@ pub enum Outcome {
         project: Box<Project>,
         tracker: Vec<TrackerKind>,
     },
+    /// A directory now tracked. `already_tracked` distinguishes the two things
+    /// `ensure_project` does, so the message can say which happened.
+    Added {
+        project: Box<Project>,
+        already_tracked: bool,
+    },
+    /// A project whose metadata was forgotten. Its directory is untouched.
+    Untracked { project: Box<Project> },
+    /// A project handed to its application, with `last_opened_at` now set.
+    Opened { project: Box<Project> },
+    /// The user answered no to a confirmation. Not a failure: exit 0, because
+    /// nothing went wrong and a script should not treat it as an error.
+    Cancelled,
     /// What a scan registered: the projects created, how many directories
     /// were already tracked, and the rows that failed.
     Imported { report: ImportReport },
@@ -67,8 +81,6 @@ pub enum Outcome {
     Scanned { root: String, report: ScanReport },
     /// A colour setting now in effect, after `config` showed or changed it.
     Color { setting: ColorSetting, color: Color },
-    /// Succeeded with nothing to show.
-    Done,
 }
 
 /// The colours a user can set with `indexer config`.
@@ -157,6 +169,36 @@ pub fn unique_kinds(kinds: &[TrackerKind]) -> Vec<TrackerKind> {
     unique
 }
 
+/// The single project `query` names, or the [`Failure`] explaining why there
+/// isn't one.
+///
+/// Shared by every command that acts on one project — `show`, `open`,
+/// `untrack` — so a query resolves identically whichever verb is in front of
+/// it. Three copies of this `match` was the point at which they could start to
+/// drift.
+///
+/// `tracker` narrows the corpus first, for the reason [`with_tracker`] gives:
+/// `open app -t git` should find the git `app` rather than report an ambiguity
+/// with an Unreal one.
+pub fn find_one(
+    ctx: &Context,
+    query: String,
+    tracker: Vec<TrackerKind>,
+) -> anyhow::Result<Project> {
+    let projects = ctx.projects.list(SortOptions::default())?;
+    let projects = with_tracker(projects, &tracker);
+    match resolve(&projects, &query) {
+        Resolution::Found(project) => Ok(project.clone()),
+        Resolution::NotFound => Err(Failure::NotFound { query }.into()),
+        Resolution::Ambiguous(matches) => Err(Failure::Ambiguous {
+            query,
+            matches: matches.into_iter().cloned().collect(),
+            tracker,
+        }
+        .into()),
+    }
+}
+
 pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {
     match command {
         Command::List(args) => list::run(args, ctx),
@@ -167,9 +209,4 @@ pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {
         Command::Scan(args) => scan::run(args, ctx),
         Command::Config(args) => config::run(args, ctx),
     }
-}
-
-/// The error every stub returns until its command is written.
-fn not_implemented(name: &str) -> anyhow::Error {
-    anyhow!("`{name}` is not implemented yet")
 }

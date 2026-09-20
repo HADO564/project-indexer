@@ -22,6 +22,9 @@ clap = { version = "4.6.6", features = ["derive"] }
 # `config_dir()` is what Tauri's `app_config_dir()` is built on, so the CLI
 # resolves the same `projects.db` as the app; see `src/paths.rs`.
 dirs = "6"
+# Hands a path to the system opener (`open`, `start`, the XDG handler). The
+# same crate `tauri-plugin-opener` wraps, so the CLI and the app agree.
+open = "5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The terminal's width, so `list`'s table can fill and centre in it.

@@ -39,6 +39,9 @@ code is `crates/cli/src/output/json.rs`, and its tests are in
 | `indexer list <query> --json` | an array of the projects whose name contains `query` (exact names first, then names starting with it, then the rest), or whose path ends with it when `query` contains `/`. An empty array, exit 0, when nothing matches |
 | `indexer list --tracker <kind> --json`, `indexer show <query> --tracker <kind> --json` | the same, narrowed to projects carrying that tracker (`git` or `unreal`) before the query is matched. Name several by repeating the flag or with commas (`-t git,unreal`) to keep projects carrying any of them. An unknown kind is a usage error, exit 2. The flag picks columns and detail sections in human output; the JSON document is the same with or without it, and always carries every tracker in full |
 | `indexer show <query> --json` | one [project](#a-project). `query` is an exact name, a full id, an id prefix of 8+ characters, a `parent/folder` path ending, or part of a name, tried in that order. No match or several matches is an [error](#errors) |
+| `indexer add [dir] --json` | `{"project": {…}, "already_tracked": false}`. Registers `dir`, or the current directory when it is left out. The path is resolved to an absolute one before it is stored. Already tracked is not an error: the same document comes back with `already_tracked: true` and nothing is changed |
+| `indexer open <query> --json` | one [project](#a-project), with `last_opened_at` stamped. Hands its directory to the system opener, or to the app in `open_with`. A directory that has been deleted or moved, or a missing `open_with` app, is an [error](#errors) |
+| `indexer untrack <query> --json` | the [project](#a-project) as it was, now removed from the database. Its directory on disk is untouched. **Needs `--yes` when stdin is not a terminal** — without it the command refuses rather than reading a script's input as consent |
 | `indexer scan <dir> --json` | `{"candidates": [{"directory", "suggested_name", "matched_kinds", "already_tracked", "disambiguated"}], "visited", "stopped_early"}`. Nothing is registered. `stopped_early` means the walk hit its 50,000-directory limit and the list is incomplete |
 | `indexer scan <dir> --import --json` | `{"imported": [projects], "skipped", "failures": [{"directory", "message"}]}`. Registers every candidate; an already-tracked directory counts in `skipped`, and a row that fails is listed in `failures` without failing the command (exit 0) |
 | `indexer config folder-color --json` | `{"folder_color": "cyan"}` — the colour in effect after the command |
@@ -47,8 +50,12 @@ code is `crates/cli/src/output/json.rs`, and its tests are in
 `scan` takes `--depth <n>` (1, the default, visits only the folder's
 children), `--include-ignored` and `-t/--tracker` to narrow what it looks for.
 
-`add`, `open`, `untrack`, the observer and the TUI are not written yet. They
-fail with an error of kind `error`.
+A command that asks for confirmation and is answered no returns
+`{"schema": 1, "data": {"cancelled": true}}` and exits 0 — nothing went wrong,
+so it is a result rather than an error. Pass `--yes` to agree in advance.
+
+The observer and the TUI are not written yet. They fail with an error of kind
+`error`.
 
 **To act on one project, use its id.** `show <id>` is exact, and names are not
 unique. Two projects called `app` in different folders is normal.
