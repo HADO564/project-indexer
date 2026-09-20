@@ -1896,6 +1896,7 @@ dependencies = [
  "clap",
  "dirs",
  "indexer-core",
+ "open",
  "serde",
  "serde_json",
  "tempfile",

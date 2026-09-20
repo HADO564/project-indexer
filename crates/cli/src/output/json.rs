@@ -94,6 +94,21 @@ impl<'a> From<&'a Project> for ProjectJson<'a> {
     }
 }
 
+/// `add`'s document: the project, and whether it was already tracked before
+/// the command ran.
+#[derive(Serialize)]
+struct AddedJson<'a> {
+    project: ProjectJson<'a>,
+    already_tracked: bool,
+}
+
+/// A confirmation the user declined. One field rather than `null`, so a reader
+/// can tell "you said no" from a command that simply has no data.
+#[derive(Serialize)]
+struct CancelledJson {
+    cancelled: bool,
+}
+
 /// A tracker as `{"kind": "git", …its fields}`, rather than serde's default
 /// `{"Git": {…}}` — so a reader finds the kind under one fixed key, and a kind
 /// it has never heard of is still a map it can skip.
@@ -137,13 +152,31 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
             data.insert(setting.key().to_string(), serde_json::to_value(color)?);
             emit(out, &data)
         }
+        // The project plus which of the two things `ensure_project` did, so a
+        // script can tell a new registration from a no-op without diffing.
+        Outcome::Added {
+            project,
+            already_tracked,
+        } => emit(
+            out,
+            &AddedJson {
+                project: ProjectJson::from(project.as_ref()),
+                already_tracked: *already_tracked,
+            },
+        ),
+        // The project as it was when it stopped being tracked — its id is gone
+        // from the database by now, so this is the only record of it.
+        Outcome::Untracked { project } => emit(out, &ProjectJson::from(project.as_ref())),
+        // The project with `last_opened_at` already stamped.
+        Outcome::Opened { project } => emit(out, &ProjectJson::from(project.as_ref())),
+        // A refusal is still a successful run, so it is `data`, not an error.
+        Outcome::Cancelled => emit(out, &CancelledJson { cancelled: true }),
         // Both scan documents are the core report as-is: `ImportReport` here,
         // `ScanReport` below.
         Outcome::Imported { report } => emit(out, report),
         // `ScanReport` is the document: candidates, how many directories were
         // visited, and whether the walk hit its limit.
         Outcome::Scanned { report, .. } => emit(out, report),
-        Outcome::Done => emit(out, &serde_json::Value::Null),
     }
 }
 

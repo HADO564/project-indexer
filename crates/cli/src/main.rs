@@ -3,10 +3,6 @@
 //! No arguments opens the TUI. A known subcommand parses into a [`Command`]
 //! and runs once. Anything else is a command to run and observe.
 
-// Scaffolding: most items are stubs nothing calls yet. Remove this once the
-// first commands are implemented, so real dead code shows up again.
-#![allow(dead_code)]
-
 mod commands;
 mod confirm;
 mod context;
