@@ -3,9 +3,9 @@
 use std::io::{IsTerminal, Write};
 use std::path::Path;
 
-use indexer_core::domain::Project;
-
+use indexer_core::domain::matching::SHORT_ID_LEN;
 use indexer_core::domain::scan::Candidate;
+use indexer_core::domain::Project;
 use indexer_core::Tracker;
 
 use crate::commands::{Outcome, TrackerKind};
@@ -165,14 +165,14 @@ pub struct TableStyle {
 /// With a known terminal width, a narrower table grows to this share of it.
 const MIN_WIDTH_PERCENT: usize = 70;
 
-/// The column headers for `trackers`: NAME and DIRECTORY, then each kind's
-/// own columns in the order asked for, then LAST OPENED.
+/// The column headers for `trackers`: NAME, DIRECTORY and ID, then each
+/// kind's own columns in the order asked for, then LAST OPENED.
 ///
 /// Without `--tracker` the middle is TRACKERS, every kind the project has.
 /// With one or more, the kinds are already known, so the space goes to those
 /// trackers' own detail instead.
 fn headers(trackers: &[TrackerKind]) -> Vec<&'static str> {
-    let mut headers = vec!["NAME", "DIRECTORY"];
+    let mut headers = vec!["NAME", "DIRECTORY", "ID"];
     if trackers.is_empty() {
         headers.push("TRACKERS");
     }
@@ -309,7 +309,7 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
 const DIRECTORY_COLUMN: usize = 1;
 
 /// A bordered table of projects — `list`'s view, and `show`'s when a query
-/// matches several. The columns come from [`headers`]: NAME, DIRECTORY,
+/// matches several. The columns come from [`headers`]: NAME, DIRECTORY, ID,
 /// TRACKERS and LAST OPENED by default, or those trackers' own columns when
 /// `style.tracker` names any.
 ///
@@ -456,7 +456,11 @@ struct Row {
     /// root of the filesystem.
     parent: String,
     folder: String,
-    /// The columns between DIRECTORY and LAST OPENED — one cell per header
+    /// The project's id, cut to [`SHORT_ID_LEN`] — the shortest prefix
+    /// `show` accepts, so a row can be copied from by id as well as by
+    /// `parent/folder`.
+    id: String,
+    /// The columns between ID and LAST OPENED — one cell per header
     /// [`headers`] chose for this tracker.
     middle: Vec<String>,
     /// `YYYY-MM-DD`, or `never`.
@@ -476,6 +480,10 @@ impl Row {
             .map(|f| f.to_string_lossy().into_owned())
             .unwrap_or_else(|| project.directory.clone());
 
+        // `chars`, not a byte slice: an id is hex today, but slicing a string
+        // by bytes panics the moment one is not ASCII.
+        let id = project.id.chars().take(SHORT_ID_LEN).collect();
+
         let last_opened = match project.last_opened_at {
             Some(date) => date.format("%Y-%m-%d").to_string(),
             None => "never".to_string(),
@@ -485,6 +493,7 @@ impl Row {
             name: project.name.clone(),
             parent,
             folder,
+            id,
             middle: middle_cells(project, tracker),
             last_opened,
         }
@@ -492,7 +501,11 @@ impl Row {
 
     /// The cells in column order, one per header.
     fn cells(&self) -> Vec<String> {
-        let mut cells = vec![self.name.clone(), format!("{}{}", self.parent, self.folder)];
+        let mut cells = vec![
+            self.name.clone(),
+            format!("{}{}", self.parent, self.folder),
+            self.id.clone(),
+        ];
         cells.extend(self.middle.iter().cloned());
         cells.push(self.last_opened.clone());
         cells
