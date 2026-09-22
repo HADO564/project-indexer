@@ -38,10 +38,17 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
             };
             write!(out, "{}", project_table(&projects, &style))?;
         }
-        Outcome::Project { project, tracker } => {
+        Outcome::Project {
+            project,
+            tracker,
+            group,
+        } => {
             writeln!(out, "{}", project.name)?;
             writeln!(out, "  directory  {}", project.directory)?;
             writeln!(out, "  id         {}", project.id)?;
+            if let Some(group) = group {
+                writeln!(out, "  group      {}", group.name)?;
+            }
             for kind in tracker {
                 let details = kind_details(project, *kind);
                 if details.is_empty() {

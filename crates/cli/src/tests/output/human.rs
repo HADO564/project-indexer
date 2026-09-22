@@ -3,7 +3,7 @@ use indexer_core::domain::scan::Candidate;
 use indexer_core::domain::Project;
 use serde_json::json;
 
-use crate::commands::{Outcome, TrackerKind};
+use crate::commands::{GroupLabel, Outcome, TrackerKind};
 use crate::output::color::Color;
 use crate::output::human::{candidate_table, project_table, write, TableStyle};
 use crate::output::Colors;
@@ -225,9 +225,19 @@ fn a_project_without_the_kind_shows_a_dash_in_each_of_its_columns() {
 
 /// `show`'s detail view for one project, as `write` renders it.
 fn detail(project: Project, trackers: Vec<TrackerKind>) -> String {
+    detail_in_group(project, trackers, None)
+}
+
+/// The same, for a project that belongs to `group`.
+fn detail_in_group(
+    project: Project,
+    trackers: Vec<TrackerKind>,
+    group: Option<GroupLabel>,
+) -> String {
     let outcome = Outcome::Project {
         project: Box::new(project),
         tracker: trackers,
+        group,
     };
     let mut out = Vec::new();
     write(
@@ -343,4 +353,35 @@ fn the_id_column_is_the_prefix_show_accepts() {
         full_id.starts_with(id),
         "the column must be a prefix of the real id: {id} vs {full_id}"
     );
+}
+
+#[test]
+fn a_grouped_project_shows_its_group_name() {
+    let rendered = detail_in_group(
+        project("app", "/home/me/work/app", json!([]), None),
+        Vec::new(),
+        Some(GroupLabel {
+            name: "Client work".to_string(),
+            color: "violet".to_string(),
+            icon: "briefcase".to_string(),
+        }),
+    );
+
+    assert!(rendered.contains("group      Client work"), "{rendered}");
+    // The name only, for now: colour and icon are carried but not rendered
+    // until `Color::from_swatch` and the icon setting exist.
+    assert!(!rendered.contains("violet"), "{rendered}");
+    assert!(!rendered.contains("briefcase"), "{rendered}");
+}
+
+#[test]
+fn an_ungrouped_project_shows_no_group_line() {
+    // Skipped entirely rather than printed as `-`, the way a tracker section
+    // the project lacks is skipped.
+    let rendered = detail(
+        project("app", "/home/me/work/app", json!([]), None),
+        Vec::new(),
+    );
+
+    assert!(!rendered.contains("group"), "{rendered}");
 }

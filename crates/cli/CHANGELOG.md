@@ -15,6 +15,8 @@ Nothing released yet.
 ### Added
 
 - The project table gains an ID column — the first 8 characters of each project's id, the shortest prefix `show` accepts — so a row can be copied from by id as well as by `parent/folder`.
+- `indexer list --sort <field>` orders the table by `name` (A to Z) or `last-opened` (most recent first), with `-r/--reverse` to flip it. Each field has its own natural direction, so `--reverse` means "the opposite of this field", not "descending" — `--sort last-opened` answers most-recent-first, and only `--sort last-opened --reverse` reaches for the stalest.
+- `indexer show` reports the group a project belongs to. Ungrouped projects show no group line at all, the way a tracker section a project lacks is skipped rather than printed empty.
 - `indexer add [dir]` starts tracking a directory, defaulting to the current one — `indexer add` inside a project folder is the common case. The path is resolved to an absolute one before it is stored, so `add .` and `add ../app` record where they actually point; a path that does not exist, or that is a file, is refused. A directory that is already tracked is reported as such rather than duplicated or treated as an error.
 - `indexer open <query>` opens a project in its application — the one in `open_with`, or the system default — and records that it was opened. A directory that has been deleted or moved, or an `open_with` app that is no longer installed, is reported before anything is launched.
 - `indexer untrack <query>` forgets a project's metadata and leaves its directory on disk alone. It asks for confirmation first; `--yes` answers in advance, and with stdin piped it refuses rather than reading a script's input as consent. Answering no prints `cancelled` and exits 0.

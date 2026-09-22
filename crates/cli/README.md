@@ -12,7 +12,7 @@ and the TUI still return "not implemented". Groups and the bin have no commands
 yet. The binary name `indexer` is a placeholder.
 
 ```
-indexer list                     every project, as a table
+indexer list                     every project, as a table (-s name|last-opened, -r to flip)
 indexer show <query>             one project — exact name, id, parent/folder, or part of a name
 indexer add [dir]                track a directory, or the current one
 indexer open <query>             open a project in its application
