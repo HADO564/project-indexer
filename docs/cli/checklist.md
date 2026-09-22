@@ -82,7 +82,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 - [ ] `text_width` counts display columns, not `chars()` (`unicode-width`) — an emoji or a CJK project name is one char and two columns, so it under-pads its column and shifts every column to its right. Latent today, and the blocker for icons in any table (`ROADMAP.md` → *Group colour and icons in a terminal*)
 - [ ] Group colour in the CLI: `Color::from_swatch` for the seven shared names, a `Rust` variant for the eighth, and `#rrggbb` into the existing `Code::Rgb`
 - [ ] `indexer config icons nerd|emoji|off` and an icon renderer with a fallback chain, for the TUI sidebar — `custom:*` icons are uploaded images and always fall back
-- [ ] `views.ts` view, count and search logic moved into core, with the GUI switched over in the same change
+- [ ] `views.ts` view, count and search logic moved into core, with the GUI switched over in the same change — briefed in [`../handoffs/2026-09-23-views-to-core.md`](../handoffs/2026-09-23-views-to-core.md). The hard part is not the port: the GUI's three `$derived` are synchronous and Tauri `invoke` is not, so the search box's reactivity has to change shape
 - [ ] `scanSettings.ts` validation moved into core, likewise
 
 ## 4. The observer
