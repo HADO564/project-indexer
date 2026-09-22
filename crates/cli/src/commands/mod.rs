@@ -48,11 +48,14 @@ pub enum Command {
 #[derive(Debug)]
 pub enum Outcome {
     /// Projects to list. `query` is what they were filtered by, if anything,
-    /// so an empty list can say "nothing matched" rather than "nothing tracked".
+    /// and `view` is the set they were drawn from — between them an empty
+    /// list can say which emptiness it is, rather than always claiming
+    /// nothing is tracked.
     Projects {
         projects: Vec<Project>,
         query: Option<String>,
         tracker: Vec<TrackerKind>,
+        view: View,
     },
     /// One project's details. `tracker` is the kinds `--tracker` asked to
     /// expand, so the view can show a section per kind.
@@ -108,6 +111,47 @@ impl ColorSetting {
             ColorSetting::Folder => Color::DEFAULT_FOLDER,
             ColorSetting::Header => Color::DEFAULT_HEADER,
         }
+    }
+}
+
+/// Which set of projects `list` draws from.
+///
+/// One flag taking a value rather than a `--favorite` and a `--binned` flag:
+/// the sets are alternatives, so a value makes choosing two of them
+/// unsayable instead of an error to check for. It also leaves room for the
+/// groups the GUI already has — `src/lib/views.ts` models exactly this as one
+/// `View` type, with groups as a further variant carrying an id.
+///
+/// `Ungrouped` is deliberately absent: it is the only view with no core
+/// method behind it, and inventing its rule here is what the `views.ts`
+/// migration exists to prevent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum View {
+    /// Every tracked project.
+    All,
+    /// Only favourites. Binned projects are excluded even when favourited.
+    Favorites,
+    /// Only binned projects. They appear in no other view, so a project
+    /// favourited and then binned is here rather than under `favorites` —
+    /// restoring it puts it back.
+    Binned,
+}
+
+impl View {
+    /// The spelling clap parses, which is also what `--help` prints as the
+    /// default — the two must agree, as they must for [`list::SortByKind`].
+    pub fn name(self) -> &'static str {
+        match self {
+            View::All => "all",
+            View::Favorites => "favorites",
+            View::Binned => "binned",
+        }
+    }
+}
+
+impl std::fmt::Display for View {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
     }
 }
 

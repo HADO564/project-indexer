@@ -4,7 +4,7 @@ use clap::Parser;
 use indexer_core::domain::sorting::{SortBy, SortDirection};
 
 use crate::commands::list::{ListArgs, SortByKind};
-use crate::commands::{Command, TrackerKind};
+use crate::commands::{Command, TrackerKind, View};
 use crate::{Cli, Invocation};
 
 /// The parsed `ListArgs`, or a panic naming what came back instead.
@@ -88,5 +88,56 @@ fn tracker_still_parses_alongside_the_sort_flags() {
     let args = parsed(&["indexer", "list", "-t", "git,unreal", "-s", "last-opened"]);
 
     assert_eq!(args.tracker, vec![TrackerKind::Git, TrackerKind::Unreal]);
+    assert_eq!(args.sort, SortByKind::LastOpened);
+}
+
+#[test]
+fn the_view_defaults_to_all_and_names_the_other_sets() {
+    assert_eq!(parsed(&["indexer", "list"]).view, View::All);
+    assert_eq!(
+        parsed(&["indexer", "list", "--view", "favorites"]).view,
+        View::Favorites
+    );
+    assert_eq!(
+        parsed(&["indexer", "list", "--view", "binned"]).view,
+        View::Binned
+    );
+}
+
+#[test]
+fn an_unknown_view_is_rejected() {
+    assert!(Cli::try_parse_from(["indexer", "list", "--view", "archived"]).is_err());
+}
+
+#[test]
+fn the_view_spelling_display_prints_is_the_one_clap_parses() {
+    // As for `SortByKind`: `--help` renders the default through `Display`, so
+    // a disagreement would advertise a value the command refuses.
+    for view in [View::All, View::Favorites, View::Binned] {
+        let spelled = view.to_string();
+        let args = parsed(&["indexer", "list", "--view", &spelled]);
+        assert_eq!(args.view, view, "`{spelled}` should parse back to {view:?}");
+    }
+}
+
+#[test]
+fn a_view_composes_with_the_other_flags() {
+    // The view picks the source; tracker and query narrow whatever came back,
+    // so they are not alternatives to each other.
+    let args = parsed(&[
+        "indexer",
+        "list",
+        "app",
+        "--view",
+        "binned",
+        "-t",
+        "git",
+        "-s",
+        "last-opened",
+    ]);
+
+    assert_eq!(args.view, View::Binned);
+    assert_eq!(args.query.as_deref(), Some("app"));
+    assert_eq!(args.tracker, vec![TrackerKind::Git]);
     assert_eq!(args.sort, SortByKind::LastOpened);
 }

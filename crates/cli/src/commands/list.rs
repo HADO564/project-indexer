@@ -4,7 +4,7 @@ use crate::context::Context;
 use indexer_core::domain::matching::filter;
 use indexer_core::domain::sorting::{SortBy, SortDirection, SortOptions};
 
-use super::{unique_kinds, with_tracker, Outcome, TrackerKind};
+use super::{unique_kinds, with_tracker, Outcome, TrackerKind, View};
 
 /// The field `--sort` orders by, as `name` and `last-opened` on the command
 /// line.
@@ -104,13 +104,31 @@ pub struct ListArgs {
     /// matched. Repeat the flag or separate the kinds with commas.
     #[arg(long, short = 't', value_enum, value_delimiter = ',')]
     pub tracker: Vec<TrackerKind>,
+
+    /// Which projects to draw from. Binned projects appear only under `binned`.
+    #[arg(long, value_enum, default_value_t = View::All)]
+    pub view: View,
 }
 
 pub fn run(args: ListArgs, ctx: &Context) -> anyhow::Result<Outcome> {
-    let projects = ctx.projects.list(SortOptions {
+    let options = SortOptions {
         by: args.sort.into(),
         direction: args.sort.direction(args.reverse),
-    })?;
+    };
+
+    // The view picks the *source*, not a filter over one. `list_favorites`
+    // excludes binned projects itself and `list_deleted` ignores `favorite`
+    // entirely, so the three sets are core's to define, not the CLI's — the
+    // same split `src/lib/views.ts` makes, where only the bin swaps the list
+    // being filtered.
+    let projects = match args.view {
+        View::All => ctx.projects.list(options)?,
+        View::Favorites => ctx.projects.list_favorites(options)?,
+        View::Binned => ctx.projects.list_deleted(options)?,
+    };
+
+    // Narrowing happens after the sort, and both steps preserve order, so the
+    // rows keep the sequence core put them in.
     let tracker = unique_kinds(&args.tracker);
     let projects = with_tracker(projects, &tracker);
     let projects = match &args.query {
@@ -121,5 +139,6 @@ pub fn run(args: ListArgs, ctx: &Context) -> anyhow::Result<Outcome> {
         projects,
         query: args.query,
         tracker,
+        view: args.view,
     })
 }
