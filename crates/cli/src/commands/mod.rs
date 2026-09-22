@@ -8,7 +8,7 @@
 pub mod add;
 mod config;
 mod failure;
-mod list;
+pub mod list;
 mod open;
 pub mod scan;
 mod show;
@@ -59,6 +59,7 @@ pub enum Outcome {
     Project {
         project: Box<Project>,
         tracker: Vec<TrackerKind>,
+        group: Option<GroupLabel>,
     },
     /// A directory now tracked. `already_tracked` distinguishes the two things
     /// `ensure_project` does, so the message can say which happened.
@@ -131,6 +132,42 @@ impl TrackerKind {
             TrackerKind::Unreal => "unreal",
         }
     }
+}
+
+/// The group a project belongs to, as a view needs it.
+///
+/// Resolved by the command, because `Project` stores only a `group_id` and a
+/// renderer has no database to look it up in. `None` on [`Outcome::Project`]
+/// means Ungrouped — or a `group_id` whose group has since gone, which is not
+/// worth refusing to show a project over.
+///
+/// Every field is kept exactly as core stored it. Deciding what `"violet"`
+/// looks like on this terminal, or whether there is a glyph for `"gamepad"`,
+/// is the renderer's job — which is what lets the TUI answer differently from
+/// the shell.
+#[derive(Debug)]
+pub struct GroupLabel {
+    pub name: String,
+    /// One of `domain::palette::SWATCHES` (`"violet"`), or `#rrggbb` from the
+    /// colour picker.
+    ///
+    /// A `String` rather than an [`output::Color`](crate::output::color::Color):
+    /// that enum derives `ValueEnum` so it can be a `--folder-color` value, so
+    /// every variant is a bare name with no payload — it cannot represent an
+    /// arbitrary hex literal at all.
+    ///
+    /// Carried before anything renders it: painting the group name needs
+    /// `Color::from_swatch` and a hex parser, which are their own checklist
+    /// item. Reaching that item should not mean reopening the command layer.
+    #[allow(dead_code)]
+    pub color: String,
+    /// A bundled icon name (`"gamepad"`), or `custom:…` for an uploaded image
+    /// that no terminal can draw and every renderer has to fall back on.
+    ///
+    /// Carried for the same reason as `color`, and further off: icons need a
+    /// `config icons` setting and `text_width` counting display columns first.
+    #[allow(dead_code)]
+    pub icon: String,
 }
 
 /// Keeps the projects carrying any of `kinds`, or every project when no

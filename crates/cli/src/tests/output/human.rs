@@ -1,11 +1,23 @@
+use indexer_core::domain::matching::SHORT_ID_LEN;
 use indexer_core::domain::scan::Candidate;
 use indexer_core::domain::Project;
 use serde_json::json;
 
-use crate::commands::{Outcome, TrackerKind};
+use crate::commands::{GroupLabel, Outcome, TrackerKind};
 use crate::output::color::Color;
 use crate::output::human::{candidate_table, project_table, write, TableStyle};
 use crate::output::Colors;
+
+/// A uuid-shaped id derived from the name, so the ID column shows a realistic
+/// 8-character hex prefix rather than the name over again — which would let a
+/// truncation bug pass unnoticed.
+fn uuid_for(name: &str) -> String {
+    let hex: String = name.bytes().map(|b| format!("{b:02x}")).collect();
+    format!(
+        "{:0<8}-0000-4000-8000-000000000001",
+        &hex[..8.min(hex.len())]
+    )
+}
 
 /// A project from its stored JSON shape, so the test needs neither `chrono`
 /// nor every detector's info struct spelled out.
@@ -16,7 +28,7 @@ fn project(
     last_opened: Option<&str>,
 ) -> Project {
     serde_json::from_value(json!({
-        "id": name,
+        "id": uuid_for(name),
         "name": name,
         "directory": directory,
         "created_at": "2026-01-01T00:00:00Z",
@@ -80,16 +92,16 @@ fn strip_ansi(text: &str) -> String {
 #[test]
 fn a_plain_table_is_bordered_and_lines_up_every_column() {
     let rule = |left: char, middle: char, right: char| {
-        let runs = [13, 19, 13, 13].map(|n| "─".repeat(n));
+        let runs = [13, 19, 10, 13, 13].map(|n| "─".repeat(n));
         format!("{left}{}{right}\n", runs.join(&middle.to_string()))
     };
 
     let expected = [
         rule('╭', '┬', '╮'),
-        "│ NAME        │ DIRECTORY         │ TRACKERS    │ LAST OPENED │\n".to_string(),
+        "│ NAME        │ DIRECTORY         │ ID       │ TRACKERS    │ LAST OPENED │\n".to_string(),
         rule('├', '┼', '┤'),
-        "│ app         │ work/app          │ Git, Unreal │ 2026-09-14  │\n".to_string(),
-        "│ app-gateway │ infra/app-gateway │ -           │ never       │\n".to_string(),
+        "│ app         │ work/app          │ 61707000 │ Git, Unreal │ 2026-09-14  │\n".to_string(),
+        "│ app-gateway │ infra/app-gateway │ 6170702d │ -           │ never       │\n".to_string(),
         rule('╰', '┴', '╯'),
     ]
     .concat();
@@ -99,18 +111,21 @@ fn a_plain_table_is_bordered_and_lines_up_every_column() {
 
 #[test]
 fn in_a_wide_terminal_the_table_fills_seventy_percent_and_is_centred() {
+    // 140 rather than 100: with the ID column these two projects draw a
+    // 74-column table on their own, which already exceeds 70% of 100 — the
+    // test would still pass while proving nothing about stretching.
     let style = TableStyle {
-        width: Some(100),
+        width: Some(140),
         ..TableStyle::default()
     };
 
     let output = table(&two_projects(), style);
 
-    // 70 columns of table, centred in 100: 15 spaces before it.
+    // 98 columns of table (70% of 140), centred in 140: 21 spaces before it.
     for line in output.lines() {
-        assert_eq!(line.chars().count(), 85, "{line:?}");
+        assert_eq!(line.chars().count(), 119, "{line:?}");
         let indent = line.chars().take_while(|&c| c == ' ').count();
-        assert_eq!(indent, 15, "{line:?}");
+        assert_eq!(indent, 21, "{line:?}");
     }
 }
 
@@ -203,15 +218,26 @@ fn a_project_without_the_kind_shows_a_dash_in_each_of_its_columns() {
         .find(|line| line.contains("app-gateway"))
         .expect("a row for app-gateway");
 
+    // Cells 1..=3 are NAME, DIRECTORY and ID; the tracker columns start at 4.
     let cells: Vec<&str> = row.split('│').map(str::trim).collect();
-    assert_eq!(&cells[3..6], ["-", "-", "-"], "{row}");
+    assert_eq!(&cells[4..7], ["-", "-", "-"], "{row}");
 }
 
 /// `show`'s detail view for one project, as `write` renders it.
 fn detail(project: Project, trackers: Vec<TrackerKind>) -> String {
+    detail_in_group(project, trackers, None)
+}
+
+/// The same, for a project that belongs to `group`.
+fn detail_in_group(
+    project: Project,
+    trackers: Vec<TrackerKind>,
+    group: Option<GroupLabel>,
+) -> String {
     let outcome = Outcome::Project {
         project: Box::new(project),
         tracker: trackers,
+        group,
     };
     let mut out = Vec::new();
     write(
@@ -304,4 +330,58 @@ fn an_already_tracked_candidate_and_a_renamed_one_are_both_flagged() {
 
     assert!(alpha.contains("yes"), "{alpha}");
     assert!(beta.contains("code/beta (renamed)"), "{beta}");
+}
+
+#[test]
+fn the_id_column_is_the_prefix_show_accepts() {
+    // The point of the column: what it prints must be long enough for
+    // `show <id>` to take it. Both read `SHORT_ID_LEN`, and this fails if
+    // either side ever stops.
+    let project = project("app", "/home/me/work/app", json!([]), None);
+    let full_id = project.id.clone();
+    let rendered = table(&[project], TableStyle::default());
+
+    let row = rendered
+        .lines()
+        .find(|line| line.contains("work/app"))
+        .expect("a row for app");
+    let cells: Vec<&str> = row.split('│').map(str::trim).collect();
+    let id = cells[3];
+
+    assert_eq!(id.chars().count(), SHORT_ID_LEN);
+    assert!(
+        full_id.starts_with(id),
+        "the column must be a prefix of the real id: {id} vs {full_id}"
+    );
+}
+
+#[test]
+fn a_grouped_project_shows_its_group_name() {
+    let rendered = detail_in_group(
+        project("app", "/home/me/work/app", json!([]), None),
+        Vec::new(),
+        Some(GroupLabel {
+            name: "Client work".to_string(),
+            color: "violet".to_string(),
+            icon: "briefcase".to_string(),
+        }),
+    );
+
+    assert!(rendered.contains("group      Client work"), "{rendered}");
+    // The name only, for now: colour and icon are carried but not rendered
+    // until `Color::from_swatch` and the icon setting exist.
+    assert!(!rendered.contains("violet"), "{rendered}");
+    assert!(!rendered.contains("briefcase"), "{rendered}");
+}
+
+#[test]
+fn an_ungrouped_project_shows_no_group_line() {
+    // Skipped entirely rather than printed as `-`, the way a tracker section
+    // the project lacks is skipped.
+    let rendered = detail(
+        project("app", "/home/me/work/app", json!([]), None),
+        Vec::new(),
+    );
+
+    assert!(!rendered.contains("group"), "{rendered}");
 }

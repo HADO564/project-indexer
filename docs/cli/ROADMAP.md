@@ -138,6 +138,39 @@ composed *inside* another command and then exits, while the TUI is somewhere
 the user stays. Both can exist — but decided by default rather than
 deliberately, it leaves the project with two project lists to keep in step.
 
+#### Group colour and icons in a terminal
+
+A group carries a `name`, a `color` and an `icon`, and the first two cross over
+to a terminal better than they look.
+
+**Colour is nearly free.** `core::domain::palette` already bounds the value to
+one of eight swatch names or exactly `#rrggbb`, and seven of those eight names
+(`cyan`, `gold`, `amber`, `violet`, `green`, `blue`, `pink`) are already
+variants of the CLI's own `Color`; only `rust` is missing. `Color` also already
+emits truecolor (`Code::Rgb` → `38;2;r;g;b`), so a hex literal has a rendering
+path today. What is needed is a `Color::from_swatch` and a hex parser, not
+colour support.
+
+**Icons need a decision and a fix first.**
+
+- *The decision:* there is no way to ask a terminal whether its font carries
+  Nerd Font glyphs, so it cannot be detected — it is told.
+  `indexer config icons nerd|emoji|off`, in `cli-settings.json` beside the
+  colours, with a per-run `--icons`. `off` is a real choice, not a degraded one.
+- *The renderer:* a fallback chain — stored name → the style's glyph → the
+  style's default (`folder`) → nothing. The 25 bundled names all have obvious
+  equivalents; `custom:my-logo` is an uploaded image and always falls back,
+  which is why the chain has to exist at all.
+- *The fix:* **`text_width` counts `chars()`, not display columns.** An emoji is
+  one char and two columns, so an emoji in a table cell under-pads its column
+  and shifts every column to its right on that row. This is already a latent
+  bug for CJK project names, it is just rare. `unicode-width`'s
+  `UnicodeWidthStr::width` inside that one helper fixes both, and every caller
+  already goes through it.
+
+So the order is: colour first (no blockers), `unicode-width` next, then icons
+in the TUI sidebar and optionally in `list`.
+
 ### The TUI — every change is a command
 
 `indexer` with no arguments opens a terminal view of the same database. It is

@@ -68,6 +68,7 @@ fn a_tracker_carries_its_kind_under_one_key_beside_its_fields() {
     let doc = render(&Outcome::Project {
         project: Box::new(project("app", json!([git()]))),
         tracker: Vec::new(),
+        group: None,
     });
     let tracker = &doc["data"]["trackers"][0];
     assert_eq!(tracker["kind"], "git");
