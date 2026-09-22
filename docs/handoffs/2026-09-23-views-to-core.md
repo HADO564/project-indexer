@@ -11,6 +11,41 @@ its comments carry most of the reasoning.
 
 ---
 
+## 0. Cold start
+
+Read these first; this handoff assumes them rather than repeating them.
+
+| Where | For |
+|---|---|
+| [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md) | *The checks*, *Project layout*, *Rules the codebase enforces*, *Commits and pull requests* |
+| [`../architecture.md`](../architecture.md) | *Invariants worth protecting* — **invariant 9, core never depends on Tauri, is the one this work must not break**: the logic moves into `indexer-core`, the Tauri commands that expose it stay in `src-tauri` |
+| [`../../src/lib/views.ts`](../../src/lib/views.ts) | the module being moved, in full — 168 lines, and its comments carry most of the reasoning |
+| [`../../src/tests/lib/views.test.ts`](../../src/tests/lib/views.test.ts) | 273 lines pinning the behaviour; port all of it, not a subset |
+
+Conventions a fresh reader will otherwise trip on:
+
+- **No regex.** `domain::matching` sets the house style — *"Matched by
+  splitting the query and the path on `/` and comparing from the end, no
+  regex."* Splitting once on `:` does this job and takes no new dependency.
+- **`src/lib/api/types.ts` is a hand-maintained mirror** of the Rust types and
+  is already flagged as a drift hazard. Anything new crossing the boundary
+  belongs in it.
+- **Comments and doc comments are written as part of the change**, not left as
+  a follow-up. So are tests and the checklist update.
+- Commits are conventional and carry **no Claude attribution**.
+
+Build and check — both sides, since this change spans them:
+
+```bash
+cargo clippy --workspace --all-targets
+cargo fmt --all -- --check
+cargo test --workspace
+npm run check        # frontend typecheck
+npm test             # frontend tests
+```
+
+---
+
 ## 1. The goal in one paragraph
 
 The GUI decides what "Favourites", "Ungrouped" and `client: acme` mean, in

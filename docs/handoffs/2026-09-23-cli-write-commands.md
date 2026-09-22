@@ -1,12 +1,54 @@
 # Handoff — the CLI's write commands
 
 **Date:** 2026-09-23
-**Status:** ready to start. §4 is the one decision to take before any code.
+**Status:** ready to start. The command shape is decided (§4); nothing is
+blocked.
 **Runs in parallel with:**
 [`2026-09-23-views-to-core.md`](2026-09-23-views-to-core.md) — see §8 there and
 §7 here for the conflict surface.
 **Read first:** [`../cli/checklist.md`](../cli/checklist.md) → milestone 3, and
 [`../cli/ROADMAP.md`](../cli/ROADMAP.md) → *The `--json` contract*.
+
+---
+
+## 0. Cold start
+
+Read these first; this handoff assumes them rather than repeating them.
+
+| Where | For |
+|---|---|
+| [`../../CONTRIBUTING.md`](../../CONTRIBUTING.md) | *The checks*, *Project layout*, *Rules the codebase enforces*, *Commits and pull requests* |
+| [`../architecture.md`](../architecture.md) | *Invariants worth protecting* — invariant 9 (core never depends on Tauri) is the one this work must not break |
+| [`../cli/ROADMAP.md`](../cli/ROADMAP.md) | *The `--json` contract*, settled and additive-only |
+| [`../cli/agents.md`](../cli/agents.md) | every command's existing `--json` shape — new commands join this document |
+
+Conventions a fresh reader will otherwise trip on:
+
+- **`run` prints nothing.** A command returns an `Outcome`; `output/human.rs`
+  and `output/json.rs` render it. This is what lets the shell, `--json` and the
+  planned TUI share one implementation, and it is why anything a renderer needs
+  must be resolved *in* `run` — a renderer has no `Context` and no database.
+- **stdout is data, stderr is everything else.** Under `--json`, stdout carries
+  the document and nothing else; prose and failures go to stderr.
+- **Doc comments on clap types are the `--help` text.** A missing one is a
+  blank space in the user's help output, not a style nit.
+- **No `_` arm in a `match` over `Tracker`.** Naming every variant is what makes
+  a new detector fail the build until someone decides what it shows.
+- **Comments and doc comments are written as part of the change**, not left as
+  a follow-up. So are tests, changelog and checklist updates.
+- Commits are conventional and carry **no Claude attribution**.
+
+Build and check:
+
+```bash
+cargo build -p indexer-cli
+cargo clippy --workspace --all-targets
+cargo fmt --all -- --check
+cargo test --workspace
+```
+
+Manual checks run against a throwaway database — set `HOME` to a scratch
+directory and the CLI resolves a fresh `projects.db` under it.
 
 ---
 
@@ -22,11 +64,16 @@ last large piece of milestone 3.
 
 ## 2. Working arrangement
 
-**The user writes the feature code.** Claude explains what is needed and why,
-reviews each step, and owns comments, doc comments, tests, docs, branches,
-commits and PRs. Claude writes feature code only when the user says so
-explicitly. Corrections and small follow-ups found in review are Claude's to
-apply without handing them back.
+How this has been run, unless the user says otherwise at the start of a
+session: **the user writes the feature code.** The assistant explains what is
+needed and why, reviews each step before the next begins, and owns comments,
+doc comments, tests, docs, branches, commits and PRs. It writes feature code
+only when the user says so explicitly, in those words. Corrections and small
+follow-ups found in review are the assistant's to apply rather than hand back.
+
+If the user instead wants this executed autonomously, they will say so — in
+which case §6's order still holds, but surface each step's diff for review
+rather than running to the end.
 
 ---
 
@@ -54,31 +101,37 @@ group_id, color, icon
 
 ---
 
-## 4. The decision to take first: command shape
+## 4. Command shape — decided 2026-09-23: the hybrid
 
-This sets the pattern for everything after it. Three candidates:
+**Discrete verbs for state changes; one `edit` for the fields that take values.**
 
-**A. One `edit` verb with flags**
 ```
-indexer edit app --description "The gateway" --add-tag rust --remove-tag web
-indexer edit app --set client=acme --unset priority --favorite
-```
+indexer favorite app          indexer unfavorite app
+indexer restore app           indexer purge app
 
-**B. Discrete verbs**
-```
-indexer favorite app
-indexer tag add app rust
-indexer describe app "The gateway"
+indexer edit app --description "The gateway" \
+                 --add-tag rust --remove-tag web \
+                 --set client=acme --unset priority
 ```
 
-**C. Hybrid — recommended.** Discrete verbs for the common toggles
-(`favorite`, `unfavorite`, `restore`, `purge`), one `edit` for the form-like
-fields (description, tags, properties, notes).
+**The rule for anything added later:** *if it takes a value, it is an `edit`
+flag; if it is a state change with no argument, it is a verb.* Write that down
+rather than judging case by case, or the split drifts.
 
-The reasoning for C: the TUI plan has letter shortcuts mapping onto commands
-(`o` → `:open`, `d` → `:untrack`), so `f` → `:favorite` needs to be a command
-in its own right. But nobody wants `indexer property set app client acme` when
-`--set client=acme` can sit beside `--description` in one invocation.
+Why this rather than one `edit` with every flag, or a verb per operation:
+
+- The TUI plan binds letter shortcuts to commands (`o` → `:open`,
+  `d` → `:untrack`) and builds its action menu **from the `Command`
+  definitions**. Favouriting needs to be a command for `f` to bind to it and
+  for it to appear in that menu at all.
+- `purge` must never read as an edit. As its own verb it cannot be mistaken
+  for one; as `edit --purge` it would sit in `--help` beside `--description`
+  as though they were comparable.
+- The field flags batch. `edit app --description "…" --add-tag rust` is one
+  read-modify-write, where a verb per operation would be three — three
+  separate lost-update windows (5.1).
+- A verb per operation would also mean `indexer property set app client acme`,
+  which is a lot of typing for something naturally written inline.
 
 ---
 
@@ -168,7 +221,6 @@ touched.
 
 ## 7. Definition of done
 
-- [ ] The §4 decision recorded in the checklist, with its reasoning
 - [ ] Commands built in the order of §6, each reviewed before the next
 - [ ] Every one has: `--json` output, a human message on stderr, an entry in
       [`../cli/agents.md`](../cli/agents.md), and tests
