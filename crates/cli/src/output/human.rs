@@ -8,7 +8,7 @@ use indexer_core::domain::scan::Candidate;
 use indexer_core::domain::Project;
 use indexer_core::Tracker;
 
-use crate::commands::{Outcome, TrackerKind};
+use crate::commands::{Outcome, TrackerKind, View};
 use crate::output::color::Color;
 use crate::output::Colors;
 
@@ -20,12 +20,21 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
             projects,
             query,
             tracker,
+            view,
         } => {
             if projects.is_empty() {
                 // stderr, so a script reading stdout sees no rows either way.
+                //
+                // A query explains the emptiness on its own; without one, the
+                // view has to, or `--view binned` on an empty bin would claim
+                // nothing is tracked at all.
                 match query {
                     Some(query) => eprintln!("indexer: no projects match \"{query}\""),
-                    None => eprintln!("indexer: no projects tracked yet"),
+                    None => match view {
+                        View::All => eprintln!("indexer: no projects tracked yet"),
+                        View::Favorites => eprintln!("indexer: no favourites yet"),
+                        View::Binned => eprintln!("indexer: the bin is empty"),
+                    },
                 }
                 return Ok(());
             }

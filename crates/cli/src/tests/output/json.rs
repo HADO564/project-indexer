@@ -1,7 +1,7 @@
 use indexer_core::domain::Project;
 use serde_json::{json, Value};
 
-use crate::commands::{Failure, Outcome};
+use crate::commands::{Failure, Outcome, View};
 use crate::output::json::{write, write_error};
 
 /// A project from its stored JSON shape, as in `human.rs`.
@@ -46,6 +46,7 @@ fn results_are_wrapped_in_the_versioned_envelope() {
         projects: vec![project("app", json!([]))],
         query: None,
         tracker: Vec::new(),
+        view: View::All,
     });
     assert_eq!(doc["schema"], 1);
     assert_eq!(doc["data"][0]["name"], "app");
@@ -58,6 +59,7 @@ fn a_query_matching_nothing_is_an_empty_array_not_an_error() {
         projects: Vec::new(),
         query: Some("nothing".into()),
         tracker: Vec::new(),
+        view: View::All,
     });
     assert_eq!(doc["data"], json!([]));
     assert!(doc.get("error").is_none());
