@@ -1,7 +1,7 @@
 // Mirrors the Rust models in crates/core/src/domain/ (project.rs,
 // update_project.rs, group.rs, update_group.rs, tracker.rs, git.rs,
-// unreal.rs, sorting.rs, installed_app.rs) and crates/core/src/infra/
-// icon_store.rs. Hand-maintained — nothing checks it, so update it in the
+// unreal.rs, sorting.rs, installed_app.rs, views.rs),
+// crates/core/src/infra/icon_store.rs and src-tauri/src/commands/views.rs. Hand-maintained — nothing checks it, so update it in the
 // same commit as anything it mirrors.
 // Dates stay as ISO strings (chrono::DateTime<Utc> serializes to RFC3339).
 
@@ -219,4 +219,34 @@ export interface ImportReport {
   imported: Project[];
   skipped: number;
   failures: ImportFailure[];
+}
+
+// Sidebar views — crates/core/src/domain/views.rs. Groups are navigation, not
+// sections: selecting one changes what the list shows, and the selection
+// stays visible. There is deliberately no collapsible-band state anywhere —
+// a collapsed band hides projects with nothing on screen saying they exist.
+export type View =
+  | { kind: "all" }
+  | { kind: "favorites" }
+  | { kind: "group"; id: string }
+  | { kind: "ungrouped" }
+  | { kind: "bin" };
+
+// What each view holds, ignoring the search. `groups` has an entry for every
+// group, including an empty one, so no view vanishes without saying so.
+export interface ViewCounts {
+  all: number;
+  favorites: number;
+  ungrouped: number;
+  bin: number;
+  groups: Record<string, number>;
+}
+
+// The answer to one search — src-tauri/src/commands/views.rs. Ids, not
+// projects: the caller filters the list it already holds, which keeps its
+// sort order.
+export interface ViewMatches {
+  ids: string[];
+  // True when the query used the `name: value` syntax.
+  property_query: boolean;
 }

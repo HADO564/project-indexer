@@ -126,7 +126,10 @@ pub fn run() {
             commands::groups::reorder_groups,
             commands::icons::list_custom_icons,
             commands::icons::import_custom_icon,
-            commands::icons::delete_custom_icon
+            commands::icons::delete_custom_icon,
+            commands::views::resolve_view,
+            commands::views::view_counts,
+            commands::views::property_keys
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -204,11 +204,12 @@ dialogs. Keys and menus are shortcuts; every change goes through a command.
   whenever another connection commits, so a cheap poll does the job a file
   watcher would.
 
-**What has to move into `indexer-core` first.** The GUI's views, counts and
-search — the `name: value` property syntax included — live in TypeScript
-(`src/lib/views.ts`). A TUI that disagreed with the GUI about what "Ungrouped"
-or `client: acme` means would be a bug with no single place to fix it, so that
-logic moves to Rust in core, and the GUI switches over in the same change.
+**What had to move into `indexer-core` first — done.** The GUI's views, counts
+and search — the `name: value` property syntax included — used to live in
+TypeScript (`src/lib/views.ts`). A TUI that disagreed with the GUI about what
+"Ungrouped" or `client: acme` means would be a bug with no single place to fix
+it, so that logic moved to `core::domain::views`, and the GUI switched over in
+the same change.
 
 Still open: the exact keymap, whether there is a help overlay or a
 which-key-style hint line, and how much sort and filter state is remembered

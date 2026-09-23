@@ -4,3 +4,4 @@ pub mod inspect;
 pub mod projects;
 pub mod scan;
 pub mod system;
+pub mod views;
