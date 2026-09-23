@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Group } from "$lib/api/types";
-  import { viewKey, type View, type ViewCounts } from "$lib/views";
+  import type { Group, View, ViewCounts } from "$lib/api/types";
+  import { viewKey } from "$lib/views";
   import SidebarEntry from "./SidebarEntry.svelte";
 
   // The rail. Groups are navigation, not sections: the current selection is

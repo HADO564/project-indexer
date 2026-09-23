@@ -14,3 +14,4 @@ mod project;
 mod scan;
 mod sorting;
 mod tracker;
+mod views;

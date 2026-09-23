@@ -1,5 +1,5 @@
-import type { Group } from "./api/types";
-import { parseViewKey, viewKey, type View } from "./views";
+import type { Group, View } from "./api/types";
+import { parseViewKey, viewKey } from "./views";
 
 // The selected view and the view mode persist; sort does not, which is how it
 // already behaves. They live in localStorage rather than projects.db because

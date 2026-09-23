@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { isPropertyQuery } from "$lib/views";
   import type { ViewMode } from "$lib/viewState";
   import BundledIcon from "./BundledIcon.svelte";
   import { iconMd, inputClass } from "./styles";
@@ -10,10 +9,14 @@
     // Property names in use across the fetched projects. The `name: value`
     // syntax is only discoverable if the app says which names exist.
     knownPropertyKeys = [],
+    // Whether core read the current query as `name: value`. Passed in rather
+    // than decided here so the hint and the search cannot disagree about it.
+    propertyQuery = false,
   }: {
     mode?: ViewMode;
     query?: string;
     knownPropertyKeys?: string[];
+    propertyQuery?: boolean;
   } = $props();
 
   const modes: { value: ViewMode; icon: string; label: string }[] = [
@@ -49,7 +52,7 @@
 
   // Show the tip while the box has focus, and keep it up once the query looks
   // like a property query, so the syntax is confirmed as it is typed.
-  const showTip = $derived(focused || isPropertyQuery(query));
+  const showTip = $derived(focused || propertyQuery);
 </script>
 
 <svelte:window onkeydown={handleKeydown} />

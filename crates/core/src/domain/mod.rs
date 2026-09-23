@@ -10,6 +10,7 @@ pub mod sorting;
 pub mod tracker;
 pub mod update_group;
 pub mod update_project;
+pub mod views;
 
 pub use group::Group;
 pub use installed_app::InstalledApp;
@@ -18,3 +19,4 @@ pub use scan::{Candidate, ScanMode, ScanReport, ScanRequest};
 pub use tracker::Tracker;
 pub use update_group::UpdateGroup;
 pub use update_project::UpdateProject;
+pub use views::{View, ViewCounts};

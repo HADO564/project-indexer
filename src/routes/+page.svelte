@@ -7,7 +7,8 @@
     listMissingDirectories,
     updateProject,
   } from "$lib/api/projects";
-  import type { Group, Project, SortBy, SortDirection } from "$lib/api/types";
+  import type { Group, Project, SortBy, SortDirection, View, ViewCounts } from "$lib/api/types";
+  import { propertyKeys, resolveView, viewCounts } from "$lib/api/views";
   import { customIconSrc } from "$lib/icons";
   import { buttonClass, primaryButtonClass } from "$lib/components/styles";
   import CreateProjectModal from "$lib/components/CreateProjectModal.svelte";
@@ -21,7 +22,8 @@
   import Sidebar from "$lib/components/Sidebar.svelte";
   import SortControls from "$lib/components/SortControls.svelte";
   import ViewControls from "$lib/components/ViewControls.svelte";
-  import { propertyKeys, resolveView, viewCounts, type View } from "$lib/views";
+  import { latestOnly } from "$lib/latest";
+  import { viewKey } from "$lib/views";
   import { loadView, loadViewMode, saveView, saveViewMode, type ViewMode } from "$lib/viewState";
 
   let projects = $state<Project[]>([]);
@@ -61,15 +63,100 @@
   let deletedProjects = $state<Project[]>([]);
   let query = $state("");
 
-  const counts = $derived(viewCounts(projects, deletedProjects, groups));
+  // Counts, property names and the search are answered by core
+  // (crates/core/src/domain/views.rs) so every frontend agrees on them. They
+  // arrive over IPC, which is async, so they are state filled in by the
+  // effects below rather than $derived.
+  let counts = $state<ViewCounts>({ all: 0, favorites: 0, ungrouped: 0, bin: 0, groups: {} });
+  let knownPropertyKeys = $state<string[]>([]);
+  // The last answered search, with the view it answered. The list and every
+  // view-dependent prop on it read `shown.view`, not `selectedView`, so in the
+  // instant between a click and its answer the list is one consistent,
+  // slightly old view — never Bin actions on the All list.
+  let shown = $state<{ view: View; ids: Set<string> } | null>(null);
+  let propertyQuery = $state(false);
+
   // Resolved from the live list rather than held as a snapshot, so an edit
   // opened before a refetch edits the refetched project. If it disappears —
   // deleted from another window — the modal closes rather than editing a ghost.
   const editingProject = $derived(projects.find((p) => p.id === editingId) ?? null);
-  // Every property name already in use, for the forms' name suggestions and
-  // the search hint. Derived from the fetched list — no extra query.
-  const knownPropertyKeys = $derived(propertyKeys([...projects, ...deletedProjects]));
-  const visibleProjects = $derived(resolveView(selectedView, projects, deletedProjects, query));
+  // Filtering the fetched lists, rather than taking projects from the answer,
+  // keeps the sort the user chose. Ids are unique across live and binned, so
+  // one pass over both is exact.
+  const visibleProjects = $derived.by(() => {
+    const ids = shown?.ids;
+    return ids ? [...projects, ...deletedProjects].filter((p) => ids.has(p.id)) : [];
+  });
+  const listView = $derived(shown?.view ?? selectedView);
+
+  // Long enough to skip the intermediate keystrokes of a typed word, short
+  // enough not to read as lag.
+  const SEARCH_DEBOUNCE_MS = 60;
+  const searchTicket = latestOnly();
+  const countsTicket = latestOnly();
+  const keysTicket = latestOnly();
+  // What the previous search was dispatched for, so the effect can tell
+  // typing (debounced) from a view switch or a refetch (answered at once).
+  let lastSearch: { key: string; live: Project[]; binned: Project[] } | null = null;
+
+  async function runSearch(view: View, q: string) {
+    const isCurrent = searchTicket();
+    try {
+      const matches = await resolveView(view, q);
+      if (!isCurrent()) return;
+      shown = { view, ids: new Set(matches.ids) };
+      propertyQuery = matches.property_query;
+    } catch (err) {
+      if (isCurrent()) error = (err as Error).message;
+    }
+  }
+
+  // Re-asks whenever the view, the query or the fetched lists change — the
+  // lists because an edit, delete or re-sort refetches them, and the answer
+  // has to follow. Out-of-order replies are dropped by the ticket.
+  $effect(() => {
+    const view = $state.snapshot(selectedView);
+    const q = query;
+    const live = projects;
+    const binned = deletedProjects;
+    const key = viewKey(view);
+    const typing =
+      lastSearch !== null &&
+      lastSearch.key === key &&
+      lastSearch.live === live &&
+      lastSearch.binned === binned;
+    lastSearch = { key, live, binned };
+    const timer = setTimeout(() => void runSearch(view, q), typing ? SEARCH_DEBOUNCE_MS : 0);
+    return () => clearTimeout(timer);
+  });
+
+  // Counts ignore the query, so they follow the data alone.
+  $effect(() => {
+    void projects;
+    void deletedProjects;
+    void groups;
+    const isCurrent = countsTicket();
+    viewCounts()
+      .then((next) => {
+        if (isCurrent()) counts = next;
+      })
+      .catch((err) => {
+        if (isCurrent()) error = (err as Error).message;
+      });
+  });
+
+  // Every property name in use, for the forms' name suggestions and the
+  // search hint. Best-effort: a failure only loses the hint.
+  $effect(() => {
+    void projects;
+    void deletedProjects;
+    const isCurrent = keysTicket();
+    propertyKeys()
+      .then((next) => {
+        if (isCurrent()) knownPropertyKeys = next;
+      })
+      .catch(() => {});
+  });
 
   function handleSelectView(view: View) {
     selectedView = view;
@@ -289,7 +376,7 @@
     <main class="min-w-0 flex-1">
       <div class="mb-3 flex items-center gap-2">
         <div class="min-w-0 flex-1">
-          <ViewControls bind:mode={viewMode} bind:query {knownPropertyKeys} />
+          <ViewControls bind:mode={viewMode} bind:query {knownPropertyKeys} {propertyQuery} />
         </div>
         <SortControls bind:by={sortBy} bind:direction={sortDirection} />
       </div>
@@ -299,20 +386,20 @@
         {groups}
         {customIcons}
         mode={viewMode}
-        {loading}
+        loading={loading || shown === null}
         {missingDirs}
         onEdit={handleEdit}
         onRequestDelete={handleRequestDelete}
         onOpened={handleOpened}
         onTrackersRefreshed={handleTrackersRefreshed}
         onOpenWithAppMissing={handleOpenWithAppMissing}
-        onToggleFavorite={selectedView.kind === "favorites" ? handleToggleFavorite : undefined}
-        emptyMessage={selectedView.kind === "bin"
+        onToggleFavorite={listView.kind === "favorites" ? handleToggleFavorite : undefined}
+        emptyMessage={listView.kind === "bin"
           ? "The bin is empty."
-          : selectedView.kind === "favorites"
+          : listView.kind === "favorites"
             ? "No favourites yet."
             : "No projects yet."}
-        binMode={selectedView.kind === "bin"}
+        binMode={listView.kind === "bin"}
         onBinChanged={handleBinChanged}
         onerror={handleError}
       />
