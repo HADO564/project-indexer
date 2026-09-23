@@ -550,7 +550,8 @@ Curated and reordered from a broader architectural review. Prioritized by
   ~330 lines and holds the projects, the deleted projects, the groups, the
   custom-icon map, the selected view, the view mode and the query. The pure
   logic is already out — `views.ts`, `viewState.ts`, `palette.ts`, `icons.ts`,
-  all tested without mounting anything — so what remains is fetch-and-refetch
+  all tested without mounting anything, and the view, count and search rules
+  now live in `core::domain::views` behind async effects — so what remains is fetch-and-refetch
   orchestration plus the prop drilling of `groups` / `customIcons` down to
   `ProjectMark`. `/project/[id]` now fetches the same two lists for its copy of
   the edit form, which is the first real duplication. Still watch it rather than
