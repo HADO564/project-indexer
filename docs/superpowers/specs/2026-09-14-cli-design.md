@@ -55,6 +55,14 @@ Product-level plans live in [`docs/cli/ROADMAP.md`](../../cli/ROADMAP.md).
    it. Anything that needs typing happens on the `:` line. *Revised 2026-09-15
    from "view-only", which ruled out the shortcuts and the menu along with the
    forms.*
+   *Revised 2026-09-27 — one form, for editing.* `indexer edit <project>` with
+   no field flags opens a full-screen form of the project's fields, as the GUI
+   shows them. The form is an input method for the `edit` command, not a
+   second write path: saving it makes the same single `update` the flags make.
+   It is built **after** the flags (`--description`, `--add-tag`, `--set`, …),
+   which scripts, agents, `--json` and the `:` line still need. With stdin not
+   a terminal, or under `--json`, a bare `edit` stays a usage error. Every
+   other change is still a command with no form in front of it.
 
 6. **Distribution is through package managers, and comes after the package.**
    Homebrew, winget and similar; users never download a binary by hand.
@@ -278,7 +286,8 @@ Packaging and package managers follow, as their own piece of work.
   see decision 6.)
 - An MCP server. `docs/cli/ROADMAP.md` → *Agent access* orders it: subcommands and
   `--json` first, then judge.
-- Editing in the TUI through forms or dialogs.
+- Editing in the TUI through forms or dialogs — except the one `edit` form of
+  decision 5 (revised 2026-09-27).
 - The running GUI reflecting CLI writes live. The TUI polls for changes; the GUI
   doing the same is separate work.
 

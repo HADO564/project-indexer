@@ -177,6 +177,15 @@ in the TUI sidebar and optionally in `list`.
 deliberately **not** a terminal copy of the GUI: no forms, no buttons, no
 dialogs. Keys and menus are shortcuts; every change goes through a command.
 
+**One exception, decided 2026-09-27: the edit form.** `indexer edit <project>`
+with no field flags opens a full-screen form of the project's fields, the way
+the GUI's edit form shows them, and saving it makes the same single `update`
+that `edit --description … --add-tag …` makes — so it is a way of typing an
+`edit` command, not a second path to the database. It comes after the flags,
+which everything non-interactive needs, and it is the natural first piece of
+`ratatui` in the crate, which the TUI then builds on. Piped, or under
+`--json`, a bare `edit` is a usage error rather than a form nobody can see.
+
 - **Panes.** The sidebar views — All, Favourites, each group, Ungrouped, Bin —
   with counts, the project list, and the selected project's detail: its
   identity and per-detector status, the same data `inspect` returns.
