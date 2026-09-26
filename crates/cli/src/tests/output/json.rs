@@ -191,6 +191,21 @@ fn favoriting_reports_the_saved_project_with_its_flag() {
 }
 
 #[test]
+fn an_edit_reports_the_whole_saved_project() {
+    // Every field, not only the ones that changed — a reader replaces its copy
+    // rather than merging a diff into it.
+    let mut edited = project("app", json!([]));
+    edited.description = "The gateway".into();
+    let doc = render(&Outcome::Edited {
+        project: Box::new(edited),
+    });
+    assert_eq!(doc["schema"], 1);
+    assert_eq!(doc["data"]["description"], "The gateway");
+    assert_eq!(doc["data"]["name"], "app");
+    assert_eq!(doc["data"]["favorite"], false);
+}
+
+#[test]
 fn declining_a_confirmation_is_data_not_an_error() {
     // Nothing went wrong, so it is a successful run with `data` — a reader
     // must not have to treat "you said no" as a failure.

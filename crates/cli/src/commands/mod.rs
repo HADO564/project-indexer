@@ -7,6 +7,7 @@
 
 pub mod add;
 mod config;
+mod edit;
 mod failure;
 mod favorite;
 pub mod list;
@@ -43,6 +44,8 @@ pub enum Command {
     Favorite(favorite::FavoriteArgs),
     /// Remove a project from the favourites.
     Unfavorite(favorite::FavoriteArgs),
+    /// Change a project's fields.
+    Edit(edit::EditArgs),
     /// Find projects under a directory, and optionally register them.
     Scan(scan::ScanArgs),
     /// Show or change the CLI's settings.
@@ -86,6 +89,11 @@ pub enum Outcome {
         project: Box<Project>,
         favorite: bool,
     },
+    /// A project after `edit`, as saved. Its own variant rather than
+    /// [`Outcome::Project`]: a write reports one line, not the whole detail
+    /// view, and an edit can change several fields at once, so the message
+    /// names the project rather than any one change.
+    Edited { project: Box<Project> },
     /// The user answered no to a confirmation. Not a failure: exit 0, because
     /// nothing went wrong and a script should not treat it as an error.
     Cancelled,
@@ -266,7 +274,7 @@ pub fn unique_kinds(kinds: &[TrackerKind]) -> Vec<TrackerKind> {
 /// isn't one.
 ///
 /// Shared by every command that acts on one project — `show`, `open`,
-/// `untrack`, `favorite` and `unfavorite` — so a query resolves identically
+/// `untrack`, `favorite`, `unfavorite` and `edit` — so a query resolves identically
 /// whichever verb is in front of it. Three copies of this `match` was the point at which they could start to
 /// drift.
 ///
@@ -301,6 +309,7 @@ pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {
         Command::Untrack(args) => untrack::run(args, ctx),
         Command::Favorite(args) => favorite::run(args, ctx, true),
         Command::Unfavorite(args) => favorite::run(args, ctx, false),
+        Command::Edit(args) => edit::run(args, ctx),
         Command::Scan(args) => scan::run(args, ctx),
         Command::Config(args) => config::run(args, ctx),
     }

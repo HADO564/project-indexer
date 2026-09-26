@@ -1,6 +1,6 @@
 //! The arguments shared by the commands that act on one project — `show`,
-//! `open`, `untrack`, `favorite` and `unfavorite` — which all resolve their
-//! query through [`commands::find_one`](crate::commands::find_one).
+//! `open`, `untrack`, `favorite`, `unfavorite` and `edit` — which all resolve
+//! their query through [`commands::find_one`](crate::commands::find_one).
 
 use clap::Parser;
 
@@ -53,6 +53,36 @@ fn favorite_and_unfavorite_take_a_project_and_the_tracker_flag() {
 }
 
 #[test]
+fn edit_takes_a_project_and_a_description() {
+    let cli = Cli::try_parse_from(["indexer", "edit", "app", "--description", "The gateway"])
+        .expect("arguments should parse");
+    let Some(Invocation::Command(Command::Edit(args))) = cli.invocation else {
+        panic!("expected `edit`");
+    };
+    assert_eq!(args.project, "app");
+    assert_eq!(args.description.as_deref(), Some("The gateway"));
+
+    // An empty description is a value — it clears the field — not a missing
+    // flag, so it must reach `update` as `Some("")` rather than `None`.
+    let cli = Cli::try_parse_from(["indexer", "edit", "app", "--description", ""])
+        .expect("an empty description should parse");
+    let Some(Invocation::Command(Command::Edit(args))) = cli.invocation else {
+        panic!("expected `edit`");
+    };
+    assert_eq!(args.description.as_deref(), Some(""));
+}
+
+#[test]
+fn edit_without_a_change_is_a_usage_error() {
+    // The `change` group requires at least one field flag: an edit that
+    // changes nothing is almost certainly a mistake, and a usage error says
+    // so with exit code 2 before anything is looked up.
+    let err =
+        Cli::try_parse_from(["indexer", "edit", "app"]).expect_err("a bare edit should be refused");
+    assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+}
+
+#[test]
 fn a_project_is_required() {
     // Unlike `add`, whose directory defaults to the current one: there is no
     // sensible default project until `show .` and the TUI's selection exist.
@@ -60,6 +90,7 @@ fn a_project_is_required() {
     assert!(Cli::try_parse_from(["indexer", "untrack"]).is_err());
     assert!(Cli::try_parse_from(["indexer", "favorite"]).is_err());
     assert!(Cli::try_parse_from(["indexer", "unfavorite"]).is_err());
+    assert!(Cli::try_parse_from(["indexer", "edit", "--description", "x"]).is_err());
 }
 
 #[test]

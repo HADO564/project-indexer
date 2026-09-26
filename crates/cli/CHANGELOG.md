@@ -14,6 +14,7 @@ Nothing released yet.
 
 ### Added
 
+- `indexer edit <query> --description <text>` changes a project's description; `--description ""` clears it. `edit` is where every field that takes a value goes, so tags and properties join it as flags; with none given it is a usage error rather than a write that changes nothing.
 - `indexer favorite <query>` and `indexer unfavorite <query>` set and clear a project's favourite flag — the CLI's first write beyond adding and untracking, and the pair to `list --view favorites`. They find the project the way `show` does and take `-t/--tracker` likewise. Two verbs rather than a flag on an edit command: a state change with no value is a verb, which also lets the planned TUI bind a key to it.
 - The project table gains an ID column — the first 8 characters of each project's id, the shortest prefix `show` accepts — so a row can be copied from by id as well as by `parent/folder`.
 - `indexer list --view <set>` draws from `all` (the default), `favorites` or `binned`. One flag with a value rather than a `--favorite` and a `--binned` flag, because the sets are alternatives — and because the GUI already models them as one `View` type with groups as a further case. Binned projects appear under `binned` and nowhere else: favouriting is stored independently of binning, so a favourited project that is binned leaves `favorites` and returns on restore. An empty view now says which emptiness it is — `the bin is empty`, `no favourites yet` — rather than always claiming nothing is tracked.

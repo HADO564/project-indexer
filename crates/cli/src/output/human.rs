@@ -113,6 +113,9 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
                 eprintln!("indexer: \"{}\" is no longer a favourite", project.name);
             }
         }
+        Outcome::Edited { project } => {
+            eprintln!("indexer: updated \"{}\"", project.name);
+        }
         Outcome::Cancelled => eprintln!("indexer: cancelled"),
         Outcome::Imported { report } => {
             // A summary, not a table: what matters is the counts and the rows
