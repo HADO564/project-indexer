@@ -80,7 +80,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 - [ ] The write commands — favourite, description, tags, properties — and the bin (restore, purge). Branch `feat/cli-write-commands`, one step at a time in the handoff's order:
   - [x] `favorite` / `unfavorite <query>` — one `update` with only `favorite` set, through `find_one` like `open`. One `favorite::run` takes the flag to store, so the two verbs share every line; one `Outcome::Favorited { project, favorite }` for both, `--json` is the saved project. Needed `#[derive(Default)]` on core's `UpdateProject`, which the handoff assumed existed — every field `None`, pinned by `a_default_update_leaves_every_field_alone`
   - [x] `edit --description` — introduces `edit` and its argument shape. Every field flag joins a clap `ArgGroup` named `change` with `required(true).multiple(true)`: at least one, any combination, so a bare `edit app` is a usage error (exit 2) and each later flag needs only `group = "change"`. `description` passes straight into `UpdateProject`, since both are `Option<String>` meaning the same thing; `""` clears it. Its own `Outcome::Edited`, and `--json` is the whole saved project
-  - [ ] `edit --add-tag` / `--remove-tag`
+  - [ ] `edit --add-tag` / `--remove-tag` — the first read-modify-write. Its lost-update window is accepted for now and said so in a comment; the fix, for this and for the GUI's edit form, is the optimistic `updated_at` check in `../architecture.md` → *Quality backlog*
   - [ ] `edit --set k=v` / `--unset k`
   - [ ] `restore`
   - [ ] `purge`

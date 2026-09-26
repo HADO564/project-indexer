@@ -246,12 +246,18 @@ already proved against a real consumer, which is the cheaper way round.
 
 Three things have to be answered before either ships.
 
-- **Concurrent writers.** Exactly one process writes today. A GUI, a CLI and a
-  long-lived agent server means three. SQLite in WAL takes many readers and one
-  writer; the second writer gets `SQLITE_BUSY` unless a busy timeout is set — and
-  one is: every connection sets `busy_timeout = 5000`, so a second writer waits
-  up to five seconds rather than failing. An agent is the first consumer likely to write *while* the
-  GUI is open, so this stops being theoretical the moment this work starts.
+- **Concurrent writers.** Two processes write today — the GUI and the CLI —
+  and a long-lived agent server would make three. SQLite in WAL takes many
+  readers and one writer; the second writer gets `SQLITE_BUSY` unless a busy
+  timeout is set — and one is: every connection sets `busy_timeout = 5000`, so
+  a second writer waits up to five seconds rather than failing. That makes the
+  *writes* take turns; it does not stop a write based on a stale read from
+  undoing another. The GUI's edit form saving its whole snapshot over a change
+  made in a terminal while it was open is the real case, and it exists already.
+  The planned fix is an optimistic "unchanged since I read it" check on
+  `updated_at`, not a lock — `docs/architecture.md` → *Quality backlog* →
+  *Later — concurrent edits between the GUI and the CLI*. An agent writing
+  while the GUI is open makes it more likely, not new.
 - **What an agent is allowed to do.** Reading and registering are
   uncontroversial. `delete_project_directory` reached from a tool call is not.
   The defensible default is that the agent surface is read-plus-register, and
