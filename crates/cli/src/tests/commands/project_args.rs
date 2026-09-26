@@ -1,6 +1,6 @@
 //! The arguments shared by the commands that act on one project — `show`,
-//! `open` and `untrack` — which all resolve their query through
-//! [`commands::find_one`](crate::commands::find_one).
+//! `open`, `untrack`, `favorite` and `unfavorite` — which all resolve their
+//! query through [`commands::find_one`](crate::commands::find_one).
 
 use clap::Parser;
 
@@ -32,11 +32,34 @@ fn untrack_takes_a_project_and_the_tracker_flag() {
 }
 
 #[test]
+fn favorite_and_unfavorite_take_a_project_and_the_tracker_flag() {
+    let cli = Cli::try_parse_from(["indexer", "favorite", "app", "-t", "git"])
+        .expect("arguments should parse");
+    let Some(Invocation::Command(Command::Favorite(args))) = cli.invocation else {
+        panic!("expected `favorite`");
+    };
+    assert_eq!(args.project, "app");
+    assert_eq!(args.tracker, vec![TrackerKind::Git]);
+
+    // Two verbs over one argument struct: `unfavorite` must parse into its own
+    // variant, or `run` would store the wrong flag.
+    let cli =
+        Cli::try_parse_from(["indexer", "unfavorite", "work/app"]).expect("arguments should parse");
+    let Some(Invocation::Command(Command::Unfavorite(args))) = cli.invocation else {
+        panic!("expected `unfavorite`");
+    };
+    assert_eq!(args.project, "work/app");
+    assert!(args.tracker.is_empty());
+}
+
+#[test]
 fn a_project_is_required() {
     // Unlike `add`, whose directory defaults to the current one: there is no
     // sensible default project until `show .` and the TUI's selection exist.
     assert!(Cli::try_parse_from(["indexer", "open"]).is_err());
     assert!(Cli::try_parse_from(["indexer", "untrack"]).is_err());
+    assert!(Cli::try_parse_from(["indexer", "favorite"]).is_err());
+    assert!(Cli::try_parse_from(["indexer", "unfavorite"]).is_err());
 }
 
 #[test]

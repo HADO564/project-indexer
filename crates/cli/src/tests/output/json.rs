@@ -169,6 +169,28 @@ fn untrack_and_open_report_the_project_itself() {
 }
 
 #[test]
+fn favoriting_reports_the_saved_project_with_its_flag() {
+    // The document is the project alone: its own `favorite` field says which
+    // way the command went, so there is no second field to keep in step.
+    let mut favourite = project("app", json!([]));
+    favourite.favorite = true;
+    let doc = render(&Outcome::Favorited {
+        project: Box::new(favourite),
+        favorite: true,
+    });
+    assert_eq!(doc["schema"], 1);
+    assert_eq!(doc["data"]["name"], "app");
+    assert_eq!(doc["data"]["favorite"], true);
+    assert!(doc["data"].get("project").is_none());
+
+    let doc = render(&Outcome::Favorited {
+        project: Box::new(project("app", json!([]))),
+        favorite: false,
+    });
+    assert_eq!(doc["data"]["favorite"], false);
+}
+
+#[test]
 fn declining_a_confirmation_is_data_not_an_error() {
     // Nothing went wrong, so it is a successful run with `data` — a reader
     // must not have to treat "you said no" as a failure.

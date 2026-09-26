@@ -8,6 +8,7 @@
 pub mod add;
 mod config;
 mod failure;
+mod favorite;
 pub mod list;
 mod open;
 pub mod scan;
@@ -38,6 +39,10 @@ pub enum Command {
     Open(open::OpenArgs),
     /// Stop tracking a project, leaving its files alone.
     Untrack(untrack::UntrackArgs),
+    /// Mark a project as a favourite.
+    Favorite(favorite::FavoriteArgs),
+    /// Remove a project from the favourites.
+    Unfavorite(favorite::FavoriteArgs),
     /// Find projects under a directory, and optionally register them.
     Scan(scan::ScanArgs),
     /// Show or change the CLI's settings.
@@ -74,6 +79,13 @@ pub enum Outcome {
     Untracked { project: Box<Project> },
     /// A project handed to its application, with `last_opened_at` now set.
     Opened { project: Box<Project> },
+    /// A project after `favorite` or `unfavorite`. One variant for both verbs:
+    /// `favorite` is the flag now stored, so the message can say which way it
+    /// went.
+    Favorited {
+        project: Box<Project>,
+        favorite: bool,
+    },
     /// The user answered no to a confirmation. Not a failure: exit 0, because
     /// nothing went wrong and a script should not treat it as an error.
     Cancelled,
@@ -254,8 +266,8 @@ pub fn unique_kinds(kinds: &[TrackerKind]) -> Vec<TrackerKind> {
 /// isn't one.
 ///
 /// Shared by every command that acts on one project — `show`, `open`,
-/// `untrack` — so a query resolves identically whichever verb is in front of
-/// it. Three copies of this `match` was the point at which they could start to
+/// `untrack`, `favorite` and `unfavorite` — so a query resolves identically
+/// whichever verb is in front of it. Three copies of this `match` was the point at which they could start to
 /// drift.
 ///
 /// `tracker` narrows the corpus first, for the reason [`with_tracker`] gives:
@@ -287,6 +299,8 @@ pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {
         Command::Add(args) => add::run(args, ctx),
         Command::Open(args) => open::run(args, ctx),
         Command::Untrack(args) => untrack::run(args, ctx),
+        Command::Favorite(args) => favorite::run(args, ctx, true),
+        Command::Unfavorite(args) => favorite::run(args, ctx, false),
         Command::Scan(args) => scan::run(args, ctx),
         Command::Config(args) => config::run(args, ctx),
     }

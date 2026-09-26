@@ -13,7 +13,13 @@ where
     Deserialize::deserialize(deserializer).map(Some)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+/// A partial update to a [`Project`](crate::domain::Project): every field is
+/// optional, and `None` means "leave this field alone".
+///
+/// `Default` is therefore the empty update, so a caller names only what it
+/// changes — `UpdateProject { favorite: Some(true), ..Default::default() }`.
+/// Guarded by `a_default_update_leaves_every_field_alone`.
+#[derive(Debug, Serialize, Default, Deserialize)]
 pub struct UpdateProject {
     pub name: Option<String>,
     pub directory: Option<String>,

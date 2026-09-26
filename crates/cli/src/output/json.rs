@@ -169,6 +169,9 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
         Outcome::Untracked { project } => emit(out, &ProjectJson::from(project.as_ref())),
         // The project with `last_opened_at` already stamped.
         Outcome::Opened { project } => emit(out, &ProjectJson::from(project.as_ref())),
+        // The project as saved. Its own `favorite` field says which way the
+        // command went, so the document needs nothing beside it.
+        Outcome::Favorited { project, .. } => emit(out, &ProjectJson::from(project.as_ref())),
         // A refusal is still a successful run, so it is `data`, not an error.
         Outcome::Cancelled => emit(out, &CancelledJson { cancelled: true }),
         // Both scan documents are the core report as-is: `ImportReport` here,

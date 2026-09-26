@@ -106,6 +106,13 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
         Outcome::Opened { project } => {
             eprintln!("indexer: opening \"{}\"", project.name);
         }
+        Outcome::Favorited { project, favorite } => {
+            if *favorite {
+                eprintln!("indexer: \"{}\" is now a favourite", project.name);
+            } else {
+                eprintln!("indexer: \"{}\" is no longer a favourite", project.name);
+            }
+        }
         Outcome::Cancelled => eprintln!("indexer: cancelled"),
         Outcome::Imported { report } => {
             // A summary, not a table: what matters is the counts and the rows

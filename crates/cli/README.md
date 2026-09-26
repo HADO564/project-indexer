@@ -7,9 +7,9 @@ keyboard-driven TUI. It opens the same database as the app, so the two stay in
 step with no pairing — and it works without the app installed.
 
 **Status: every plain subcommand works.** `list`, `show`, `add`, `open`,
-`untrack`, `scan` and `config` all run against the app's database; the observer
-and the TUI still return "not implemented". Groups and the bin have no commands
-yet. The binary name `indexer` is a placeholder.
+`untrack`, `favorite`, `unfavorite`, `scan` and `config` all run against the
+app's database; the observer and the TUI still return "not implemented".
+Editing a project's fields, groups and the bin have no commands yet. The binary name `indexer` is a placeholder.
 
 ```
 indexer list                     every project, as a table (--view, -s name|last-opened, -r to flip)
@@ -17,6 +17,7 @@ indexer show <query>             one project — exact name, id, parent/folder, 
 indexer add [dir]                track a directory, or the current one
 indexer open <query>             open a project in its application
 indexer untrack <query>          forget a project, leaving its files alone (asks first; --yes)
+indexer favorite <query>         mark a project as a favourite; unfavorite clears it
 indexer scan <dir>               find projects under a folder; --import registers them
 indexer config folder-color ...  the folder colour in that table; header-color likewise
 indexer <anything> --json        {"schema": 1, "data": …} on stdout, or {"schema": 1, "error": …} on stderr
