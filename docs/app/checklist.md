@@ -145,6 +145,14 @@ coverage**, which is why the 0.3.0 scanner was released as a beta first.
 
 ## Open (features)
 
+- [ ] **Later — the edit form must not overwrite a change made elsewhere.**
+  `EditProjectForm` saves every field as it was when the form opened, so a
+  change made by the CLI (or a second window) while the form was open is
+  silently undone. Planned: an optimistic check on `updated_at` in core, and
+  the form reloading and saying so when its copy is stale, rather than a lock.
+  Design and scope in `architecture.md` → *Quality backlog* → *Later —
+  concurrent edits between the GUI and the CLI*.
+
 - [ ] **NEXT — re-detect sweep when the detector set gains a kind.** Detection
   results are persisted, so a project registered before a detector existed
   carries an incomplete tracker set forever and nothing says so. This lands the

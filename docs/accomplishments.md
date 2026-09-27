@@ -413,3 +413,27 @@ the project given the scaffolding a published release needs.
   whole TUI adds ~0.15 MB — so the CLI is not split from the TUI, and the app
   serves the command from its own binary instead
   (`docs/handoffs/2026-09-15-gui-provides-indexer.md`).
+
+## 2026-09-27 — The CLI writes
+
+Branch `feat/cli-write-commands`, built in the order the
+`docs/handoffs/2026-09-23-cli-write-commands.md` brief set, one reviewed step at
+a time.
+
+- `1db31c9` `favorite` / `unfavorite`. Needed `#[derive(Default)]` on core's
+  `UpdateProject`, which the brief assumed existed; a core test pins that the
+  default update leaves every field alone.
+- `61bae9d` `edit --description`, and `edit`'s shape: every field flag joins a
+  required clap `ArgGroup`, so a bare `edit` is a usage error.
+- `e0da78f` `edit --add-tag` / `--remove-tag`, the first read-modify-write.
+  Removals are normalized first, or `--remove-tag rust` would miss `Rust` and
+  still succeed.
+- `b8347f9` `edit --set` / `--unset`. Property names match ignoring case, as the
+  search bar does, even though core stores them as typed.
+- `restore` and `purge`, the first commands resolved against the bin:
+  `find_one` became `find_in` over a `Corpus`. The first CLI tests to run whole
+  commands against an in-memory database.
+- **Decided along the way.** A bare `edit` will open a full-screen form, after
+  the flags and on its own branch — the one exception to "no forms" in the TUI
+  (`7c91f19`). And lost updates between the GUI and the CLI get an optimistic
+  `updated_at` check rather than a lock, planned in `architecture.md` (`d0f634e`).

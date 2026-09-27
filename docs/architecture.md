@@ -532,6 +532,49 @@ Curated and reordered from a broader architectural review. Prioritized by
       ran. The version-skew guard (invariant 11) was already tested and is
       unaffected.
 
+### Later — concurrent edits between the GUI and the CLI
+
+- [ ] **An optimistic "unchanged since I read it" check on project saves.**
+      Recorded 2026-09-27, while building the CLI's write commands. Not a
+      lock: nothing waits, and nothing can be left locked by a crash.
+
+      *The problem.* Two processes now write `projects.db`, and a write can
+      silently undo another. The long window is the GUI's, not the CLI's:
+      `EditProjectForm.svelte` sends **every** field (name, description,
+      tags, favourite, properties, …) as they were when the form opened. Open
+      the form, run `indexer edit app --add-tag rust` or `indexer favorite app`
+      in a terminal, then press Save — the form writes its stale copy back and
+      the CLI's change is gone, with no error. The CLI's own read-modify-write
+      (`--add-tag`, `--set`) has the same flaw in a window of milliseconds;
+      SQLite's `busy_timeout = 5000` already makes the two processes' *writes*
+      take turns, but that serialises the writes, not the read before them.
+
+      *Why not a lock.* A lock held while editing would have to last as long as
+      the GUI's form stays open — minutes — so the CLI would block or fail for
+      that long, and a crash mid-edit would leave the lock behind.
+
+      *The plan.* Every project already carries `updated_at`. A writer sends
+      the `updated_at` it read alongside its update; the repository saves only
+      if the stored value still matches, checking and writing inside one
+      transaction (`UPDATE … WHERE id = ? AND updated_at = ?`, or a read and a
+      compare under `BEGIN IMMEDIATE`). A mismatch is a new
+      `ProjectError` — "changed elsewhere since you opened it" — and nothing is
+      written. No schema change and no migration.
+
+      *What it touches.*
+      - **core:** `ProjectService::update` (and the repository port's save
+        path) takes the expected `updated_at`; the new error.
+      - **GUI:** `EditProjectForm` keeps the `updated_at` it opened with and,
+        on the new error, reloads the project and says so rather than
+        overwriting.
+      - **CLI:** passes the `updated_at` from `find_one` for its
+        read-modify-writes. Losing that race is rare enough that one retry,
+        or an error, is fine.
+
+      *Until then:* accepted, and said so in a comment where the CLI does a
+      read-modify-write. Related: `docs/cli/ROADMAP.md` → *Agent access* →
+      *Concurrent writers*.
+
 ### Deferred — gated on a concrete trigger, not a date
 
 - **Fast vs deep detection tiers.** When the first detector genuinely needs

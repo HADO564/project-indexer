@@ -157,6 +157,37 @@ fn new_project_has_no_group_colour_or_icon() {
 }
 
 #[test]
+fn a_default_update_leaves_every_field_alone() {
+    // `UpdateProject::default()` is every field `None`, which is what lets a
+    // caller name only what it changes — the CLI's `favorite` sets one field
+    // with `..Default::default()`. If a field ever defaulted to something
+    // other than "leave alone", that one-field update would silently
+    // overwrite the rest.
+    let mut p = project_with_dir(&std::env::temp_dir().to_string_lossy());
+    p.description = "kept".into();
+    p.tags = vec!["Rust".into()];
+    p.favorite = true;
+    p.properties.insert("client".into(), "acme".into());
+    p.color = Some("gold".into());
+    let before = p.clone();
+
+    p.update(UpdateProject::default())
+        .expect("an empty update is valid");
+
+    assert_eq!(p.name, before.name);
+    assert_eq!(p.directory, before.directory);
+    assert_eq!(p.description, before.description);
+    assert_eq!(p.tags, before.tags);
+    assert_eq!(p.favorite, before.favorite);
+    assert_eq!(p.properties, before.properties);
+    assert_eq!(p.color, before.color);
+    assert_eq!(p.open_with, before.open_with);
+    assert_eq!(p.notes, before.notes);
+    assert_eq!(p.group_id, before.group_id);
+    assert_eq!(p.icon, before.icon);
+}
+
+#[test]
 fn update_sets_and_clears_group_colour_and_icon() {
     let mut p = project_with_dir(&std::env::temp_dir().to_string_lossy());
 

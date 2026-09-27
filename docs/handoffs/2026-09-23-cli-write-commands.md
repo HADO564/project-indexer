@@ -1,8 +1,9 @@
 # Handoff — the CLI's write commands
 
 **Date:** 2026-09-23
-**Status:** ready to start. The command shape is decided (§4); nothing is
-blocked.
+**Status:** done 2026-09-27 on `feat/cli-write-commands` — all six steps of §6.
+The bare-`edit` form decided along the way is its own later branch
+(`../cli/checklist.md`).
 **Runs in parallel with:**
 [`2026-09-23-views-to-core.md`](2026-09-23-views-to-core.md) — see §8 there and
 §7 here for the conflict surface.
