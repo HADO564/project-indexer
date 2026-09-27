@@ -77,7 +77,7 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
                 writeln!(out, "{name}")?;
             }
         }
-        // These four report an action rather than return data, so their human
+        // These report an action rather than return data, so their human
         // output is prose on stderr and stdout stays empty — the same split
         // `Imported` uses below. A script that wants the project itself asks
         // for `--json`.
@@ -115,6 +115,21 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
         }
         Outcome::Edited { project } => {
             eprintln!("indexer: updated \"{}\"", project.name);
+        }
+        // The bin holds projects whose folder was deleted, so restoring brings
+        // back the entry and not the files — said here, where a user expecting
+        // their folder back would otherwise find out from `open`.
+        Outcome::Restored { project } => {
+            eprintln!(
+                "indexer: restored \"{}\" — the record only; files deleted from {} are not brought back",
+                project.name, project.directory
+            );
+        }
+        Outcome::Purged { project } => {
+            eprintln!(
+                "indexer: purged \"{}\" — its record is gone for good",
+                project.name
+            );
         }
         Outcome::Cancelled => eprintln!("indexer: cancelled"),
         Outcome::Imported { report } => {

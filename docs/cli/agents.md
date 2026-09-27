@@ -46,6 +46,8 @@ code is `crates/cli/src/output/json.rs`, and its tests are in
 | `indexer untrack <query> --json` | the [project](#a-project) as it was, now removed from the database. Its directory on disk is untouched. **Needs `--yes` when stdin is not a terminal** — without it the command refuses rather than reading a script's input as consent |
 | `indexer favorite <query> --json`, `indexer unfavorite <query> --json` | the [project](#a-project) as saved, with `favorite` now `true` or `false`. Nothing else about it changes. Favouriting is stored independently of the bin, so a binned project cannot be found by these commands, and a favourited project that is later binned keeps the flag |
 | `indexer edit <query> [--description <text>] [--add-tag <tags>] [--remove-tag <tags>] [--set <key=value>] [--unset <key>] --json` | the [project](#a-project) as saved — every field, not only what changed. `--description ""` clears the description. The tag flags repeat or take commas (`--add-tag rust,web`). A removal ignores case, and removing a tag the project lacks is not an error. Removals apply before additions. Tags are stored title-cased (`rust` → `Rust`) without duplicates, the same as in the app. `--set` and `--unset` repeat but do not split on commas, because a property value may contain one; `--set` splits at the first `=`, keeps the value exactly as typed, and replaces a property whose name matches ignoring case; `--unset` also ignores case, and unsets apply before sets. A `--set` with no `=` is a usage error (exit 2); a name that is empty or contains `:` is refused by the app's own rule, as an `error` (exit 1). At least one field flag is required: a bare `edit` is a usage error, exit 2. All the flags given are saved together in one write |
+| `indexer restore <query> --json` | the [project](#a-project) as saved, `is_deleted` now `false`. `query` is matched **only against the bin**, by the same rules as `show`. Only the record comes back: a project reaches the bin when its folder is deleted, so its `directory` is usually gone and `open` on it fails |
+| `indexer purge <query> --json` | the [project](#a-project) as it was, now deleted from the database for good. Matched only against the bin, so a live project cannot be purged. **Needs `--yes` when stdin is not a terminal**, as `untrack` does |
 | `indexer scan <dir> --json` | `{"candidates": [{"directory", "suggested_name", "matched_kinds", "already_tracked", "disambiguated"}], "visited", "stopped_early"}`. Nothing is registered. `stopped_early` means the walk hit its 50,000-directory limit and the list is incomplete |
 | `indexer scan <dir> --import --json` | `{"imported": [projects], "skipped", "failures": [{"directory", "message"}]}`. Registers every candidate; an already-tracked directory counts in `skipped`, and a row that fails is listed in `failures` without failing the command (exit 0) |
 | `indexer config folder-color --json` | `{"folder_color": "cyan"}` — the colour in effect after the command |
@@ -144,7 +146,7 @@ Today there are two kinds:
 
 | `kind` | When | Extra fields |
 |---|---|---|
-| `not_found` | No project matches the query | `query` |
+| `not_found` | No project matches the query. For `restore` and `purge` the message says it looked in the bin (`no project in the bin matches "app"`) | `query` |
 | `ambiguous` | Several projects match the query | `query`, and `matches`: the candidates as full [projects](#a-project), best first |
 | `error` | Anything else: a stub command, a database that can't be opened, a database written by a newer app | none |
 

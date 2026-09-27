@@ -175,6 +175,11 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
         // The project as saved, every field — not a diff of what changed, so a
         // reader never has to merge it with an earlier copy.
         Outcome::Edited { project } => emit(out, &ProjectJson::from(project.as_ref())),
+        // The project as saved, `is_deleted` now false.
+        Outcome::Restored { project } => emit(out, &ProjectJson::from(project.as_ref())),
+        // The project as it was: its row is gone, so, as for `untrack`, this
+        // document is the only record of what was deleted.
+        Outcome::Purged { project } => emit(out, &ProjectJson::from(project.as_ref())),
         // A refusal is still a successful run, so it is `data`, not an error.
         Outcome::Cancelled => emit(out, &CancelledJson { cancelled: true }),
         // Both scan documents are the core report as-is: `ImportReport` here,
@@ -190,7 +195,7 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
 /// Meant for stderr: under `--json`, stdout only ever holds a result.
 pub fn write_error(out: &mut impl Write, error: &anyhow::Error) -> anyhow::Result<()> {
     let error = match error.downcast_ref::<Failure>() {
-        Some(Failure::NotFound { query }) => ErrorJson {
+        Some(Failure::NotFound { query, .. }) => ErrorJson {
             kind: "not_found",
             message: error.to_string(),
             query: Some(query),

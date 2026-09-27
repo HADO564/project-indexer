@@ -1,7 +1,7 @@
 use indexer_core::domain::Project;
 use serde_json::{json, Value};
 
-use crate::commands::{Failure, Outcome, View};
+use crate::commands::{Corpus, Failure, Outcome, View};
 use crate::output::json::{write, write_error};
 
 /// A project from its stored JSON shape, as in `human.rs`.
@@ -87,6 +87,7 @@ fn a_query_matching_nothing_is_a_not_found_error() {
     let doc = render_error(
         Failure::NotFound {
             query: "nope".into(),
+            corpus: Corpus::Live,
         }
         .into(),
     );
@@ -203,6 +204,37 @@ fn an_edit_reports_the_whole_saved_project() {
     assert_eq!(doc["data"]["description"], "The gateway");
     assert_eq!(doc["data"]["name"], "app");
     assert_eq!(doc["data"]["favorite"], false);
+}
+
+#[test]
+fn restore_and_purge_report_the_project_itself() {
+    let doc = render(&Outcome::Restored {
+        project: Box::new(project("app", json!([]))),
+    });
+    assert_eq!(doc["data"]["name"], "app");
+    assert_eq!(doc["data"]["is_deleted"], false);
+
+    // As for `untrack`: the row is gone, so this is the only record of it.
+    let doc = render(&Outcome::Purged {
+        project: Box::new(project("app", json!([]))),
+    });
+    assert_eq!(doc["data"]["id"], "app-id");
+}
+
+#[test]
+fn a_query_matching_nothing_in_the_bin_says_where_it_looked() {
+    let doc = render_error(
+        Failure::NotFound {
+            query: "app".into(),
+            corpus: Corpus::Bin,
+        }
+        .into(),
+    );
+    assert_eq!(doc["error"]["kind"], "not_found");
+    assert_eq!(
+        doc["error"]["message"],
+        "no project in the bin matches \"app\""
+    );
 }
 
 #[test]

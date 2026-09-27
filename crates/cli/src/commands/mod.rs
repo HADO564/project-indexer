@@ -12,6 +12,8 @@ mod failure;
 mod favorite;
 pub mod list;
 mod open;
+mod purge;
+mod restore;
 pub mod scan;
 mod show;
 mod untrack;
@@ -46,6 +48,11 @@ pub enum Command {
     Unfavorite(favorite::FavoriteArgs),
     /// Change a project's fields.
     Edit(edit::EditArgs),
+    /// Bring a project back from the bin. Only its record returns: the bin
+    /// holds projects whose folder was deleted, and the files stay gone.
+    Restore(restore::RestoreArgs),
+    /// Permanently delete a binned project's record. Asks first; cannot be undone.
+    Purge(purge::PurgeArgs),
     /// Find projects under a directory, and optionally register them.
     Scan(scan::ScanArgs),
     /// Show or change the CLI's settings.
@@ -94,6 +101,12 @@ pub enum Outcome {
     /// view, and an edit can change several fields at once, so the message
     /// names the project rather than any one change.
     Edited { project: Box<Project> },
+    /// A project brought back from the bin, as saved. Its directory is still
+    /// wherever it was when it was binned — usually gone.
+    Restored { project: Box<Project> },
+    /// A binned project whose record was deleted for good, as it was just
+    /// before. Like [`Outcome::Untracked`], this is the only record left of it.
+    Purged { project: Box<Project> },
     /// The user answered no to a confirmation. Not a failure: exit 0, because
     /// nothing went wrong and a script should not treat it as an error.
     Cancelled,
@@ -270,13 +283,26 @@ pub fn unique_kinds(kinds: &[TrackerKind]) -> Vec<TrackerKind> {
     unique
 }
 
-/// The single project `query` names, or the [`Failure`] explaining why there
-/// isn't one.
+/// Which projects a query is resolved against.
 ///
-/// Shared by every command that acts on one project — `show`, `open`,
-/// `untrack`, `favorite`, `unfavorite` and `edit` — so a query resolves identically
-/// whichever verb is in front of it. Three copies of this `match` was the point at which they could start to
-/// drift.
+/// Live projects and binned ones never mix: every command that acts on one
+/// project reaches for exactly one of the two sets, so a query cannot match a
+/// binned project when the user meant a live one, or the other way round.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Corpus {
+    /// Everything not in the bin — what `list` shows by default.
+    Live,
+    /// Only binned projects, for `restore` and `purge`.
+    Bin,
+}
+
+/// The single live project `query` names, or the [`Failure`] explaining why
+/// there isn't one.
+///
+/// Shared by every command that acts on one live project — `show`, `open`,
+/// `untrack`, `favorite`, `unfavorite` and `edit` — so a query resolves
+/// identically whichever verb is in front of it. Three copies of this `match`
+/// was the point at which they could start to drift.
 ///
 /// `tracker` narrows the corpus first, for the reason [`with_tracker`] gives:
 /// `open app -t git` should find the git `app` rather than report an ambiguity
@@ -286,11 +312,28 @@ pub fn find_one(
     query: String,
     tracker: Vec<TrackerKind>,
 ) -> anyhow::Result<Project> {
-    let projects = ctx.projects.list(SortOptions::default())?;
+    find_in(ctx, Corpus::Live, query, tracker)
+}
+
+/// [`find_one`] against a chosen [`Corpus`]. `restore` and `purge` pass
+/// [`Corpus::Bin`]: the live list filters out binned projects, so resolving
+/// there would report "no project matches" for the very project they act on.
+/// The rules are otherwise the same, so a query finds a binned project the way
+/// it finds a live one.
+pub fn find_in(
+    ctx: &Context,
+    corpus: Corpus,
+    query: String,
+    tracker: Vec<TrackerKind>,
+) -> anyhow::Result<Project> {
+    let projects = match corpus {
+        Corpus::Live => ctx.projects.list(SortOptions::default())?,
+        Corpus::Bin => ctx.projects.list_deleted(SortOptions::default())?,
+    };
     let projects = with_tracker(projects, &tracker);
     match resolve(&projects, &query) {
         Resolution::Found(project) => Ok(project.clone()),
-        Resolution::NotFound => Err(Failure::NotFound { query }.into()),
+        Resolution::NotFound => Err(Failure::NotFound { query, corpus }.into()),
         Resolution::Ambiguous(matches) => Err(Failure::Ambiguous {
             query,
             matches: matches.into_iter().cloned().collect(),
@@ -310,6 +353,8 @@ pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {
         Command::Favorite(args) => favorite::run(args, ctx, true),
         Command::Unfavorite(args) => favorite::run(args, ctx, false),
         Command::Edit(args) => edit::run(args, ctx),
+        Command::Restore(args) => restore::run(args, ctx),
+        Command::Purge(args) => purge::run(args, ctx),
         Command::Scan(args) => scan::run(args, ctx),
         Command::Config(args) => config::run(args, ctx),
     }

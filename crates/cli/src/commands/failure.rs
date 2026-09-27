@@ -7,13 +7,15 @@ use std::fmt;
 
 use indexer_core::Project;
 
-use super::TrackerKind;
+use super::{Corpus, TrackerKind};
 use crate::output::human;
 
 #[derive(Debug)]
 pub enum Failure {
-    /// No project matches the query.
-    NotFound { query: String },
+    /// No project matches the query. `corpus` is where it looked, so a
+    /// `restore` of a project that is not in the bin says so rather than
+    /// claiming nothing matches at all.
+    NotFound { query: String, corpus: Corpus },
     /// Several projects match the query, best first.
     Ambiguous {
         query: String,
@@ -26,7 +28,14 @@ impl Failure {
     /// The one-line message, without the table human output adds.
     pub fn summary(&self) -> String {
         match self {
-            Failure::NotFound { query } => format!("no project matches \"{query}\""),
+            Failure::NotFound {
+                query,
+                corpus: Corpus::Live,
+            } => format!("no project matches \"{query}\""),
+            Failure::NotFound {
+                query,
+                corpus: Corpus::Bin,
+            } => format!("no project in the bin matches \"{query}\""),
             Failure::Ambiguous { .. } => {
                 "multiple matches found, which one did you mean?".to_string()
             }
