@@ -9,7 +9,7 @@ step with no pairing — and it works without the app installed.
 **Status: every plain subcommand works.** `list`, `show`, `add`, `open`,
 `untrack`, `favorite`, `unfavorite`, `edit`, `scan` and `config` all run
 against the app's database; the observer and the TUI still return "not
-implemented". `edit` takes only `--description` so far; tags, properties,
+implemented". `edit` takes `--description` and the tag flags so far; properties,
 groups and the bin have no commands yet. The binary name `indexer` is a placeholder.
 
 ```
@@ -19,7 +19,7 @@ indexer add [dir]                track a directory, or the current one
 indexer open <query>             open a project in its application
 indexer untrack <query>          forget a project, leaving its files alone (asks first; --yes)
 indexer favorite <query>         mark a project as a favourite; unfavorite clears it
-indexer edit <query> --description <text>   change a project's fields
+indexer edit <query> --description <text> --add-tag <tag> --remove-tag <tag>   change a project's fields
 indexer scan <dir>               find projects under a folder; --import registers them
 indexer config folder-color ...  the folder colour in that table; header-color likewise
 indexer <anything> --json        {"schema": 1, "data": …} on stdout, or {"schema": 1, "error": …} on stderr

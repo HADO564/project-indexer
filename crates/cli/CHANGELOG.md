@@ -14,6 +14,7 @@ Nothing released yet.
 
 ### Added
 
+- `indexer edit <query> --add-tag <tags> --remove-tag <tags>` adds and removes tags without retyping the rest. Both repeat or take commas; a removal ignores case, so `--remove-tag rust` removes `Rust`; removing a tag the project lacks is not an error; and removals apply before additions. Given together with `--description`, everything is saved in one write.
 - `indexer edit <query> --description <text>` changes a project's description; `--description ""` clears it. `edit` is where every field that takes a value goes, so tags and properties join it as flags; with none given it is a usage error rather than a write that changes nothing.
 - `indexer favorite <query>` and `indexer unfavorite <query>` set and clear a project's favourite flag — the CLI's first write beyond adding and untracking, and the pair to `list --view favorites`. They find the project the way `show` does and take `-t/--tracker` likewise. Two verbs rather than a flag on an edit command: a state change with no value is a verb, which also lets the planned TUI bind a key to it.
 - The project table gains an ID column — the first 8 characters of each project's id, the shortest prefix `show` accepts — so a row can be copied from by id as well as by `parent/folder`.

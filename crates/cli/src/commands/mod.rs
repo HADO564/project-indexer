@@ -7,7 +7,7 @@
 
 pub mod add;
 mod config;
-mod edit;
+pub mod edit;
 mod failure;
 mod favorite;
 pub mod list;
