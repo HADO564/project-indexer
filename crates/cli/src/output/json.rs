@@ -207,6 +207,17 @@ pub fn write_error(out: &mut impl Write, error: &anyhow::Error) -> anyhow::Resul
             query: Some(query),
             matches: Some(matches.iter().map(ProjectJson::from).collect()),
         },
+        // Not normally reached: `main` prints a usage error as prose and exits
+        // 2 before any document is written, as the `--json` contract has it.
+        // The arm exists because the match must cover every `Failure`, and it
+        // reports the documented `error` kind rather than inventing a fourth
+        // one a reader has never been told about.
+        Some(Failure::Usage { message }) => ErrorJson {
+            kind: "error",
+            message: message.clone(),
+            query: None,
+            matches: None,
+        },
         None => ErrorJson {
             kind: "error",
             message: format!("{error:#}"),

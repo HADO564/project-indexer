@@ -6,4 +6,5 @@ mod edit;
 mod list;
 mod project_args;
 mod scan;
+mod support;
 mod tracker;

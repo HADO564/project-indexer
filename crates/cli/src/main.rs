@@ -6,6 +6,7 @@
 mod commands;
 mod confirm;
 mod context;
+mod editor;
 mod launcher;
 mod observe;
 mod output;
@@ -21,9 +22,10 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
-use crate::commands::Command;
+use crate::commands::{Command, Failure};
 use crate::confirm::StdinConfirmer;
 use crate::context::Context;
+use crate::editor::TerminalEditor;
 use crate::output::color::Color;
 use crate::output::{Colors, Format};
 
@@ -73,6 +75,13 @@ fn main() -> ExitCode {
     match run(cli) {
         Ok(code) => code,
         Err(e) => {
+            // A usage error is prose with exit code 2, as clap's own are —
+            // even under `--json`, which the contract reserves for results
+            // and for failures a script can act on.
+            if let Some(Failure::Usage { message }) = e.downcast_ref::<Failure>() {
+                eprintln!("indexer: {message}");
+                return ExitCode::from(2);
+            }
             // The whole cause chain is printed, so core's own message — the
             // version-skew guard above all — reaches the user intact.
             output::print_error(&e, format);
@@ -84,12 +93,18 @@ fn main() -> ExitCode {
 fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     match cli.invocation {
         None => {
-            let ctx = Context::open(Box::new(StdinConfirmer::new(cli.yes)))?;
+            let ctx = Context::open(
+                Box::new(StdinConfirmer::new(cli.yes)),
+                Box::new(TerminalEditor::new(cli.json)),
+            )?;
             tui::run(&ctx)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Invocation::Command(command)) => {
-            let ctx = Context::open(Box::new(StdinConfirmer::new(cli.yes)))?;
+            let ctx = Context::open(
+                Box::new(StdinConfirmer::new(cli.yes)),
+                Box::new(TerminalEditor::new(cli.json)),
+            )?;
             let outcome = commands::run(command, &ctx)?;
             let colors = resolve_colors(cli.folder_color, cli.header_color);
             output::print(&outcome, Format::from_json_flag(cli.json), colors)?;

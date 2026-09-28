@@ -22,6 +22,12 @@ pub enum Failure {
         matches: Vec<Project>,
         tracker: Vec<TrackerKind>,
     },
+    /// The command line was fine as far as clap could tell, but cannot be
+    /// carried out as given — a bare `edit` where no form can be opened. `main`
+    /// prints it as prose and exits 2, as clap does for its own usage errors,
+    /// even under `--json`. `message` is written by whoever raises it, so it
+    /// can say what to type instead.
+    Usage { message: String },
 }
 
 impl Failure {
@@ -39,6 +45,7 @@ impl Failure {
             Failure::Ambiguous { .. } => {
                 "multiple matches found, which one did you mean?".to_string()
             }
+            Failure::Usage { message } => message.clone(),
         }
     }
 }
@@ -64,6 +71,7 @@ impl fmt::Display for Failure {
                     human::project_table(&matches, &style)
                 )
             }
+            Failure::Usage { .. } => write!(f, "{}", self.summary()),
         }
     }
 }

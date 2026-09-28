@@ -5,8 +5,12 @@ use std::collections::BTreeMap;
 
 use clap::Parser;
 
+use indexer_core::UpdateProject;
+
+use super::support::{context, never_asked, run, Scripted};
 use crate::commands::edit::{edited_properties, edited_tags, EditArgs};
-use crate::commands::Command;
+use crate::commands::{Command, Failure, Outcome};
+use crate::editor::{ProjectEditor, TerminalEditor};
 use crate::{Cli, Invocation};
 
 /// The parsed `EditArgs`, or a panic naming what came back instead.
@@ -171,4 +175,63 @@ fn unsets_apply_before_sets_and_a_missing_name_changes_nothing() {
         edited_properties(&current, Vec::new(), &tags(&["nothere"])),
         current
     );
+}
+
+#[test]
+fn a_bare_edit_saves_what_the_editor_returns() {
+    // The form's changes go through the same `update` the flags use.
+    let ctx = context(
+        true,
+        Scripted(|_| {
+            Some(UpdateProject {
+                description: Some("From the form".into()),
+                ..Default::default()
+            })
+        }),
+    );
+    let Outcome::Edited { project } = run(&ctx, &["indexer", "edit", "app"]).unwrap() else {
+        panic!("expected `Edited`");
+    };
+    assert_eq!(project.description, "From the form");
+    assert_eq!(
+        ctx.projects.get(&project.id).unwrap().description,
+        "From the form"
+    );
+}
+
+#[test]
+fn cancelling_the_editor_changes_nothing() {
+    let ctx = context(true, Scripted(|_| None));
+    assert!(matches!(
+        run(&ctx, &["indexer", "edit", "app"]).unwrap(),
+        Outcome::Cancelled
+    ));
+    assert_eq!(
+        ctx.projects
+            .get("app-0000-4000-8000-000000000000")
+            .unwrap()
+            .description,
+        ""
+    );
+}
+
+#[test]
+fn a_field_flag_never_opens_the_editor() {
+    // `never_asked` panics if it is called.
+    let ctx = context(true, Scripted(never_asked));
+    assert!(run(&ctx, &["indexer", "edit", "app", "--add-tag", "rust"]).is_ok());
+}
+
+#[test]
+fn the_terminal_editor_refuses_under_json_with_a_usage_error() {
+    // `--json` is checked before the terminal, so this holds wherever the
+    // tests run. `main` turns a `Failure::Usage` into prose and exit code 2.
+    let project = super::support::project("app", false);
+    let err = TerminalEditor::new(true)
+        .edit(&project)
+        .expect_err("no form under --json");
+    assert!(matches!(
+        err.downcast_ref::<Failure>(),
+        Some(Failure::Usage { .. })
+    ));
 }
