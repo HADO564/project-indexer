@@ -186,6 +186,15 @@ which everything non-interactive needs, and it is the natural first piece of
 `ratatui` in the crate, which the TUI then builds on. Piped, or under
 `--json`, a bare `edit` is a usage error rather than a form nobody can see.
 
+*Widened 2026-09-29.* The form's purpose is human: to see a project at a
+glance and change what you want, not to be the only way to change anything.
+`edit app` opens a compact form — description, tags, properties — and
+`edit app --full` opens every field the GUI's edit view has, favourite as a
+checkbox. Every field the full form adds gets its own `edit` flag in the same
+step (`--name`, `--notes`, `--directory`, `--open-with`, `--group`, `--color`,
+`--icon`), so scripts, agents and the `:` line can still make every change a
+person can. Briefed in `../handoffs/2026-09-27-cli-edit-form.md`.
+
 - **Panes.** The sidebar views — All, Favourites, each group, Ungrouped, Bin —
   with counts, the project list, and the selected project's detail: its
   identity and per-detector status, the same data `inspect` returns.

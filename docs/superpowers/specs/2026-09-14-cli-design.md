@@ -63,6 +63,14 @@ Product-level plans live in [`docs/cli/ROADMAP.md`](../../cli/ROADMAP.md).
    which scripts, agents, `--json` and the `:` line still need. With stdin not
    a terminal, or under `--json`, a bare `edit` stays a usage error. Every
    other change is still a command with no form in front of it.
+   *Widened 2026-09-29:* the form is **human centric** — a way for a person to
+   see their project at a glance and change the fields they want — and never
+   the only way to change a field. `edit app` opens a compact form
+   (description, tags, properties); `edit app --full` opens every field the
+   GUI's edit view has, favourite as a checkbox. Each field the full form adds
+   gains its `edit` flag in the same step, so nothing the form changes lacks a
+   command-line way to change it (favourite's is the `favorite` /
+   `unfavorite` verbs).
 
 6. **Distribution is through package managers, and comes after the package.**
    Homebrew, winget and similar; users never download a binary by hand.
