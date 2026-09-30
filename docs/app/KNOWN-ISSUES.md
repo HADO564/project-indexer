@@ -7,13 +7,16 @@ workaround, was fixed and retired the same day. Re-verified 2026-09-08 on `main`
 at `5bb818f`: every gate below still passes on Arch, and `PI-006` still
 reproduces — its previously untested workaround is now tested, and replaced with
 one that needs no root. Extended 2026-09-14 with `PI-007`, the first entry from
-a macOS run (`main` at `ba59c61`)._
+a macOS run (`main` at `ba59c61`). Extended 2026-09-30 with `PI-008`, which no
+run on this machine could have found: it was reported by the appimage.github.io
+catalog test against the published `v0.3.1` artifact (`main` at `5ee4b63`)._
 
-Five issues are tracked here from getting the Windows-developed app compiling
-and running on Linux. They carry deliberately different dispositions: two were
-real defects, one is cosmetic log noise, one is a linter false positive, and one
-is the host distribution's problem rather than the app's. `PI-007` is macOS-only
-and was reported separately, as issue #4.
+Six issues are tracked here from getting the Windows-developed app compiling,
+running and packaging on Linux. They carry deliberately different dispositions:
+three were real defects — one of them in the packaging toolchain rather than in
+our code — one is cosmetic log noise, one is a linter false positive, and one is
+the host distribution's problem rather than the app's. `PI-007` is macOS-only and
+was reported separately, as issue #4.
 
 | ID | Issue | Severity | Status |
 |----|-------|----------|--------|
@@ -23,6 +26,7 @@ and was reported separately, as issue #4.
 | PI-005 | Missing appindicator library kills startup | High — blocks launch | **Fixed** |
 | PI-006 | AppImage bundling fails on Arch | Low — local packaging only | Environmental |
 | PI-007 | Cmd+W in fullscreen leaves a black screen | Medium — user-visible | **Fixed** |
+| PI-008 | Published AppImage starts only for its builder | High — blocks launch | **Fixed** (needs a re-release) |
 
 Nothing here blocks the Linux *build* — `cargo check`, `cargo clippy`,
 `cargo fmt --check`, `cargo test`, `pnpm run check`, `pnpm test` and `pnpm build`
@@ -349,6 +353,95 @@ must leave the window visible.
 
 The Dock icon stays while the window is hidden. That is the app's normal
 close-to-tray behaviour on macOS, not part of this issue.
+
+---
+
+## PI-008 — The published AppImage will not start for anyone but its builder
+
+**Severity:** High (blocks launch for everyone who downloads it) · **Status:** Fixed for future releases; `v0.3.1` and earlier remain affected until one is cut · **Platform:** Linux, the x86_64 AppImage only
+
+The `v0.3.1` AppImage quits immediately, before any window, for most people who
+download it:
+
+```text
+/run/firejail/appimage/AppRun: line 12: /run/firejail/appimage/AppRun.wrapped: Permission denied
+ERROR: The application exited within 11 seconds instead of showing a window
+```
+
+**Cause.** Exactly one of the 300-odd entries in the payload is owner-restricted.
+`AppRun.wrapped` is stored `0770 root:root`, so *other* is left with neither the
+read nor the execute bit, while every sibling is fine:
+
+```text
+-rwxr-xr-x  AppRun              <- the shell wrapper
+-rwxrwx---  AppRun.wrapped      <- the binary it execs: 0770
+-rw-r--r--  217 files
+drwxr-xr-x  54 dirs
+```
+
+The mode comes from Tauri, not from anything in this repository. Its AppImage
+bundler downloads `AppRun-x86_64` into the tools cache through
+`write_and_make_executable`, which calls
+`fs::set_permissions(path, from_mode(0o770))`; `fs::copy` then carries that mode
+into `AppDir/AppRun`, and linuxdeploy's GTK plugin — which needs an AppRun hook
+— renames that file to `AppRun.wrapped` and writes its own `0755` shell script
+as `AppRun`. That is why the wrapper is world-executable and the thing it execs
+is not. The file inside the shipped bundle is byte-for-byte identical to the
+upstream `AppRun-x86_64` (sha256 `f30140a4…73fb4f`), so nothing but the mode is
+wrong.
+
+**Why it was invisible here.** The AppImage runtime mounts its squashfs with
+squashfuse and without `default_permissions`, so the kernel does not check modes
+and every file reads as usable to whoever started it. The AppImage therefore
+works on the machine that built it, and on every machine its author tries. It
+only breaks for a *different* uid: under firejail, which is what the catalog
+test uses; for an extraction performed by root and then run by a user; and for
+any mount that does enforce permissions. `--appimage-extract` likewise re-owns
+the tree to the extracting user, which hides it again.
+
+**Why no gate caught it.** Every existing gate runs before or during the build —
+`cargo`, `pnpm`, and the bundler's own success. None of them looks at the
+finished artifact, and no test launches the app as another user. A green release
+run said the bundle was produced, not that it could run.
+
+**How it surfaced.** `AppImage/appimage.github.io#9004`, an auto-discovered
+catalog entry for this repository, whose test reported the `Permission denied`
+above along with `error-not-executable`. Upstream is
+`tauri-apps/tauri#16155`, closed 2026-09-28 as fixed "in 2.12" — but
+`write_and_make_executable` on `dev` still sets `0o770`, and no commit touching
+the AppImage bundler since changes it. So this is worked around here rather than
+waited out.
+
+**Fix** — `.github/workflows/release.yml`, Linux job:
+
+- A step before `tauri-action` seeds
+  `${XDG_CACHE_HOME:-$HOME/.cache}/tauri/AppRun-x86_64` with the same upstream
+  binary, checksum-pinned, at `0755`. The bundler downloads `AppRun` only when
+  the cached copy is absent, so seeding it is the entire fix — no repacking of
+  the finished AppImage, and no change to its contents.
+- A step after it runs `.github/scripts/check-appimage-permissions.sh`, which
+  extracts the bundle and fails on any file that is not other-readable, any
+  owner-executable file that is not other-executable, and any directory that is
+  not other-traversable. The check has to inspect the artifact from outside,
+  because the defect cannot be observed from the uid that produced it.
+
+Artifacts go to a *draft* release, so a failing gate blocks publication rather
+than arriving after the fact.
+
+**Verified** on the published `v0.3.1` AppImage, downloaded from the release page
+rather than taken from a build tree:
+
+| Check | Result |
+|---|---|
+| `AppRun.wrapped` mode as stored | `0770`, uid/gid `0/0` |
+| sha256 vs upstream `AppRun-x86_64` | identical — mode is the only defect |
+| Gate script against `v0.3.1` | fails, naming `AppRun.wrapped` and nothing else |
+| Gate predicates after `chmod 0755` on that one file | clean, so the one change is sufficient |
+| Launched normally on the build machine | starts fine — the mount hides the problem |
+
+**Still outstanding:** `v0.3.1` on the release page is still broken. The fix
+reaches users only when the next tag is cut; a `/retest` on the catalog issue
+before then will fail again.
 
 ---
 

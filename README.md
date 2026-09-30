@@ -287,6 +287,16 @@ sed "s|^gdk_pixbuf_binarydir=.*|gdk_pixbuf_binarydir=$shim/pixbuf/2.10.0|" \
 NO_STRIP=1 PKG_CONFIG_PATH="$shim/pkgconfig" pnpm run tauri build --bundles appimage
 ```
 
+An AppImage built this way still carries Tauri's `0770` mode on its inner
+`AppRun.wrapped`, which means it starts only for the uid that built it — see
+[PI-008](docs/app/KNOWN-ISSUES.md#pi-008--the-published-appimage-will-not-start-for-anyone-but-its-builder).
+Published builds are fixed in CI; if you intend to hand a local one to someone
+else, check it first:
+
+```sh
+.github/scripts/check-appimage-permissions.sh
+```
+
 ### NVIDIA proprietary driver
 
 On the proprietary NVIDIA driver, WebKitGTK's DMABUF renderer can't allocate GBM

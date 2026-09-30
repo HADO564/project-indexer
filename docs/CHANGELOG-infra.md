@@ -17,6 +17,37 @@ version is tagged. Newest first.
 
 ---
 
+## 2026-09-30
+
+### Fixed
+
+- **The release workflow now produces an AppImage that runs for someone other
+  than the machine that built it.** Tauri's bundler writes its cached `AppRun`
+  with mode `0770` (`tauri-apps/tauri#16155`) and copies that mode into the
+  AppDir, where linuxdeploy's GTK plugin renames it to `AppRun.wrapped` — so the
+  published `v0.3.1` AppImage exits with `Permission denied` for every uid but
+  the builder's. The Linux job now seeds the tools cache with the same upstream
+  binary, checksum-pinned, at `0755` before building; the bundler only downloads
+  `AppRun` when the cached copy is absent, so that is the whole fix. Upstream
+  closed the issue as fixed in 2.12, but its `dev` branch still sets `0o770`, so
+  the workaround stays until a released CLI actually changes it. Details in
+  `docs/app/KNOWN-ISSUES.md` → PI-008.
+
+### Added
+
+- **A release gate on AppImage permissions.**
+  `.github/scripts/check-appimage-permissions.sh` extracts the finished bundle
+  and fails on any file that is not other-readable, any owner-executable file
+  that is not other-executable, and any directory that is not other-traversable.
+  It runs after `tauri-action` in the Linux job, and because artifacts land in a
+  draft release, a failure blocks publication instead of arriving afterwards.
+  This class of defect cannot be seen from the uid that built the artifact — the
+  AppImage runtime's FUSE mount presents every file as owned by whoever started
+  it — so it has to be checked on the bundle from outside rather than trusted to
+  a green build.
+
+---
+
 ## 2026-09-14
 
 ### Changed

@@ -51,6 +51,28 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Tauri's AppImage bundler writes its cached AppRun with mode 0770
+      # (tauri-apps/tauri#16155) and `fs::copy`s that mode into the AppDir,
+      # where linuxdeploy's GTK plugin renames the file to AppRun.wrapped. That
+      # leaves "other" with no execute bit, so the AppImage starts only for a
+      # uid matching the builder's — invisible to us, because the runtime's
+      # FUSE mount reports every file as owned by whoever started it, and fatal
+      # under firejail, for root-owned extractions and for the
+      # appimage.github.io catalog test. The bundler downloads AppRun only when
+      # the cached copy is absent, so seeding it at 0755 is the whole fix; the
+      # checksum pins the byte-for-byte file the bundler would have fetched.
+      # Drop this once a released CLI writes the tools cache world-executable.
+      - name: Seed the AppImage AppRun as world-executable
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          apprun="${XDG_CACHE_HOME:-$HOME/.cache}/tauri/AppRun-x86_64"
+          mkdir -p "$(dirname "$apprun")"
+          curl -fsSL --retry 3 -o "$apprun" \
+            https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64
+          echo "f30140a43a0a59e46db21bdefdf749b9e9f2c6946e92afabbacf98b8ae73fb4f  $apprun" \
+            | sha256sum -c -
+          chmod 0755 "$apprun"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -73,3 +95,11 @@ jobs:
           # is what would have happened while this was hardcoded to false.
           prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+
+      # The artifacts go to a draft release, so a failure here blocks
+      # publication instead of arriving after the fact. The check has to happen
+      # on the finished bundle: the defect it guards against cannot be observed
+      # from the uid that produced it.
+      - name: Verify the AppImage is usable by other users
+        if: matrix.platform == 'ubuntu-22.04'
+        run: .github/scripts/check-appimage-permissions.sh
