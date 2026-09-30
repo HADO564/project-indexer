@@ -26,7 +26,7 @@ was reported separately, as issue #4.
 | PI-005 | Missing appindicator library kills startup | High — blocks launch | **Fixed** |
 | PI-006 | AppImage bundling fails on Arch | Low — local packaging only | Environmental |
 | PI-007 | Cmd+W in fullscreen leaves a black screen | Medium — user-visible | **Fixed** |
-| PI-008 | Published AppImage starts only for its builder | High — blocks launch | **Fixed** (needs a re-release) |
+| PI-008 | Published AppImage starts only for its builder | High — blocks launch | **Fixed** in `v0.3.2` |
 
 Nothing here blocks the Linux *build* — `cargo check`, `cargo clippy`,
 `cargo fmt --check`, `cargo test`, `pnpm run check`, `pnpm test` and `pnpm build`
@@ -358,7 +358,7 @@ close-to-tray behaviour on macOS, not part of this issue.
 
 ## PI-008 — The published AppImage will not start for anyone but its builder
 
-**Severity:** High (blocks launch for everyone who downloads it) · **Status:** Fixed for future releases; `v0.3.1` and earlier remain affected until one is cut · **Platform:** Linux, the x86_64 AppImage only
+**Severity:** High (blocks launch for everyone who downloads it) · **Status:** Fixed in `v0.3.2`; `v0.3.0` and `v0.3.1` are affected · **Platform:** Linux, the x86_64 AppImage only
 
 The `v0.3.1` AppImage quits immediately, before any window, for most people who
 download it:
@@ -439,9 +439,9 @@ rather than taken from a build tree:
 | Gate predicates after `chmod 0755` on that one file | clean, so the one change is sufficient |
 | Launched normally on the build machine | starts fine — the mount hides the problem |
 
-**Still outstanding:** `v0.3.1` on the release page is still broken. The fix
-reaches users only when the next tag is cut; a `/retest` on the catalog issue
-before then will fail again.
+`v0.3.2` was cut for this, because a fix in the workflow does nothing for the
+artifact already on the release page and the catalog only ever tests the latest
+release. `v0.3.0` and `v0.3.1` stay broken and cannot be repaired in place.
 
 ---
 

@@ -10,8 +10,19 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-09-30
+
+A bugfix release. Its reason for existing is the Linux AppImage: the 0.3.0 and
+0.3.1 downloads do not start for most people, and only a new build can fix that.
+The database format is unchanged, so any of these versions opens the others' data.
+
 ### Fixed
 
+- **Linux: the AppImage now starts.** The `0.3.0` and `0.3.1` AppImages quit
+  immediately, before any window, with `AppRun.wrapped: Permission denied` —
+  one file inside the bundle was left executable only by the machine that built
+  it. If that is what you downloaded, replace it with this release; the `.deb`
+  and `.rpm` packages were never affected.
 - **macOS: closing the window while it's fullscreen no longer leaves a black
   screen.** Cmd+W or the close button now takes the window out of fullscreen
   and hides it to the tray, returning you to the desktop you were on before.
@@ -225,7 +236,8 @@ The feature set below is what 0.1.1 ships.
 - Projects are stored in SQLite at `projects.db` in the platform config
   directory, with synchronous transactional writes.
 
-[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/HADO564/project-indexer/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/HADO564/project-indexer/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/HADO564/project-indexer/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/HADO564/project-indexer/compare/v0.1.1...v0.2.0
