@@ -464,6 +464,13 @@ running the gate against a bundle known to be bad and requiring it to fail —
 which is now how it is tested, in an `ubuntu:22.04` container so the awk is the
 same one CI has.
 
+**The repaired gate first ran green on the `v0.3.3` release build**, parsing 369
+payload entries and finding no offender; `v0.3.3` was cut for exactly that, since
+a gate that has never passed on real input is not yet a gate. `v0.3.2`'s release
+run stays red from the extraction bug above — a defect in the check, not in its
+artifact, which was verified by hand and is the build the catalog test passed
+against. Both releases carry the same fixed AppImage.
+
 `v0.3.2` was cut for this, because a fix in the workflow does nothing for the
 artifact already on the release page and the catalog only ever tests the latest
 release. `v0.3.0` and `v0.3.1` stay broken and cannot be repaired in place.
