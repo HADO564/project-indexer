@@ -10,6 +10,13 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+## [0.3.3] — 2026-09-30
+
+No user-facing changes; identical in behaviour to 0.3.2. Cut so that the repaired
+AppImage permission gate runs against a real release build — the 0.3.2 run failed
+on a bug in the gate itself, not in the artifact, and a check that has never run
+green is not yet a check.
+
 ## [0.3.2] — 2026-09-30
 
 A bugfix release. Its reason for existing is the Linux AppImage: the 0.3.0 and
@@ -236,7 +243,8 @@ The feature set below is what 0.1.1 ships.
 - Projects are stored in SQLite at `projects.db` in the platform config
   directory, with synchronous transactional writes.
 
-[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/HADO564/project-indexer/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/HADO564/project-indexer/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/HADO564/project-indexer/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/HADO564/project-indexer/compare/v0.2.0...v0.3.0
