@@ -420,24 +420,49 @@ waited out.
   the cached copy is absent, so seeding it is the entire fix — no repacking of
   the finished AppImage, and no change to its contents.
 - A step after it runs `.github/scripts/check-appimage-permissions.sh`, which
-  extracts the bundle and fails on any file that is not other-readable, any
-  owner-executable file that is not other-executable, and any directory that is
-  not other-traversable. The check has to inspect the artifact from outside,
-  because the defect cannot be observed from the uid that produced it.
+  reads the modes stored in the bundle with `unsquashfs -ll` and fails on any
+  file that is not other-readable, any owner-executable file that is not
+  other-executable, and any directory that is not other-traversable. The check
+  has to read the artifact from outside, because the defect cannot be observed
+  from the uid that produced it.
 
 Artifacts go to a *draft* release, so a failing gate blocks publication rather
 than arriving after the fact.
 
-**Verified** on the published `v0.3.1` AppImage, downloaded from the release page
-rather than taken from a build tree:
+**Verified** on the published AppImages, downloaded from the release page rather
+than taken from a build tree:
 
 | Check | Result |
 |---|---|
-| `AppRun.wrapped` mode as stored | `0770`, uid/gid `0/0` |
+| `v0.3.1` `AppRun.wrapped` mode as stored | `0770`, uid/gid `0/0` |
 | sha256 vs upstream `AppRun-x86_64` | identical — mode is the only defect |
-| Gate script against `v0.3.1` | fails, naming `AppRun.wrapped` and nothing else |
-| Gate predicates after `chmod 0755` on that one file | clean, so the one change is sufficient |
-| Launched normally on the build machine | starts fine — the mount hides the problem |
+| Gate against `v0.3.1` | fails, naming `AppRun.wrapped` and nothing else |
+| `v0.3.2` `AppRun.wrapped` mode as stored | `0755` — seeding works |
+| `v0.3.2` stored directory modes | 55 × `0755`, 1 × `0777`; none owner-only |
+| Gate against `v0.3.2` | passes, 369 payload entries parsed |
+| `v0.3.1` launched normally on the build machine | starts fine — the mount hides the problem |
+
+**Two things made the first version of the gate worthless**, both found by running
+it for real rather than by reading it:
+
+1. **It extracted the bundle.** `--appimage-extract` under the runtime `v0.3.2`
+   ships creates *every* directory `0700` no matter what the image stores, so the
+   gate reported 56 unreadable directories in a payload whose stored modes were
+   all `0755` — and it did so on the release run, having passed on `v0.3.1`,
+   whose older runtime extracted `0755`. Extracted directory modes describe the
+   extractor. Reading the image with `unsquashfs -ll` is the fix.
+2. **Its mode regex used `{9}`.** The default awk on Ubuntu is mawk, which does
+   not honour interval expressions, so the pattern matched nothing, no offender
+   was ever printed, and the gate reported `ok` for the known-broken `v0.3.1` as
+   readily as for the fixed `v0.3.2`. Selecting rows by `length($1) == 10`
+   avoids intervals entirely, and the entry count is now asserted so that a
+   listing which fails to parse fails the gate instead of passing it.
+
+The second is the more instructive: a check that silently matches nothing is
+worse than no check, because it manufactures confidence. Both were caught by
+running the gate against a bundle known to be bad and requiring it to fail —
+which is now how it is tested, in an `ubuntu:22.04` container so the awk is the
+same one CI has.
 
 `v0.3.2` was cut for this, because a fix in the workflow does nothing for the
 artifact already on the release page and the catalog only ever tests the latest

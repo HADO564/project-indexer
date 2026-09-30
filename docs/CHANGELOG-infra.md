@@ -36,15 +36,23 @@ version is tagged. Newest first.
 ### Added
 
 - **A release gate on AppImage permissions.**
-  `.github/scripts/check-appimage-permissions.sh` extracts the finished bundle
-  and fails on any file that is not other-readable, any owner-executable file
-  that is not other-executable, and any directory that is not other-traversable.
-  It runs after `tauri-action` in the Linux job, and because artifacts land in a
-  draft release, a failure blocks publication instead of arriving afterwards.
-  This class of defect cannot be seen from the uid that built the artifact — the
-  AppImage runtime's FUSE mount presents every file as owned by whoever started
-  it — so it has to be checked on the bundle from outside rather than trusted to
-  a green build.
+  `.github/scripts/check-appimage-permissions.sh` reads the modes stored in the
+  finished bundle with `unsquashfs -ll` and fails on any file that is not
+  other-readable, any owner-executable file that is not other-executable, and any
+  directory that is not other-traversable. It runs after `tauri-action` in the
+  Linux job — which is why that job now installs `squashfs-tools` — and because
+  artifacts land in a draft release, a failure blocks publication instead of
+  arriving afterwards. This class of defect cannot be seen from the uid that
+  built the artifact — the AppImage runtime's FUSE mount presents every file as
+  owned by whoever started it — so it has to be read off the bundle rather than
+  trusted to a green build.
+
+  It deliberately does *not* use `--appimage-extract`: the current runtime
+  creates every extracted directory `0700` whatever the image says, so extracted
+  directory modes describe the extractor, not the artifact. It also avoids awk
+  interval expressions (`{n}`), which mawk — the default awk on Ubuntu — ignores,
+  and asserts that the listing parsed at all. Both of those turned the first
+  version of this gate into a rubber stamp; see PI-008.
 
 ---
 

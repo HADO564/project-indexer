@@ -291,7 +291,8 @@ An AppImage built this way still carries Tauri's `0770` mode on its inner
 `AppRun.wrapped`, which means it starts only for the uid that built it — see
 [PI-008](docs/app/KNOWN-ISSUES.md#pi-008--the-published-appimage-will-not-start-for-anyone-but-its-builder).
 Published builds are fixed in CI; if you intend to hand a local one to someone
-else, check it first:
+else, check it first (it needs `squashfs-tools`, and reads the modes stored in
+the bundle rather than extracting it):
 
 ```sh
 .github/scripts/check-appimage-permissions.sh

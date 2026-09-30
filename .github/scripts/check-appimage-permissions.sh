@@ -10,11 +10,25 @@
 # whoever started it, so an owner-only binary still launches for the person who
 # built it — the defect cannot be seen from the inside, and only appears for a
 # different uid: firejail, a root-owned extraction, the appimage.github.io
-# catalog test. That is why this gate inspects the finished artifact from
-# outside rather than trusting the build to have gone well.
+# catalog test. That is why this gate exists at all.
+#
+# It reads the modes *stored in the squashfs* with `unsquashfs -ll`, and does
+# not extract. --appimage-extract is not usable for this: the current runtime
+# creates every directory 0700 regardless of what the image says, so extracted
+# directory modes describe the extractor rather than the artifact.
+#
+# Nothing here may use awk interval expressions (`{n}`): the default awk on
+# Ubuntu is mawk, which does not honour them, and a regex that quietly matches
+# nothing turns this gate into a rubber stamp. That is also why the parsed entry
+# count is asserted below — an unreadable listing has to fail, not pass.
 #
 # See docs/app/KNOWN-ISSUES.md → PI-008.
 set -euo pipefail
+
+if ! command -v unsquashfs >/dev/null; then
+  echo "error: unsquashfs not found — install squashfs-tools" >&2
+  exit 1
+fi
 
 shopt -s nullglob
 bundles=(target/release/bundle/appimage/*.AppImage)
@@ -27,27 +41,55 @@ fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+# `unsquashfs -ll` prints: mode owner/group size date time path, with a trailing
+# " -> target" on symlinks. Selecting rows by a 10-character mode in the first
+# field keeps this free of interval expressions.
+select_rows='length($1) == 10 && $1 ~ /^[-dlbcsp]/'
+
 status=0
 
 for appimage in "${bundles[@]}"; do
   echo "Checking $appimage"
 
-  # Extract rather than mount: --appimage-extract needs no FUSE, and it
-  # preserves the stored modes (only ownership becomes ours), which is exactly
-  # what is under test.
-  rm -rf "$work/squashfs-root"
-  cp "$appimage" "$work/app.AppImage"
-  chmod +x "$work/app.AppImage"
-  (cd "$work" && ./app.AppImage --appimage-extract >/dev/null)
+  chmod +x "$appimage"
+  offset="$("$appimage" --appimage-offset)"
 
-  root="$work/squashfs-root"
+  listing="$work/listing.txt"
+  unsquashfs -o "$offset" -ll "$appimage" > "$listing"
 
-  # Three ways a payload can be unusable to another uid. Symlinks are skipped:
-  # their own mode is not consulted, the target's is.
+  # A listing that does not parse must fail. Silence would otherwise be
+  # indistinguishable from a clean payload.
+  entries="$(awk "$select_rows {n++} END {print n + 0}" "$listing")"
+  if [ "$entries" -lt 10 ]; then
+    echo "error: could not read the payload of $(basename "$appimage") —" >&2
+    echo "parsed $entries entries from unsquashfs, which cannot be right." >&2
+    status=1
+    continue
+  fi
+  echo "  $entries entries in the payload"
+
   offenders="$(
-    find "$root" -type f ! -perm -o=r -printf 'not readable by others: %M %P\n'
-    find "$root" -type f -perm -u=x ! -perm -o=x -printf 'executable only for its owner: %M %P\n'
-    find "$root" -type d \( ! -perm -o=r -o ! -perm -o=x \) -printf 'not traversable by others: %M %P\n'
+    awk "$select_rows {
+      mode = \$1
+      path = \$6
+      for (i = 7; i <= NF; i++) path = path \" \" \$i
+      arrow = index(path, \" -> \")
+      if (arrow > 0) path = substr(path, 1, arrow - 1)
+      sub(/^squashfs-root\/?/, \"\", path)
+      if (path == \"\") path = \"(payload root)\"
+
+      type       = substr(mode, 1, 1)
+      owner_exec = substr(mode, 4, 1) == \"x\" || substr(mode, 4, 1) == \"s\"
+      other_read = substr(mode, 8, 1) == \"r\"
+      other_exec = substr(mode, 10, 1) == \"x\" || substr(mode, 10, 1) == \"t\"
+
+      if (type == \"-\") {
+        if (!other_read)               print \"not readable by others: \" mode \" \" path
+        if (owner_exec && !other_exec) print \"executable only for its owner: \" mode \" \" path
+      } else if (type == \"d\") {
+        if (!other_read || !other_exec) print \"not traversable by others: \" mode \" \" path
+      }
+    }" "$listing"
   )"
 
   if [ -n "$offenders" ]; then
