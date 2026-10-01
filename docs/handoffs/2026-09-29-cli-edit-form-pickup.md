@@ -5,7 +5,7 @@
 Pushed; nothing uncommitted. `main` has not moved since the branch was cut —
 check with `git fetch && git log HEAD..origin/main` before starting.
 **The task brief:** [`2026-09-27-cli-edit-form.md`](2026-09-27-cli-edit-form.md)
-— decisions (§2), shape (§3), the thirteen steps (§4), definition of done
+— decisions (§2), shape (§3), the fourteen steps (§4), definition of done
 (§5). This file does not repeat it; it says where the work stands and how to
 carry on.
 
@@ -170,13 +170,14 @@ impl FormState {
    field is `Some(String::new())`, not `None`.
 
 **Tests (yours):** loading a project fills the fields; typing, Backspace and
-cursor movement including non-ASCII text; focus wraps or stops at the ends
-(decide which with the user — the GUI's Tab order wraps); Enter / Esc /
+cursor movement including non-ASCII text; focus wraps at the ends when
+`wrap` is on and stops when it is off (decided 2026-09-30: wraps by default,
+the `form-wrap` setting of step 6 turns it off); Enter / Esc /
 Ctrl+C give their `Action`; a key release does nothing; `changes()` is empty
 for an untouched form, carries only the edited field, and ignores a tag
 retyped in another case.
 
-**Then:** steps 3–6 per the brief. Step 4 (drawing) is where the user first
+**Then:** steps 3–7 per the brief. Step 4 (drawing) is where the user first
 sees `ratatui`; step 5 needs the stderr-backed `Terminal` and a panic hook
 that restores the terminal, because `ratatui::init()` assumes stdout.
 

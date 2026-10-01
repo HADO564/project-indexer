@@ -47,6 +47,7 @@ agents and the TUI's `:` line can make every change a person can.
 | Enter | **Saves, from any field.** Every input is one line, so Enter is never needed for a newline. Tab / Shift+Tab and ↓ / ↑ move between fields. Esc cancels. |
 | Properties | **One row per property,** a name input and a value input, like the GUI's property editor. Ctrl+N adds an empty row; Ctrl+D deletes the row under the cursor. |
 | Tags | One line, comma-separated, as the GUI's tag box. |
+| Focus at the ends | **Wraps by default, a setting turns it off** (decided 2026-09-30). Tab on the last field goes to the first and Shift+Tab on the first to the last, as the GUI's Tab order does. `indexer config form-wrap on\|off [--reset]` saves the choice in `cli-settings.json` (`Settings.form_wrap: Option<bool>`, missing = on); off, focus stops at the ends. A setting rather than a flag because it is a preference, not a per-run choice. `FormState::new` takes it as a plain `bool`, so the form stays pure and both behaviours are unit-tested. |
 | When the form opens | Only when **no field flag** was given, stdin and stderr are both terminals, and `--json` is off. Otherwise a bare `edit` (or `edit --full`) stays a **usage error, exit 2**, as today. |
 
 ## 3. Shape
@@ -101,8 +102,10 @@ between them is a natural point for a pull request.
    `ctx.editor` — a `ProjectEditor` on `Context` — when no field flag was
    given, and `TerminalEditor` refuses without a terminal or under `--json`
    with `Failure::Usage`, which `main` turns into prose and exit 2.
-2. **`FormState` for the three fields** — load from a `Project`, a single-line
-   text input (insert, backspace, ←/→), focus movement, Enter → `Save`, Esc →
+2. ~~**`FormState` for the three fields**~~ *(done 2026-10-01; properties
+   moved to step 3 with their rows.)* — load from a `Project`, a single-line
+   text input (insert, backspace, ←/→), focus movement (wrapping or stopping
+   at the ends, as a `bool` given to `FormState::new`), Enter → `Save`, Esc →
    `Cancel`, and `changes()`. No terminal; unit tests only.
 3. **Property rows** — name and value per row, Ctrl+N / Ctrl+D, and
    `changes()` for the map, reusing `edit::edited_properties`' rules
@@ -114,36 +117,41 @@ between them is a natural point for a pull request.
 5. **The terminal and the loop** — `terminal.rs` (alternate screen and raw
    mode on stderr, restored on every exit including a panic), the
    draw → read key → `handle` loop, replacing `TerminalEditor`'s placeholder.
-6. **By hand, then docs.**
+6. **The `form-wrap` setting** — `Settings.form_wrap: Option<bool>` (missing =
+   on), `indexer config form-wrap on|off [--reset]` beside the colour
+   settings, and `main` passing it to `TerminalEditor::new`, which hands it to
+   `FormState::new`. A broken settings file falls back to wrapping, as the
+   colours fall back to their defaults.
+7. **By hand, then docs.**
 
 **Part 2 — `--full`, one field and its flag at a time**
 
-7. **`--full` and the favourite checkbox.** The flag (a usage error beside a
+8. **`--full` and the favourite checkbox.** The flag (a usage error beside a
    field flag, or without a terminal), `FormState` holding which form it is,
    and a checkbox input toggled with Space. Favourite's command-line way is
    the `favorite` / `unfavorite` verbs, so it needs no new flag.
-8. **Name and notes** — `--name`, `--notes` and their text fields. `--notes ""`
+9. **Name and notes** — `--name`, `--notes` and their text fields. `--notes ""`
    clears the notes (`UpdateProject.notes` is `Some(None)`).
-9. **Directory** — `--directory` and a text field. Core validates the path;
-   folder browsing can come later.
-10. **Open with** — `--open-with` and a text field (`""` clears it); a picker
+10. **Directory** — `--directory` and a text field. Core validates the path;
+    folder browsing can come later.
+11. **Open with** — `--open-with` and a text field (`""` clears it); a picker
     over `platform::list_installed_apps` can come later.
-11. **Group** — `--group <name>`, resolved to an id through `ctx.groups`
+12. **Group** — `--group <name>`, resolved to an id through `ctx.groups`
     (a name no group has, or one several groups share, is an error), and
     `--group ""` to ungroup; in the form, a choice cycled with ←/→ rather than
     typed.
-12. **Colour and icon** — `--color` (a palette name or `#rrggbb`, core's rule)
+13. **Colour and icon** — `--color` (a palette name or `#rrggbb`, core's rule)
     and `--icon` (a bundled name or an existing `custom:<name>`; uploading a
     custom icon stays in the GUI). Text fields first; a swatch row and an icon
     list can come later.
-13. **By hand, then docs and the PR.**
+14. **By hand, then docs and the PR.**
 
 ## 5. Definition of done
 
 - [ ] Steps built in order, each reviewed before the next
 - [ ] `cargo clippy --workspace --all-targets`, `cargo fmt --all -- --check`,
       `cargo test --workspace`
-- [ ] By hand in a real terminal, per steps 6 and 13: open each form, edit
+- [ ] By hand in a real terminal, per steps 7 and 14: open each form, edit
       each field, save; cancel; Ctrl+C; resize while open; a panic leaves the
       terminal usable; and `edit app` / `edit app --full` piped or under
       `--json` still exit 2
