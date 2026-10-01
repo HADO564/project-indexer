@@ -117,6 +117,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 - [ ] A per-project action menu (LazyVim / which-key style) on `Space` and on right-click, built from the `Command` definitions; every entry also reachable by key
 - [ ] Prose on the message line, not stderr — see the item in milestone 3; a stray `eprintln!` lands on top of the alternate screen buffer and stays there
 - [ ] A hint line or `?` help overlay showing the keys
+- [ ] **Configurable keys** (asked for 2026-10-01): a user rebinds any shortcut — the edit form's Ctrl+N / Ctrl+D as much as the TUI's letters — through a `config` command, saved in `cli-settings.json`, never only by editing the file. One keymap for the form and the TUI: each key resolves to a named action (`add-row`, `delete-row`, `open`, …) before anything acts on it, so the hint line, the `?` overlay and the action menu show the user's bindings, not the defaults. A binding that clashes with another in the same place is refused. Until then the form's keys are fixed in `FormState::handle`; moving them behind the keymap is a change to that one function
 - [ ] `y/n` confirmation on the command line for destructive commands
 - [ ] Refreshes when another process writes, via `PRAGMA data_version`
 

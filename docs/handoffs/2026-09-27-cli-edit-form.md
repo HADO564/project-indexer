@@ -45,7 +45,8 @@ agents and the TUI's `:` line can make every change a person can.
 | Every field is also a flag | A field is never editable **only** in the form. Each field the full form adds gets its `edit` flag **in the same step** (`--name`, `--notes`, `--directory`, `--open-with`, `--group`, `--color`, `--icon`), so the form and the command line cannot drift apart. The rule is not "the form shows only what has a flag" but "nothing the form changes lacks a command-line way to change it". |
 | Favourite | **A checkbox in the full form,** as in the GUI (decided 2026-09-29). It saves through the same `update`; on the command line it stays the `favorite` / `unfavorite` verbs, which is its command-line way. |
 | Enter | **Saves, from any field.** Every input is one line, so Enter is never needed for a newline. Tab / Shift+Tab and ↓ / ↑ move between fields. Esc cancels. |
-| Properties | **One row per property,** a name input and a value input, like the GUI's property editor. Ctrl+N adds an empty row; Ctrl+D deletes the row under the cursor. |
+| Properties | **One row per property,** a name input and a value input, like the GUI's property editor. Ctrl+N adds an empty row and focuses its name; Ctrl+D deletes the row under the cursor. |
+| Empty rows | **A row needs a name; leaving an empty row removes it** (decided 2026-10-01). When focus leaves a row whose name *and* value are both empty — a Ctrl+N row never filled in, or a loaded property with both boxes cleared — the row is removed; Ctrl+N brings a new one. Ctrl+N does nothing while the focused row is empty, so blank rows cannot stack up. Saving drops an empty row still under focus. A row with a value but no name is kept and sent, and core refuses it with "a property name cannot be empty", as `edit --set =x` is refused: nothing typed is thrown away silently. Two names equal ignoring case: **the lower row wins**, as a later `--set` replaces an earlier name. |
 | Tags | One line, comma-separated, as the GUI's tag box. |
 | Focus at the ends | **Wraps by default, a setting turns it off** (decided 2026-09-30). Tab on the last field goes to the first and Shift+Tab on the first to the last, as the GUI's Tab order does. `indexer config form-wrap on\|off [--reset]` saves the choice in `cli-settings.json` (`Settings.form_wrap: Option<bool>`, missing = on); off, focus stops at the ends. A setting rather than a flag because it is a preference, not a per-run choice. `FormState::new` takes it as a plain `bool`, so the form stays pure and both behaviours are unit-tested. |
 | When the form opens | Only when **no field flag** was given, stdin and stderr are both terminals, and `--json` is off. Otherwise a bare `edit` (or `edit --full`) stays a **usage error, exit 2**, as today. |
@@ -107,9 +108,10 @@ between them is a natural point for a pull request.
    text input (insert, backspace, ←/→), focus movement (wrapping or stopping
    at the ends, as a `bool` given to `FormState::new`), Enter → `Save`, Esc →
    `Cancel`, and `changes()`. No terminal; unit tests only.
-3. **Property rows** — name and value per row, Ctrl+N / Ctrl+D, and
-   `changes()` for the map, reusing `edit::edited_properties`' rules
-   (names ignoring case, values as typed).
+3. **Property rows** — name and value per row, Ctrl+N / Ctrl+D, an empty
+   row removed when focus leaves it (§2, *Empty rows*), and `changes()` for
+   the map, reusing `edit::edited_properties`' rules (names ignoring case,
+   the lower of two equal names wins, values as typed).
 4. **Drawing** — `ui::form::draw`: a bordered block titled with the project's
    name, labelled inputs, the focused one highlighted with the cursor in it,
    and a hint line (`Enter save · Tab next · Esc cancel`). Tested with
