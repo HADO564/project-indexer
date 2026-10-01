@@ -25,6 +25,7 @@ dirs = "6"
 # Hands a path to the system opener (`open`, `start`, the XDG handler). The
 # same crate `tauri-plugin-opener` wraps, so the CLI and the app agree.
 open = "5"
+ratatui = "0.30.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The terminal's width, so `list`'s table can fill and centre in it.

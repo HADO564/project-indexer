@@ -5,3 +5,4 @@ mod commands;
 mod output;
 mod paths;
 mod settings;
+mod tui;
