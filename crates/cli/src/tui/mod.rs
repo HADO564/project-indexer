@@ -5,12 +5,13 @@
 
 mod app;
 mod cmdline;
-// Nothing outside the tests calls the form until `TerminalEditor` runs it
-// (step 5 of the edit-form brief); drop this then.
+// Nothing outside the tests calls the form or its drawing until
+// `TerminalEditor` runs them (step 5 of the edit-form brief); drop these then.
 #[allow(dead_code)]
 pub mod form;
 mod keys;
-mod ui;
+#[allow(dead_code)]
+pub mod ui;
 
 use anyhow::bail;
 

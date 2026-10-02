@@ -26,6 +26,11 @@ impl TextInput {
         self.value.as_str()
     }
 
+    /// Where the cursor is, in characters from the start.
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }
+
     pub fn insert(&mut self, c: char) {
         let byte_pos = self.byte_index(self.cursor);
         self.value.insert(byte_pos, c);
@@ -86,12 +91,20 @@ impl TextInput {
 }
 
 /// One property: a name box and a value box side by side.
-struct PropertyRow {
+pub struct PropertyRow {
     name: TextInput,
     value: TextInput,
 }
 
 impl PropertyRow {
+    pub fn name(&self) -> &TextInput {
+        &self.name
+    }
+
+    pub fn value(&self) -> &TextInput {
+        &self.value
+    }
+
     fn is_empty(&self) -> bool {
         self.name.value().is_empty() && self.value.value().is_empty()
     }
@@ -103,9 +116,10 @@ pub enum Action {
     Cancel,
 }
 
+/// Which box keys go to.
 // `Copy`: the focus is a small value, read and replaced whole, never shared.
-#[derive(Clone, Copy)]
-enum Focus {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Focus {
     Description,
     Tags,
     Name(usize),
@@ -123,6 +137,8 @@ impl Focus {
 }
 
 pub struct FormState {
+    /// The project's name, for the form's title. Not editable here.
+    title: String,
     description: String,
     edit_description: TextInput,
     tags: Vec<String>,
@@ -138,6 +154,7 @@ pub struct FormState {
 impl FormState {
     pub fn new(project: &Project, wrap: bool) -> Self {
         Self {
+            title: project.name.clone(),
             description: project.description.clone(),
             edit_description: TextInput::new(&project.description),
             tags: project.tags.clone(),
@@ -155,6 +172,33 @@ impl FormState {
             wrap,
             pending_delete: None,
         }
+    }
+
+    // Read-only views for `ui::form::draw`, which paints and decides nothing.
+
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub fn focus(&self) -> Focus {
+        self.focus
+    }
+
+    pub fn description_input(&self) -> &TextInput {
+        &self.edit_description
+    }
+
+    pub fn tags_input(&self) -> &TextInput {
+        &self.edit_tags
+    }
+
+    pub fn rows(&self) -> &[PropertyRow] {
+        &self.rows
+    }
+
+    /// The row Ctrl+D is asking about, while it waits for `y`.
+    pub fn pending_delete(&self) -> Option<usize> {
+        self.pending_delete
     }
 
     /// Tab / ↓. On the last box (the last row's value, or the tags when there

@@ -113,7 +113,8 @@ between them is a natural point for a pull request.
    (§2, *Properties*), and `changes()` for
    the map, reusing `edit::edited_properties`' rules (names ignoring case,
    the lower of two equal names wins, values as typed).
-4. **Drawing** — `ui::form::draw`: a bordered block titled with the project's
+4. ~~**Drawing**~~ *(done 2026-10-02; modifiers only, no colours, so it
+   reads the same under `NO_COLOR`.)* — `ui::form::draw`: a bordered block titled with the project's
    name, labelled inputs, the focused one highlighted with the cursor in it,
    and a hint line (`Enter save · Tab next · Esc cancel`). Tested with
    ratatui's `TestBackend`.
