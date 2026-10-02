@@ -7,10 +7,10 @@ use clap::Parser;
 
 use indexer_core::UpdateProject;
 
-use super::support::{context, never_asked, run, Scripted};
+use super::support::{context, never_asked, run, Expecting, Scripted};
 use crate::commands::edit::{edited_properties, edited_tags, EditArgs};
 use crate::commands::{Command, Failure, Outcome};
-use crate::editor::{ProjectEditor, TerminalEditor};
+use crate::editor::{FormKind, ProjectEditor, TerminalEditor};
 use crate::{Cli, Invocation};
 
 /// The parsed `EditArgs`, or a panic naming what came back instead.
@@ -228,7 +228,7 @@ fn the_terminal_editor_refuses_under_json_with_a_usage_error() {
     // tests run. `main` turns a `Failure::Usage` into prose and exit code 2.
     let project = super::support::project("app", false);
     let err = TerminalEditor::new(true)
-        .edit(&project)
+        .edit(&project, FormKind::Compact)
         .expect_err("no form under --json");
     assert!(matches!(
         err.downcast_ref::<Failure>(),
@@ -253,4 +253,37 @@ fn an_editor_saved_untouched_writes_nothing() {
         before,
         "no write, so `updated_at` does not move"
     );
+}
+
+// `--full` chooses the form, and nothing else.
+
+#[test]
+fn a_bare_edit_asks_for_the_compact_form() {
+    let ctx = context(true, Expecting(FormKind::Compact));
+    assert!(run(&ctx, &["indexer", "edit", "app"]).is_ok());
+}
+
+#[test]
+fn full_asks_for_the_full_form() {
+    let ctx = context(true, Expecting(FormKind::Full));
+    assert!(run(&ctx, &["indexer", "edit", "app", "--full"]).is_ok());
+}
+
+#[test]
+fn full_beside_a_field_flag_is_a_usage_error() {
+    for flag in [
+        ["--description", "x"],
+        ["--add-tag", "rust"],
+        ["--remove-tag", "rust"],
+        ["--set", "k=v"],
+        ["--unset", "k"],
+    ] {
+        let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", flag[0], flag[1]])
+            .expect_err("--full only chooses the form");
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::ArgumentConflict,
+            "{flag:?}"
+        );
+    }
 }

@@ -15,11 +15,18 @@ use crate::settings;
 use crate::tui;
 use crate::tui::form::{Action, FormState};
 
+/// Which form `edit` opens: the compact one, or every field with `--full`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FormKind {
+    Compact,
+    Full,
+}
+
 pub trait ProjectEditor {
     /// Lets the user edit `project`: `Some` with the changes to save, or
     /// `None` if they cancelled. An editor that cannot run here — no terminal,
     /// or `--json` — returns [`Failure::Usage`] rather than guessing.
-    fn edit(&self, project: &Project) -> anyhow::Result<Option<UpdateProject>>;
+    fn edit(&self, project: &Project, kind: FormKind) -> anyhow::Result<Option<UpdateProject>>;
 }
 
 /// The shell's editor: a full-screen form drawn on stderr, when there is a
@@ -35,7 +42,7 @@ impl TerminalEditor {
 }
 
 impl ProjectEditor for TerminalEditor {
-    fn edit(&self, project: &Project) -> anyhow::Result<Option<UpdateProject>> {
+    fn edit(&self, project: &Project, _kind: FormKind) -> anyhow::Result<Option<UpdateProject>> {
         // stdin to read keys from and stderr to draw on — stdout is never
         // needed, so `indexer edit app > out` still gets the form. Under
         // `--json` a script is driving, and a form nobody can see would hang

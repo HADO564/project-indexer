@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 
 use super::{find_one, Outcome, TrackerKind};
 use crate::context::Context;
+use crate::editor::FormKind;
 
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("change").multiple(true)))]
@@ -56,16 +57,27 @@ pub struct EditArgs {
     /// Repeat the flag or separate the kinds with commas.
     #[arg(long, short = 't', value_enum, value_delimiter = ',')]
     pub tracker: Vec<TrackerKind>,
+
+    /// Open the form with every field, not just the description, tags and
+    /// properties. It only chooses the form, so it cannot be combined with a
+    /// field flag.
+    #[arg(long, conflicts_with = "change")]
+    pub full: bool,
 }
 
 pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
     // Asked before `find_one` takes `args.project`: once one field has been
     // moved out of `args`, the struct can no longer be lent whole.
     let from_form = !has_field_flag(&args);
+    let kind = if args.full {
+        FormKind::Full
+    } else {
+        FormKind::Compact
+    };
     let project = find_one(ctx, args.project, super::unique_kinds(&args.tracker))?;
 
     let update = if from_form {
-        match ctx.editor.edit(&project)? {
+        match ctx.editor.edit(&project, kind)? {
             Some(update) => update,
             None => return Ok(Outcome::Cancelled),
         }
