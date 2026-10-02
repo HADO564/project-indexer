@@ -78,7 +78,7 @@ fn the_form_lays_out_its_fields() {
             "│     Stage       beta                                     │",
             "│                                                          │",
             "│                                                          │",
-            "│ Enter save · Esc cancel · Tab next · Shift+Tab back      │",
+            "│ Enter save · Esc cancel · Tab next · Ctrl+N add property │",
             "└──────────────────────────────────────────────────────────┘",
         ]
     );
@@ -188,7 +188,28 @@ fn rows_scroll_to_keep_the_focused_row_on_screen() {
 }
 
 #[test]
-fn a_wide_terminal_shows_every_hint() {
-    let terminal = render(&form(), 100, 11);
-    assert!(screen(&terminal)[9].contains("Ctrl+N add property · Ctrl+D delete"));
+fn the_hints_follow_the_focus() {
+    // The hint line's text, without the borders and padding.
+    let line = |form: &FormState| {
+        screen(&render(form, 100, 11))[9]
+            .trim_matches(|c| c == '│' || c == ' ')
+            .to_string()
+    };
+
+    let mut form = form();
+    assert_eq!(
+        line(&form),
+        "Enter save · Esc cancel · Tab next · Ctrl+N add property · Shift+Tab back",
+        "on the description: no Ctrl+D, nothing to delete"
+    );
+
+    press(&mut form, KeyCode::Tab);
+    press(&mut form, KeyCode::Tab); // Client's name
+    assert_eq!(
+        line(&form),
+        "Enter value · Esc leave properties · Tab next · Ctrl+N add property · Ctrl+D delete"
+    );
+
+    press(&mut form, KeyCode::Enter); // Client's value
+    assert!(line(&form).starts_with("Enter save · Esc leave properties"));
 }

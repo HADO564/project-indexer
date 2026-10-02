@@ -30,16 +30,32 @@ use crate::tui::form::{Focus, FormState, TextInput};
 const LABEL_WIDTH: u16 = 16;
 const MARKER_WIDTH: u16 = 4;
 
-/// The keys, most needed first: a narrow terminal drops them from the end,
-/// whole, rather than cutting one off mid-word.
-const HINTS: [&str; 6] = [
-    "Enter save",
-    "Esc cancel",
-    "Tab next",
-    "Shift+Tab back",
-    "Ctrl+N add property",
-    "Ctrl+D delete",
-];
+/// The keys for where focus is, most needed first: a narrow terminal drops
+/// them from the end, whole, rather than cutting one off mid-word. Enter and
+/// Esc say what they do here; Ctrl+D is only offered on a row.
+fn hints(focus: Focus) -> Vec<&'static str> {
+    let on_row = matches!(focus, Focus::Name(_) | Focus::Value(_));
+    let mut hints = vec![
+        if matches!(focus, Focus::Name(_)) {
+            "Enter value"
+        } else {
+            "Enter save"
+        },
+        if on_row {
+            "Esc leave properties"
+        } else {
+            "Esc cancel"
+        },
+        "Tab next",
+        "Ctrl+N add property",
+    ];
+    if on_row {
+        hints.push("Ctrl+D delete");
+    }
+    // Last, so the first to go: Tab's partner is the easiest to guess.
+    hints.push("Shift+Tab back");
+    hints
+}
 
 pub fn draw(frame: &mut Frame, state: &FormState) {
     let block = Block::bordered().title(format!(" Edit {} ", state.title()));
@@ -211,17 +227,17 @@ fn hint_line(frame: &mut Frame, area: Rect, state: &FormState) {
             ))
         }
         None => Line::from(Span::styled(
-            fitting_hints(area.width as usize),
+            fitting_hints(&hints(state.focus()), area.width as usize),
             Style::new().add_modifier(Modifier::DIM),
         )),
     };
     frame.render_widget(Paragraph::new(line), area);
 }
 
-/// As many of `HINTS` as fit in `width` columns, joined with ` · `.
-fn fitting_hints(width: usize) -> String {
+/// As many of `hints` as fit in `width` columns, joined with ` · `.
+fn fitting_hints(hints: &[&str], width: usize) -> String {
     let mut line = String::new();
-    for hint in HINTS {
+    for hint in hints {
         let next = if line.is_empty() {
             hint.to_string()
         } else {

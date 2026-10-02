@@ -720,3 +720,110 @@ fn of_two_names_equal_ignoring_case_the_lower_row_wins() {
         Some(props(&[("Stage", "beta"), ("client", "Globex")]))
     );
 }
+
+// Enter in a name box moves to the value; anywhere else it saves.
+
+#[test]
+fn enter_in_a_name_box_moves_to_its_value_instead_of_saving() {
+    let mut form = form_with_rows(true);
+    tab(&mut form, 2); // Client's name
+    assert!(matches!(
+        form.handle(press(KeyCode::Enter)),
+        Action::Continue
+    ));
+    type_text(&mut form, "!");
+    assert_eq!(
+        form.changes().properties,
+        Some(props(&[("Client", "Acme!"), ("Stage", "beta")]))
+    );
+}
+
+#[test]
+fn ctrl_n_name_enter_value_enter_adds_the_property_and_saves() {
+    let mut form = form_with_rows(true);
+    form.handle(ctrl('n'));
+    type_text(&mut form, "Owner");
+    assert!(matches!(
+        form.handle(press(KeyCode::Enter)),
+        Action::Continue
+    ));
+    type_text(&mut form, "me");
+    assert!(matches!(form.handle(press(KeyCode::Enter)), Action::Save));
+    assert_eq!(
+        form.changes().properties,
+        Some(props(&[
+            ("Client", "Acme"),
+            ("Owner", "me"),
+            ("Stage", "beta")
+        ]))
+    );
+}
+
+#[test]
+fn enter_in_a_value_box_saves() {
+    let mut form = form_with_rows(true);
+    tab(&mut form, 3); // Client's value
+    assert!(matches!(form.handle(press(KeyCode::Enter)), Action::Save));
+}
+
+#[test]
+fn enter_in_the_tags_saves() {
+    let mut form = form_with_rows(true);
+    tab(&mut form, 1);
+    assert!(matches!(form.handle(press(KeyCode::Enter)), Action::Save));
+}
+
+// Esc on a row leaves the properties; elsewhere it cancels.
+
+#[test]
+fn esc_on_a_row_moves_to_the_tags_instead_of_cancelling() {
+    let mut form = form_with_rows(true);
+    tab(&mut form, 3); // Client's value
+    type_text(&mut form, "!");
+    assert!(matches!(form.handle(press(KeyCode::Esc)), Action::Continue));
+    type_text(&mut form, ", Go"); // now in the tags
+    let changes = form.changes();
+    assert_eq!(changes.tags, Some(vec!["Rust".into(), "Go".into()]));
+    assert_eq!(
+        changes.properties,
+        Some(props(&[("Client", "Acme!"), ("Stage", "beta")])),
+        "the row's edit is kept"
+    );
+}
+
+#[test]
+fn a_second_esc_outside_the_properties_cancels() {
+    let mut form = form_with_rows(true);
+    tab(&mut form, 2);
+    form.handle(press(KeyCode::Esc));
+    assert!(matches!(form.handle(press(KeyCode::Esc)), Action::Cancel));
+}
+
+#[test]
+fn esc_out_of_an_untouched_new_row_removes_it() {
+    let mut form = form_with_rows(true);
+    form.handle(ctrl('n'));
+    form.handle(press(KeyCode::Esc));
+    assert_eq!(form.changes().properties, None);
+    // The tags have focus, and the blank row is gone: Tab reaches Client's
+    // name, and Shift+Tab from the description wraps to Stage's value.
+    shift_tab(&mut form, 2);
+    type_text(&mut form, "!");
+    assert_eq!(
+        form.changes().properties,
+        Some(props(&[("Client", "Acme"), ("Stage", "beta!")]))
+    );
+}
+
+#[test]
+fn esc_during_the_delete_question_only_answers_no() {
+    let mut form = form_with_rows(true);
+    tab(&mut form, 2);
+    form.handle(ctrl('d'));
+    form.handle(press(KeyCode::Esc)); // "no": still on Client's name
+    type_text(&mut form, "X");
+    assert_eq!(
+        form.changes().properties,
+        Some(props(&[("ClientX", "Acme"), ("Stage", "beta")]))
+    );
+}

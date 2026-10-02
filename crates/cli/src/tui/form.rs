@@ -270,8 +270,28 @@ impl FormState {
             return Action::Continue;
         }
         match key.code {
-            KeyCode::Enter => Action::Save,
-            KeyCode::Esc => Action::Cancel,
+            // Enter saves, except in a name box, where it moves on to that
+            // row's value: after typing a name, a value comes next, not a save.
+            KeyCode::Enter => match self.focus {
+                Focus::Name(i) => {
+                    self.focus = Focus::Value(i);
+                    Action::Continue
+                }
+                _ => Action::Save,
+            },
+            // Esc on a property row leaves the properties for the tags (an
+            // untouched row goes, as when leaving any empty row); only Esc
+            // outside them cancels, so a stray Esc mid-row loses nothing.
+            KeyCode::Esc => {
+                if self.focus.row().is_some() {
+                    let from = self.focus;
+                    self.focus = Focus::Tags;
+                    self.leave_row(from);
+                    Action::Continue
+                } else {
+                    Action::Cancel
+                }
+            }
             KeyCode::Tab | KeyCode::Down => {
                 self.next_focus();
                 Action::Continue
