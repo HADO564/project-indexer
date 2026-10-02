@@ -77,6 +77,14 @@ pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
         )
     };
 
+    // A form saved untouched sends every field `None`. Writing that would
+    // still move `updated_at` and report an edit that never happened.
+    if update.is_empty() {
+        return Ok(Outcome::Unchanged {
+            project: Box::new(project),
+        });
+    }
+
     // It returns the project as saved — with its new `updated_at` — so that
     // copy replaces the one `find_one` returned.
     let project = ctx.projects.update(&project.id, update)?;

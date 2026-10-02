@@ -127,9 +127,10 @@ between them is a natural point for a pull request.
    settings, and `main` passing it to `TerminalEditor::new`, which hands it to
    `FormState::new`. A broken settings file falls back to wrapping, as the
    colours fall back to their defaults.
-7. ~~**By hand, then docs.**~~ *(done 2026-10-02.)* Open: Enter on an
-   untouched form still calls `update` — `updated_at` moves and it prints
-   `updated` — though every field is `None`.
+7. ~~**By hand, then docs.**~~ *(done 2026-10-02.)* Found by hand: Enter
+   on an untouched form still called `update`, moving `updated_at` and
+   printing `updated`. Fixed: core's `UpdateProject::is_empty`, and `edit`
+   returns `Outcome::Unchanged` without writing.
 
 **Part 2 — `--full`, one field and its flag at a time**
 

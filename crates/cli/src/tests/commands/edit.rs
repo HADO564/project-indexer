@@ -235,3 +235,22 @@ fn the_terminal_editor_refuses_under_json_with_a_usage_error() {
         Some(Failure::Usage { .. })
     ));
 }
+
+#[test]
+fn an_editor_saved_untouched_writes_nothing() {
+    let ctx = context(true, Scripted(|_| Some(UpdateProject::default())));
+    let before = ctx
+        .projects
+        .get("app-0000-4000-8000-000000000000")
+        .unwrap()
+        .updated_at;
+    let Outcome::Unchanged { project } = run(&ctx, &["indexer", "edit", "app"]).unwrap() else {
+        panic!("expected `Unchanged`");
+    };
+    assert_eq!(project.name, "app");
+    assert_eq!(
+        ctx.projects.get(&project.id).unwrap().updated_at,
+        before,
+        "no write, so `updated_at` does not move"
+    );
+}

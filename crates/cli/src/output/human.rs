@@ -119,6 +119,9 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
         Outcome::Edited { project } => {
             eprintln!("indexer: updated \"{}\"", project.name);
         }
+        Outcome::Unchanged { project } => {
+            eprintln!("indexer: nothing changed in \"{}\"", project.name);
+        }
         // The bin holds projects whose folder was deleted, so restoring brings
         // back the entry and not the files — said here, where a user expecting
         // their folder back would otherwise find out from `open`.

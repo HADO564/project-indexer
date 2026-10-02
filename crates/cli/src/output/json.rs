@@ -176,6 +176,8 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
         // The project as saved, every field — not a diff of what changed, so a
         // reader never has to merge it with an earlier copy.
         Outcome::Edited { project } => emit(out, &ProjectJson::from(project.as_ref())),
+        // The same shape as `Edited`: the project, here as it already was.
+        Outcome::Unchanged { project } => emit(out, &ProjectJson::from(project.as_ref())),
         // The project as saved, `is_deleted` now false.
         Outcome::Restored { project } => emit(out, &ProjectJson::from(project.as_ref())),
         // The project as it was: its row is gone, so, as for `untrack`, this
