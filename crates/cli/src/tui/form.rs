@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use indexer_core::domain::normalize::normalize_tags;
 use indexer_core::{Project, UpdateProject};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -83,15 +85,41 @@ impl TextInput {
     }
 }
 
+/// One property: a name box and a value box side by side.
+struct PropertyRow {
+    name: TextInput,
+    value: TextInput,
+}
+
+impl PropertyRow {
+    fn is_empty(&self) -> bool {
+        self.name.value().is_empty() && self.value.value().is_empty()
+    }
+}
+
 pub enum Action {
     Continue,
     Save,
     Cancel,
 }
 
+// `Copy`: the focus is a small value, read and replaced whole, never shared.
+#[derive(Clone, Copy)]
 enum Focus {
     Description,
     Tags,
+    Name(usize),
+    Value(usize),
+}
+
+impl Focus {
+    /// The row this focus is on, or `None` for the description and tags.
+    fn row(self) -> Option<usize> {
+        match self {
+            Focus::Name(i) | Focus::Value(i) => Some(i),
+            _ => None,
+        }
+    }
 }
 
 pub struct FormState {
@@ -101,6 +129,10 @@ pub struct FormState {
     edit_tags: TextInput,
     focus: Focus,
     wrap: bool,
+    properties: BTreeMap<String, String>,
+    rows: Vec<PropertyRow>,
+    /// `Some(row)` while Ctrl+D waits for `y`; the next key answers it.
+    pending_delete: Option<usize>,
 }
 
 impl FormState {
@@ -111,33 +143,64 @@ impl FormState {
             tags: project.tags.clone(),
             edit_tags: TextInput::new(&project.tags.join(", ")),
             focus: Focus::Description,
+            properties: project.properties.clone(),
+            rows: project
+                .properties
+                .iter()
+                .map(|(name, value)| PropertyRow {
+                    name: TextInput::new(name),
+                    value: TextInput::new(value),
+                })
+                .collect(),
             wrap,
+            pending_delete: None,
         }
     }
 
-    /// Tab / ↓. On the last field, wraps to the first or stays, per `wrap`.
+    /// Tab / ↓. On the last box (the last row's value, or the tags when there
+    /// are no rows), wraps to the first or stays, per `wrap`.
     fn next_focus(&mut self) {
+        let from = self.focus;
         self.focus = match self.focus {
             Focus::Description => Focus::Tags,
+            Focus::Tags if !self.rows.is_empty() => Focus::Name(0),
+            // No rows below: the tags are the last field.
             Focus::Tags if self.wrap => Focus::Description,
             Focus::Tags => Focus::Tags,
+            Focus::Name(i) => Focus::Value(i),
+            Focus::Value(i) if i < self.rows.len() - 1 => Focus::Name(i + 1),
+            Focus::Value(i) if i == self.rows.len() - 1 && self.wrap => Focus::Description,
+            Focus::Value(i) => Focus::Value(i),
         };
+        self.leave_row(from);
     }
 
-    /// Shift+Tab / ↑. On the first field, wraps to the last or stays, per
-    /// `wrap`.
+    /// Shift+Tab / ↑. On the first field, wraps to the last box (the last
+    /// row's value, or the tags when there are no rows) or stays, per `wrap`.
     fn previous_focus(&mut self) {
+        let from = self.focus;
         self.focus = match self.focus {
             Focus::Tags => Focus::Description,
+            Focus::Description if !self.rows.is_empty() && self.wrap => {
+                Focus::Value(self.rows.len() - 1)
+            }
             Focus::Description if self.wrap => Focus::Tags,
             Focus::Description => Focus::Description,
+            // Before the general arm: row 0 has no row above it, and `0 - 1`
+            // would panic.
+            Focus::Name(0) => Focus::Tags,
+            Focus::Name(i) => Focus::Value(i - 1),
+            Focus::Value(i) => Focus::Name(i),
         };
+        self.leave_row(from);
     }
 
     fn focused_input(&mut self) -> &mut TextInput {
         match self.focus {
             Focus::Description => &mut self.edit_description,
             Focus::Tags => &mut self.edit_tags,
+            Focus::Name(i) => &mut self.rows[i].name,
+            Focus::Value(i) => &mut self.rows[i].value,
         }
     }
 
@@ -152,6 +215,15 @@ impl FormState {
             // In raw mode Ctrl+C is a key, not a signal, so the form must
             // handle it or it cannot be quit that way.
             return Action::Cancel;
+        }
+        // Ctrl+D asked "delete this row?": this key is the answer, whatever
+        // it is. `take` closes the question either way; only `y` deletes,
+        // and the key does nothing else.
+        if let Some(r) = self.pending_delete.take() {
+            if matches!(key.code, KeyCode::Char('y') | KeyCode::Char('Y')) {
+                self.remove_row(r);
+            }
+            return Action::Continue;
         }
         match key.code {
             KeyCode::Enter => Action::Save,
@@ -189,6 +261,14 @@ impl FormState {
                 self.focused_input().delete();
                 Action::Continue
             }
+            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.add_row();
+                Action::Continue
+            }
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.delete_row();
+                Action::Continue
+            }
             // Typing. A Ctrl-held letter is a shortcut, never text: Ctrl+N
             // must not also type an `n`.
             KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -219,11 +299,108 @@ impl FormState {
             None
         };
 
+        // Names match ignoring case, as `edit::edited_properties` and the
+        // search bar do: of two equal names the lower row wins. A blank row
+        // is dropped; a value without a name is kept, and core refuses it.
+        let mut typed = BTreeMap::new();
+        for row in &self.rows {
+            if row.is_empty() {
+                continue;
+            }
+            let wanted = row.name.value().trim().to_lowercase();
+            typed.retain(|existing: &String, _| existing.trim().to_lowercase() != wanted);
+            typed.insert(row.name.value().to_string(), row.value.value().to_string());
+        }
+        let properties = if Self::lowercase_names(&typed) != Self::lowercase_names(&self.properties)
+        {
+            Some(typed)
+        } else {
+            None
+        };
+
         UpdateProject {
             description,
             tags,
+            properties,
             ..Default::default()
         }
+    }
+
+    /// The map with each name trimmed and lowercased, for comparing; values
+    /// are compared exactly, as core keeps them.
+    fn lowercase_names(map: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+        map.iter()
+            .map(|(k, v)| (k.trim().to_lowercase(), v.clone()))
+            .collect()
+    }
+
+    /// Ctrl+N: a new empty row at the end, focused on its name. Does nothing
+    /// while the focused row is itself empty, so blank rows cannot stack up.
+    fn add_row(&mut self) {
+        if let Some(r) = self.focus.row() {
+            if self.rows[r].is_empty() {
+                return;
+            }
+        }
+        let from = self.focus;
+        self.rows.push(PropertyRow {
+            name: TextInput::new(""),
+            value: TextInput::new(""),
+        });
+        self.focus = Focus::Name(self.rows.len() - 1);
+        // Every focus move goes through `leave_row`. It removes nothing here:
+        // an empty row stopped us above.
+        self.leave_row(from);
+    }
+
+    /// Ctrl+D: deletes the focused row and focuses the row that took its
+    /// place, else the one above, else the tags. Off a row it does nothing.
+    /// Removes row `r` and focuses the row that took its place, else the one
+    /// above, else the tags.
+    fn remove_row(&mut self, r: usize) {
+        self.rows.remove(r);
+        self.focus = if r < self.rows.len() {
+            Focus::Name(r)
+        } else if r > 0 {
+            Focus::Name(r - 1)
+        } else {
+            Focus::Tags
+        };
+    }
+
+    /// Ctrl+D on a row: asks first (`pending_delete`), unless both boxes are
+    /// empty and nothing would be lost. Off a row it does nothing.
+    fn delete_row(&mut self) {
+        let Some(r) = self.focus.row() else {
+            return;
+        };
+        if self.rows[r].is_empty() {
+            self.remove_row(r);
+        } else {
+            self.pending_delete = Some(r);
+        }
+    }
+
+    /// Called after every focus move. When focus has left a row whose name
+    /// and value are both empty, removes it and renumbers the focus if it was
+    /// below — a row needs a name, and a blank one should not linger.
+    fn leave_row(&mut self, from: Focus) {
+        let Some(r) = from.row() else {
+            return;
+        };
+        if self.focus.row() == Some(r) {
+            return;
+        }
+
+        if !self.rows[r].is_empty() {
+            return;
+        }
+        self.rows.remove(r);
+        self.focus = match self.focus {
+            Focus::Name(i) if i > r => Focus::Name(i - 1),
+            Focus::Value(i) if i > r => Focus::Value(i - 1),
+            other => other,
+        };
     }
 }
 
