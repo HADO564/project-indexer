@@ -1,7 +1,8 @@
 # Handoff — the full-screen `edit` form
 
 **Date:** 2026-09-27
-**Status:** in progress on `feat/cli-edit-form` — step 1 done. Scope widened
+**Status:** in progress on `feat/cli-edit-form` — part 1 (the compact form,
+steps 1–7) done 2026-10-02; part 2 (`--full`) next. Scope widened
 2026-09-29 to a compact form and a `--full` one (§2); nothing is blocked.
 **Read first:** the write-commands brief
 ([`2026-09-23-cli-write-commands.md`](2026-09-23-cli-write-commands.md)), which
@@ -126,7 +127,9 @@ between them is a natural point for a pull request.
    settings, and `main` passing it to `TerminalEditor::new`, which hands it to
    `FormState::new`. A broken settings file falls back to wrapping, as the
    colours fall back to their defaults.
-7. **By hand, then docs.**
+7. ~~**By hand, then docs.**~~ *(done 2026-10-02.)* Open: Enter on an
+   untouched form still calls `update` — `updated_at` moves and it prints
+   `updated` — though every field is `None`.
 
 **Part 2 — `--full`, one field and its flag at a time**
 

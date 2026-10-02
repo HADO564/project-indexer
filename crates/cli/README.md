@@ -8,8 +8,9 @@ step with no pairing — and it works without the app installed.
 
 **Status: every plain subcommand works.** `list`, `show`, `add`, `open`,
 `untrack`, `favorite`, `unfavorite`, `edit`, `restore`, `purge`, `scan` and
-`config` all run against the app's database; the observer and the TUI still
-return "not implemented". Groups have no commands yet. The binary name `indexer` is a placeholder.
+`config` all run against the app's database, and a bare `edit` in a terminal
+opens a full-screen form; the observer and the TUI still return "not
+implemented". Groups have no commands yet. The binary name `indexer` is a placeholder.
 
 ```
 indexer list                     every project, as a table (--view, -s name|last-opened, -r to flip)
@@ -19,10 +20,12 @@ indexer open <query>             open a project in its application
 indexer untrack <query>          forget a project, leaving its files alone (asks first; --yes)
 indexer favorite <query>         mark a project as a favourite; unfavorite clears it
 indexer edit <query> --description, --add-tag/--remove-tag, --set k=v/--unset k   change a project's fields
+indexer edit <query>             with no flags, in a terminal: a form for the description, tags and properties
 indexer restore <query>          bring a project's record back from the bin
 indexer purge <query>            delete a binned project's record for good (asks first; --yes)
 indexer scan <dir>               find projects under a folder; --import registers them
 indexer config folder-color ...  the folder colour in that table; header-color likewise
+indexer config form-wrap on|off  whether Tab wraps around at the ends of edit's form
 indexer <anything> --json        {"schema": 1, "data": …} on stdout, or {"schema": 1, "error": …} on stderr
 ```
 
