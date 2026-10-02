@@ -12,9 +12,12 @@ project is built, tested and worked on live in
 
 ### Fixed
 
-- **The Bin's "Delete permanently" button holds its label.** The text spilled
-  past the button's border; each button is now as wide as its label, and in a
-  narrow grid tile the pair wraps so Delete takes its own line instead.
+- **The Bin's "Delete permanently" button is now "Purge", and fits.** The old
+  label spilled past the button's border. "Purge" is the command-line tool's
+  word for the same action; hovering explains that it removes the project's
+  record for good, and it still asks for a second click. Each button is now as
+  wide as its label, and in a narrow grid tile the pair wraps rather than
+  overflowing.
 
 ## [0.3.3] — 2026-09-30
 
