@@ -23,6 +23,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph};
 use ratatui::Frame;
 
+use crate::editor::FormKind;
 use crate::tui::form::{Focus, FormState, TextInput};
 
 /// Where every value starts, counted from the inner edge: the labels' column,
@@ -58,7 +59,13 @@ fn hints(focus: Focus) -> Vec<&'static str> {
 }
 
 pub fn draw(frame: &mut Frame, state: &FormState) {
-    let block = Block::bordered().title(format!(" Edit {} ", state.title()));
+    // The full form says so, so `edit --full` and a bare `edit` cannot be
+    // mistaken for each other.
+    let title = match state.kind() {
+        FormKind::Compact => format!(" Edit {} ", state.title()),
+        FormKind::Full => format!(" Edit {} · all fields ", state.title()),
+    };
+    let block = Block::bordered().title(title);
     let inner = block.inner(frame.area()).inner(Margin::new(1, 0));
     frame.render_widget(block, frame.area());
 

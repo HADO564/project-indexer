@@ -6,6 +6,7 @@ use ratatui::style::Modifier;
 use ratatui::Terminal;
 use serde_json::json;
 
+use crate::editor::FormKind;
 use crate::tui::form::FormState;
 use crate::tui::ui::form::draw;
 
@@ -24,7 +25,11 @@ fn project(properties: serde_json::Value) -> Project {
 }
 
 fn form() -> FormState {
-    FormState::new(&project(json!({"Client": "Acme", "Stage": "beta"})), true)
+    FormState::new(
+        &project(json!({"Client": "Acme", "Stage": "beta"})),
+        true,
+        FormKind::Compact,
+    )
 }
 
 fn press(form: &mut FormState, code: KeyCode) {
@@ -115,7 +120,7 @@ fn focus_on_a_row_marks_it_and_reverses_that_box() {
 
 #[test]
 fn no_properties_says_how_to_add_one() {
-    let form = FormState::new(&project(json!({})), true);
+    let form = FormState::new(&project(json!({})), true, FormKind::Compact);
     let terminal = render(&form, 60, 11);
     assert_eq!(
         screen(&terminal)[4],
@@ -152,7 +157,7 @@ fn a_long_value_scrolls_to_keep_the_cursor_in_view() {
 
 #[test]
 fn the_cursor_counts_columns_for_wide_characters() {
-    let mut form = FormState::new(&project(json!({})), true);
+    let mut form = FormState::new(&project(json!({})), true, FormKind::Compact);
     press(&mut form, KeyCode::End);
     for _ in 0..10 {
         press(&mut form, KeyCode::Backspace);
@@ -170,6 +175,7 @@ fn rows_scroll_to_keep_the_focused_row_on_screen() {
     let mut form = FormState::new(
         &project(json!({"A": "1", "B": "2", "C": "3", "D": "4", "E": "5"})),
         true,
+        FormKind::Compact,
     );
     // The last value: Shift+Tab from the description wraps there.
     press(&mut form, KeyCode::BackTab);
@@ -212,4 +218,10 @@ fn the_hints_follow_the_focus() {
 
     press(&mut form, KeyCode::Enter); // Client's value
     assert!(line(&form).starts_with("Enter save · Esc leave properties"));
+}
+
+#[test]
+fn the_full_form_says_so_in_its_title() {
+    let form = FormState::new(&project(json!({})), true, FormKind::Full);
+    assert!(screen(&render(&form, 60, 11))[0].starts_with("┌ Edit app · all fields ─"));
 }

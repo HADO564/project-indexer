@@ -42,17 +42,27 @@ impl TerminalEditor {
 }
 
 impl ProjectEditor for TerminalEditor {
-    fn edit(&self, project: &Project, _kind: FormKind) -> anyhow::Result<Option<UpdateProject>> {
+    fn edit(&self, project: &Project, kind: FormKind) -> anyhow::Result<Option<UpdateProject>> {
         // stdin to read keys from and stderr to draw on — stdout is never
         // needed, so `indexer edit app > out` still gets the form. Under
         // `--json` a script is driving, and a form nobody can see would hang
         // it, so that is refused as well.
         if self.json || !stdin().is_terminal() || !stderr().is_terminal() {
+            // `--full` cannot sit beside a field flag, so the compact form's
+            // advice — give one — would be wrong for it.
+            let message = match kind {
+                FormKind::Compact => {
+                    "edit needs at least one field flag (--description, --add-tag, \
+                     --remove-tag, --set, --unset) when it cannot open the form in a \
+                     terminal"
+                }
+                FormKind::Full => {
+                    "edit --full opens a form, so it needs a terminal and cannot be used \
+                     with --json; to change a field without one, give its flag instead"
+                }
+            };
             return Err(Failure::Usage {
-                message: "edit needs at least one field flag (--description, --add-tag, \
-                          --remove-tag, --set, --unset) when it cannot open the form in a \
-                          terminal"
-                    .to_string(),
+                message: message.to_string(),
             }
             .into());
         }
@@ -65,7 +75,7 @@ impl ProjectEditor for TerminalEditor {
                 true
             }
         };
-        let mut state = FormState::new(project, wrap);
+        let mut state = FormState::new(project, wrap, kind);
         // The session is dropped at the end of this block, which puts the
         // terminal back before anything is printed about the edit.
         let action = {

@@ -4,6 +4,7 @@ use indexer_core::Project;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use serde_json::json;
 
+use crate::editor::FormKind;
 use crate::tui::form::{Action, FormState, TextInput};
 
 // The cursor is private, so these tests find it the way a person would: by
@@ -158,7 +159,11 @@ fn project(description: &str, tags: &[&str]) -> Project {
 }
 
 fn form() -> FormState {
-    FormState::new(&project("A tool", &["Rust", "Web"]), true)
+    FormState::new(
+        &project("A tool", &["Rust", "Web"]),
+        true,
+        FormKind::Compact,
+    )
 }
 
 fn press(code: KeyCode) -> KeyEvent {
@@ -358,7 +363,7 @@ fn a_key_release_types_nothing() {
 // description is first, the tags last.
 
 fn form_with_wrap(wrap: bool) -> FormState {
-    FormState::new(&project("A tool", &["Rust"]), wrap)
+    FormState::new(&project("A tool", &["Rust"]), wrap, FormKind::Compact)
 }
 
 #[test]
@@ -412,7 +417,7 @@ fn props(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
 fn form_with_rows(wrap: bool) -> FormState {
     let mut project = project("A tool", &["Rust"]);
     project.properties = props(&[("Stage", "beta"), ("Client", "Acme")]);
-    FormState::new(&project, wrap)
+    FormState::new(&project, wrap, FormKind::Compact)
 }
 
 fn tab(form: &mut FormState, times: usize) {

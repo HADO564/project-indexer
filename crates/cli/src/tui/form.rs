@@ -1,3 +1,4 @@
+use crate::editor::FormKind;
 use std::collections::BTreeMap;
 
 use indexer_core::domain::normalize::normalize_tags;
@@ -149,10 +150,12 @@ pub struct FormState {
     rows: Vec<PropertyRow>,
     /// `Some(row)` while Ctrl+D waits for `y`; the next key answers it.
     pending_delete: Option<usize>,
+    /// Compact, or every field with `edit --full`.
+    kind: FormKind,
 }
 
 impl FormState {
-    pub fn new(project: &Project, wrap: bool) -> Self {
+    pub fn new(project: &Project, wrap: bool, kind: FormKind) -> Self {
         Self {
             title: project.name.clone(),
             description: project.description.clone(),
@@ -171,6 +174,7 @@ impl FormState {
                 .collect(),
             wrap,
             pending_delete: None,
+            kind,
         }
     }
 
@@ -182,6 +186,11 @@ impl FormState {
 
     pub fn focus(&self) -> Focus {
         self.focus
+    }
+
+    /// The compact form, or the full one `edit --full` asked for.
+    pub fn kind(&self) -> FormKind {
+        self.kind
     }
 
     pub fn description_input(&self) -> &TextInput {
