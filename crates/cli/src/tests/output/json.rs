@@ -251,3 +251,11 @@ fn declining_a_confirmation_is_data_not_an_error() {
 fn git_tracker_project() -> Value {
     json!([git()])
 }
+
+#[test]
+fn form_wrap_is_reported_under_its_settings_key() {
+    assert_eq!(
+        render(&Outcome::FormWrap { wrap: false })["data"],
+        json!({ "form_wrap": false })
+    );
+}

@@ -69,6 +69,9 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
                 }
             }
         }
+        Outcome::FormWrap { wrap } => {
+            writeln!(out, "{}", if *wrap { "on" } else { "off" })?;
+        }
         Outcome::Color { color: chosen, .. } => {
             let name = chosen.name();
             if color {

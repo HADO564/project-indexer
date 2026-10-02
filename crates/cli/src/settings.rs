@@ -25,6 +25,11 @@ pub struct Settings {
     /// The table header colour used when `--header-color` is not given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub header_color: Option<Color>,
+
+    /// Whether Tab and Shift+Tab wrap at the edit form's ends. Missing means
+    /// on, as the GUI's Tab order does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form_wrap: Option<bool>,
 }
 
 pub fn load() -> anyhow::Result<Settings> {

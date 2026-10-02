@@ -147,6 +147,7 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
         // The kinds only pick columns for the human table; JSON always carries
         // every tracker in full.
         Outcome::Project { project, .. } => emit(out, &ProjectJson::from(project.as_ref())),
+        Outcome::FormWrap { wrap } => emit(out, &serde_json::json!({ "form_wrap": wrap })),
         Outcome::Color { setting, color } => {
             let mut data = serde_json::Map::new();
             data.insert(setting.key().to_string(), serde_json::to_value(color)?);

@@ -6,7 +6,7 @@
 //! caller (`output/` for a shell, the message line for the TUI).
 
 pub mod add;
-mod config;
+pub mod config;
 pub mod edit;
 mod failure;
 mod favorite;
@@ -118,6 +118,9 @@ pub enum Outcome {
     Scanned { root: String, report: ScanReport },
     /// A colour setting now in effect, after `config` showed or changed it.
     Color { setting: ColorSetting, color: Color },
+    /// Whether the edit form's focus wraps at its ends, after `config
+    /// form-wrap` showed or changed it.
+    FormWrap { wrap: bool },
 }
 
 /// The colours a user can set with `indexer config`.

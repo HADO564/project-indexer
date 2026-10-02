@@ -11,6 +11,7 @@ use std::io::{stderr, stdin, IsTerminal};
 use indexer_core::{Project, UpdateProject};
 
 use crate::commands::Failure;
+use crate::settings;
 use crate::tui;
 use crate::tui::form::{Action, FormState};
 
@@ -48,9 +49,16 @@ impl ProjectEditor for TerminalEditor {
             }
             .into());
         }
-        // `wrap` comes from the `form-wrap` setting in step 6 of
-        // `docs/handoffs/2026-09-27-cli-edit-form.md`; on until then.
-        let mut state = FormState::new(project, true);
+        // A broken settings file must never stop the form from opening: it
+        // is reported and the form wraps, as `main` does for the colours.
+        let wrap = match settings::load() {
+            Ok(saved) => saved.form_wrap.unwrap_or(true),
+            Err(e) => {
+                eprintln!("indexer: ignoring settings: {e:#}");
+                true
+            }
+        };
+        let mut state = FormState::new(project, wrap);
         // The session is dropped at the end of this block, which puts the
         // terminal back before anything is printed about the edit.
         let action = {

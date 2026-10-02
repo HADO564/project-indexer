@@ -121,7 +121,7 @@ between them is a natural point for a pull request.
 5. ~~**The terminal and the loop**~~ *(done 2026-10-02.)* — `terminal.rs` (alternate screen and raw
    mode on stderr, restored on every exit including a panic), the
    draw → read key → `handle` loop, replacing `TerminalEditor`'s placeholder.
-6. **The `form-wrap` setting** — `Settings.form_wrap: Option<bool>` (missing =
+6. ~~**The `form-wrap` setting**~~ *(done 2026-10-02.)* — `Settings.form_wrap: Option<bool>` (missing =
    on), `indexer config form-wrap on|off [--reset]` beside the colour
    settings, and `main` passing it to `TerminalEditor::new`, which hands it to
    `FormState::new`. A broken settings file falls back to wrapping, as the
