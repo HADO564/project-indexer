@@ -2,7 +2,7 @@
 name = "indexer-core"
 # Internal to this repository: shared by the app and the CLI, and versioned with
 # the app. Neither consumer pulls it from a registry.
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 license-file = "../../LICENSE"
 publish = false
