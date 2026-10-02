@@ -62,11 +62,26 @@
   }
 </script>
 
-<div class="flex shrink-0 gap-2">
-  <button type="button" onclick={handleRestore} disabled={pending} class={buttonClass}>
+<!-- Each button is as wide as its label, so "Delete permanently" never breaks
+     out of its border. Where a grid tile is too narrow for both, the pair
+     wraps and Delete takes its own line rather than overflowing the tile —
+     which is why this may shrink, down to its widest button, where the
+     standard menu does not. -->
+<div class="flex flex-wrap justify-end gap-2">
+  <button
+    type="button"
+    onclick={handleRestore}
+    disabled={pending}
+    class="{buttonClass} whitespace-nowrap"
+  >
     Restore
   </button>
-  <button type="button" onclick={handlePurge} disabled={pending} class={dangerButtonClass}>
+  <button
+    type="button"
+    onclick={handlePurge}
+    disabled={pending}
+    class="{dangerButtonClass} whitespace-nowrap"
+  >
     {armed ? "Confirm?" : "Delete permanently"}
   </button>
 </div>

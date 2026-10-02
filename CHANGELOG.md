@@ -10,6 +10,12 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Bin's "Delete permanently" button holds its label.** The text spilled
+  past the button's border; each button is now as wide as its label, and in a
+  narrow grid tile the pair wraps so Delete takes its own line instead.
+
 ## [0.3.3] — 2026-09-30
 
 No user-facing changes; identical in behaviour to 0.3.2. Cut so that the repaired
