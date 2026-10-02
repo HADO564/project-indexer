@@ -8,10 +8,11 @@
 
 use std::io::{stderr, stdin, IsTerminal};
 
-use anyhow::bail;
 use indexer_core::{Project, UpdateProject};
 
 use crate::commands::Failure;
+use crate::tui;
+use crate::tui::form::{Action, FormState};
 
 pub trait ProjectEditor {
     /// Lets the user edit `project`: `Some` with the changes to save, or
@@ -33,7 +34,7 @@ impl TerminalEditor {
 }
 
 impl ProjectEditor for TerminalEditor {
-    fn edit(&self, _project: &Project) -> anyhow::Result<Option<UpdateProject>> {
+    fn edit(&self, project: &Project) -> anyhow::Result<Option<UpdateProject>> {
         // stdin to read keys from and stderr to draw on — stdout is never
         // needed, so `indexer edit app > out` still gets the form. Under
         // `--json` a script is driving, and a form nobody can see would hang
@@ -47,8 +48,18 @@ impl ProjectEditor for TerminalEditor {
             }
             .into());
         }
-        // Replaced by the form itself in step 5 of
-        // `docs/handoffs/2026-09-27-cli-edit-form.md`.
-        bail!("the edit form is not built yet")
+        // `wrap` comes from the `form-wrap` setting in step 6 of
+        // `docs/handoffs/2026-09-27-cli-edit-form.md`; on until then.
+        let mut state = FormState::new(project, true);
+        // The session is dropped at the end of this block, which puts the
+        // terminal back before anything is printed about the edit.
+        let action = {
+            let mut session = tui::terminal::enter()?;
+            tui::run_form(&mut session.terminal, &mut state)?
+        };
+        Ok(match action {
+            Action::Save => Some(state.changes()),
+            Action::Cancel | Action::Continue => None,
+        })
     }
 }

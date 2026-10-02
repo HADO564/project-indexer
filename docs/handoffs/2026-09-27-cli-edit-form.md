@@ -118,7 +118,7 @@ between them is a natural point for a pull request.
    name, labelled inputs, the focused one highlighted with the cursor in it,
    and a hint line (`Enter save · Tab next · Esc cancel`). Tested with
    ratatui's `TestBackend`.
-5. **The terminal and the loop** — `terminal.rs` (alternate screen and raw
+5. ~~**The terminal and the loop**~~ *(done 2026-10-02.)* — `terminal.rs` (alternate screen and raw
    mode on stderr, restored on every exit including a panic), the
    draw → read key → `handle` loop, replacing `TerminalEditor`'s placeholder.
 6. **The `form-wrap` setting** — `Settings.form_wrap: Option<bool>` (missing =
