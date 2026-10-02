@@ -6,7 +6,7 @@
 //! caller (`output/` for a shell, the message line for the TUI).
 
 pub mod add;
-mod config;
+pub mod config;
 pub mod edit;
 mod failure;
 mod favorite;
@@ -101,6 +101,9 @@ pub enum Outcome {
     /// view, and an edit can change several fields at once, so the message
     /// names the project rather than any one change.
     Edited { project: Box<Project> },
+    /// An `edit` with nothing to save — a form saved untouched — so nothing
+    /// was written and `updated_at` did not move. The project as it is.
+    Unchanged { project: Box<Project> },
     /// A project brought back from the bin, as saved. Its directory is still
     /// wherever it was when it was binned — usually gone.
     Restored { project: Box<Project> },
@@ -118,6 +121,9 @@ pub enum Outcome {
     Scanned { root: String, report: ScanReport },
     /// A colour setting now in effect, after `config` showed or changed it.
     Color { setting: ColorSetting, color: Color },
+    /// Whether the edit form's focus wraps at its ends, after `config
+    /// form-wrap` showed or changed it.
+    FormWrap { wrap: bool },
 }
 
 /// The colours a user can set with `indexer config`.

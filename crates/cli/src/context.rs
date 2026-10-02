@@ -7,6 +7,7 @@ use anyhow::Context as _;
 use indexer_core::{DetectorRunner, GroupService, ProjectService, ScanService, SqliteRepository};
 
 use crate::confirm::Confirmer;
+use crate::editor::ProjectEditor;
 use crate::launcher::SystemLauncher;
 use crate::paths;
 
@@ -21,10 +22,16 @@ pub struct Context {
     pub groups: Arc<GroupService>,
     pub scan: Arc<ScanService>,
     pub confirmer: Box<dyn Confirmer>,
+    /// How `edit` asks for changes when no field flag was given — the
+    /// full-screen form in a shell. Supplied by the caller, like `confirmer`.
+    pub editor: Box<dyn ProjectEditor>,
 }
 
 impl Context {
-    pub fn open(confirmer: Box<dyn Confirmer>) -> anyhow::Result<Self> {
+    pub fn open(
+        confirmer: Box<dyn Confirmer>,
+        editor: Box<dyn ProjectEditor>,
+    ) -> anyhow::Result<Self> {
         let path = paths::database_path()?;
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)
@@ -51,6 +58,7 @@ impl Context {
             groups,
             scan,
             confirmer,
+            editor,
         })
     }
 }

@@ -11,6 +11,13 @@ pub struct ConfigArgs {
     pub setting: Setting,
 }
 
+/// `on` or `off`, as `config form-wrap` takes it.
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum Switch {
+    On,
+    Off,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum Setting {
     /// Show or set the default folder colour.
@@ -33,21 +40,42 @@ pub enum Setting {
         #[arg(long, conflicts_with = "color")]
         reset: bool,
     },
+    /// Show or set whether Tab and Shift+Tab wrap at the edit form's ends.
+    FormWrap {
+        /// `on` or `off`. Omit it to show the current one.
+        #[arg(value_enum)]
+        value: Option<Switch>,
+
+        /// Go back to the built-in default (on).
+        #[arg(long, conflicts_with = "value")]
+        reset: bool,
+    },
 }
 
 pub fn run(args: ConfigArgs, _ctx: &Context) -> anyhow::Result<Outcome> {
-    let (setting, color, reset) = match args.setting {
-        Setting::FolderColor { color, reset } => (ColorSetting::Folder, color, reset),
-        Setting::HeaderColor { color, reset } => (ColorSetting::Header, color, reset),
-    };
+    match args.setting {
+        Setting::FolderColor { color, reset } => color_setting(ColorSetting::Folder, color, reset),
+        Setting::HeaderColor { color, reset } => color_setting(ColorSetting::Header, color, reset),
+        Setting::FormWrap { value, reset } => form_wrap(value, reset),
+    }
+}
 
-    // `--reset` is how a user recovers from a broken settings file, so it must
-    // not fail on one. Anything else reports the problem.
-    let mut settings = if reset {
-        settings::load().unwrap_or_default()
+/// `--reset` is how a user recovers from a broken settings file, so it must
+/// not fail on one. Anything else reports the problem.
+fn load_settings(reset: bool) -> anyhow::Result<settings::Settings> {
+    if reset {
+        Ok(settings::load().unwrap_or_default())
     } else {
-        settings::load()?
-    };
+        settings::load()
+    }
+}
+
+fn color_setting(
+    setting: ColorSetting,
+    color: Option<Color>,
+    reset: bool,
+) -> anyhow::Result<Outcome> {
+    let mut settings = load_settings(reset)?;
 
     let slot = match setting {
         ColorSetting::Folder => &mut settings.folder_color,
@@ -70,5 +98,24 @@ pub fn run(args: ConfigArgs, _ctx: &Context) -> anyhow::Result<Outcome> {
     Ok(Outcome::Color {
         setting,
         color: current,
+    })
+}
+
+fn form_wrap(value: Option<Switch>, reset: bool) -> anyhow::Result<Outcome> {
+    let mut settings = load_settings(reset)?;
+    let changed = if reset {
+        settings.form_wrap = None;
+        true
+    } else if let Some(value) = value {
+        settings.form_wrap = Some(matches!(value, Switch::On));
+        true
+    } else {
+        false
+    };
+    if changed {
+        settings::save(&settings)?;
+    }
+    Ok(Outcome::FormWrap {
+        wrap: settings.form_wrap.unwrap_or(true),
     })
 }

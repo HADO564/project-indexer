@@ -147,6 +147,7 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
         // The kinds only pick columns for the human table; JSON always carries
         // every tracker in full.
         Outcome::Project { project, .. } => emit(out, &ProjectJson::from(project.as_ref())),
+        Outcome::FormWrap { wrap } => emit(out, &serde_json::json!({ "form_wrap": wrap })),
         Outcome::Color { setting, color } => {
             let mut data = serde_json::Map::new();
             data.insert(setting.key().to_string(), serde_json::to_value(color)?);
@@ -175,6 +176,8 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
         // The project as saved, every field — not a diff of what changed, so a
         // reader never has to merge it with an earlier copy.
         Outcome::Edited { project } => emit(out, &ProjectJson::from(project.as_ref())),
+        // The same shape as `Edited`: the project, here as it already was.
+        Outcome::Unchanged { project } => emit(out, &ProjectJson::from(project.as_ref())),
         // The project as saved, `is_deleted` now false.
         Outcome::Restored { project } => emit(out, &ProjectJson::from(project.as_ref())),
         // The project as it was: its row is gone, so, as for `untrack`, this
@@ -206,6 +209,17 @@ pub fn write_error(out: &mut impl Write, error: &anyhow::Error) -> anyhow::Resul
             message: failure.summary(),
             query: Some(query),
             matches: Some(matches.iter().map(ProjectJson::from).collect()),
+        },
+        // Not normally reached: `main` prints a usage error as prose and exits
+        // 2 before any document is written, as the `--json` contract has it.
+        // The arm exists because the match must cover every `Failure`, and it
+        // reports the documented `error` kind rather than inventing a fourth
+        // one a reader has never been told about.
+        Some(Failure::Usage { message }) => ErrorJson {
+            kind: "error",
+            message: message.clone(),
+            query: None,
+            matches: None,
         },
         None => ErrorJson {
             kind: "error",

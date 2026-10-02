@@ -9,12 +9,13 @@ fn a_missing_file_is_all_defaults() {
 }
 
 #[test]
-fn saved_colors_load_back() {
+fn saved_settings_load_back() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("nested").join("cli-settings.json");
     let saved = Settings {
         folder_color: Some(Color::HotPink),
         header_color: Some(Color::Gold),
+        form_wrap: Some(false),
     };
     save_to(&path, &saved).unwrap();
 
@@ -39,4 +40,21 @@ fn a_corrupt_file_is_an_error_naming_the_file() {
     std::fs::write(&path, "not json").unwrap();
     let error = format!("{:#}", load_from(&path).unwrap_err());
     assert!(error.contains("cli-settings.json"), "{error}");
+}
+
+#[test]
+fn a_file_from_before_form_wrap_loads_with_it_unset() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cli-settings.json");
+    std::fs::write(&path, r#"{"folder_color": "teal"}"#).unwrap();
+    assert_eq!(load_from(&path).unwrap().form_wrap, None);
+}
+
+#[test]
+fn an_unset_form_wrap_is_not_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cli-settings.json");
+    save_to(&path, &Settings::default()).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(!text.contains("form_wrap"), "{text}");
 }

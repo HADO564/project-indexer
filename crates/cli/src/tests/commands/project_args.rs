@@ -73,13 +73,16 @@ fn edit_takes_a_project_and_a_description() {
 }
 
 #[test]
-fn edit_without_a_change_is_a_usage_error() {
-    // The `change` group requires at least one field flag: an edit that
-    // changes nothing is almost certainly a mistake, and a usage error says
-    // so with exit code 2 before anything is looked up.
-    let err =
-        Cli::try_parse_from(["indexer", "edit", "app"]).expect_err("a bare edit should be refused");
-    assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+fn a_bare_edit_parses() {
+    // No longer refused by clap: with no field flag, `edit` asks its editor —
+    // the form in a terminal, a usage error anywhere else
+    // (`tests/commands/edit.rs`).
+    let cli = Cli::try_parse_from(["indexer", "edit", "app"]).expect("a bare edit should parse");
+    let Some(Invocation::Command(Command::Edit(args))) = cli.invocation else {
+        panic!("expected `edit`");
+    };
+    assert_eq!(args.project, "app");
+    assert_eq!(args.description, None);
 }
 
 #[test]

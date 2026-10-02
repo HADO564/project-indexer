@@ -62,3 +62,37 @@ pub struct UpdateProject {
     )]
     pub icon: Option<Option<String>>,
 }
+
+impl UpdateProject {
+    /// Whether this update changes nothing — every field `None`, "leave
+    /// alone". An editor that sends only what changed returns one of these
+    /// for an untouched form, and saving it would still move `updated_at`.
+    pub fn is_empty(&self) -> bool {
+        // Destructured rather than compared field by field, so a field added
+        // to the struct is a compile error here until it is checked too.
+        let UpdateProject {
+            name,
+            directory,
+            description,
+            tags,
+            favorite,
+            open_with,
+            notes,
+            properties,
+            group_id,
+            color,
+            icon,
+        } = self;
+        name.is_none()
+            && directory.is_none()
+            && description.is_none()
+            && tags.is_none()
+            && favorite.is_none()
+            && open_with.is_none()
+            && notes.is_none()
+            && properties.is_none()
+            && group_id.is_none()
+            && color.is_none()
+            && icon.is_none()
+    }
+}
