@@ -3,12 +3,14 @@
 //! Launching one is [`super::app_launching`]; the `.desktop` format both use
 //! is [`super::desktop_entry`].
 
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
 use crate::domain::InstalledApp;
 
 /// Scans platform-specific sources for installed applications, used by
 /// the "open with" app picker: Start Menu shortcuts and registry App
-/// Paths on Windows, `.desktop` files on Linux. macOS isn't covered yet,
-/// so it gets an empty list.
+/// Paths on Windows, `.desktop` files on Linux, `.app` bundles on macOS.
 pub fn list_installed_apps() -> Vec<InstalledApp> {
     #[cfg(windows)]
     {
@@ -18,10 +20,83 @@ pub fn list_installed_apps() -> Vec<InstalledApp> {
     {
         linux_impl::list_installed_apps()
     }
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    {
+        scan_app_bundles(&macos_application_dirs())
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         Vec::new()
     }
+}
+
+/// Where macOS keeps applications, the user's own first so a copy there wins
+/// over a system-wide one of the same name. `/Applications/Utilities` and
+/// vendor folders inside `/Applications` are reached by the scan's depth.
+#[cfg(target_os = "macos")]
+fn macos_application_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(home) = std::env::var_os("HOME") {
+        dirs.push(PathBuf::from(home).join("Applications"));
+    }
+    dirs.push(PathBuf::from("/Applications"));
+    dirs.push(PathBuf::from("/System/Applications"));
+    dirs
+}
+
+/// Every `.app` bundle in `dirs` and up to two folders below them, named as
+/// Finder shows it (`WezTerm` for `WezTerm.app`) and stored by path, which
+/// `open -a` accepts. A bundle is never looked inside: its own contents are
+/// not separate applications. The first of two apps with the same name, by
+/// the order of `dirs`, is kept.
+///
+/// Not macOS-only, though only macOS calls it: a scan of plain folders, so
+/// the tests can run it on any machine — CI does not build for macOS.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn scan_app_bundles(dirs: &[PathBuf]) -> Vec<InstalledApp> {
+    let mut apps: HashMap<String, InstalledApp> = HashMap::new();
+    for dir in dirs {
+        scan_bundle_dir(dir, 2, &mut apps);
+    }
+    let mut list: Vec<InstalledApp> = apps.into_values().collect();
+    list.sort_by_cached_key(|app| app.name.to_lowercase());
+    list
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn scan_bundle_dir(dir: &Path, depth: u32, apps: &mut HashMap<String, InstalledApp>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        // `is_dir` follows symlinks, as `/Applications/Safari.app` is one.
+        if !path.is_dir() {
+            continue;
+        }
+        if is_app_bundle(&path) {
+            let Some(name) = path.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            apps.entry(name.to_lowercase())
+                .or_insert_with(|| InstalledApp {
+                    name: name.to_string(),
+                    path: path.to_string_lossy().into_owned(),
+                });
+        } else if depth > 0 {
+            scan_bundle_dir(&path, depth - 1, apps);
+        }
+    }
+}
+
+/// A macOS application: a folder whose name ends in `.app`. Checked on any
+/// platform, so it can be tested anywhere; only macOS treats one as an app.
+pub(crate) fn is_app_bundle(path: &Path) -> bool {
+    path.is_dir()
+        && path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("app"))
 }
 
 #[cfg(windows)]
