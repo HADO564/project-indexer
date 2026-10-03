@@ -10,6 +10,11 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-10-04
+
+The "Open with" box comes to macOS: it now suggests your installed apps,
+as it already did on Windows and Linux.
+
 ### Added
 
 - **macOS: the "Open with" box suggests your installed apps.** As on Windows
@@ -271,7 +276,8 @@ The feature set below is what 0.1.1 ships.
 - Projects are stored in SQLite at `projects.db` in the platform config
   directory, with synchronous transactional writes.
 
-[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/HADO564/project-indexer/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/HADO564/project-indexer/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/HADO564/project-indexer/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/HADO564/project-indexer/compare/v0.3.1...v0.3.2
