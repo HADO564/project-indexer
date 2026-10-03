@@ -2146,7 +2146,7 @@ dependencies = [
 
 [[package]]
 name = "indexer-core"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "chrono",
  "git2",
@@ -3508,7 +3508,7 @@ dependencies = [
 
 [[package]]
 name = "project-indexer"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "block2",
  "indexer-core",

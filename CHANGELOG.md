@@ -10,6 +10,19 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+## [0.3.4] — 2026-10-02
+
+A small fix to the Bin.
+
+### Fixed
+
+- **The Bin's "Delete permanently" button is now "Purge", and fits.** The old
+  label spilled past the button's border. "Purge" is the command-line tool's
+  word for the same action; hovering explains that it removes the project's
+  record for good, and it still asks for a second click. Each button is now as
+  wide as its label, and in a narrow grid tile the pair wraps rather than
+  overflowing.
+
 ## [0.3.3] — 2026-09-30
 
 No user-facing changes; identical in behaviour to 0.3.2. Cut so that the repaired
@@ -243,7 +256,8 @@ The feature set below is what 0.1.1 ships.
 - Projects are stored in SQLite at `projects.db` in the platform config
   directory, with synchronous transactional writes.
 
-[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/HADO564/project-indexer/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/HADO564/project-indexer/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/HADO564/project-indexer/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/HADO564/project-indexer/compare/v0.3.0...v0.3.1

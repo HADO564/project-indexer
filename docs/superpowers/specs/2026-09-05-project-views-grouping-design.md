@@ -337,11 +337,12 @@ type View =
 | Favourites | `getAllProjects`, filtered to `favorite` — identical to what `get_favorite_projects` returns, since every comparator ends in the unique `id` so the sort is a total order and filter-then-sort equals sort-then-filter | standard `⋯` menu |
 | Group | `getAllProjects`, filtered by `group_id` | standard `⋯` menu |
 | Ungrouped | `getAllProjects`, filtered to `group_id == null` | standard `⋯` menu |
-| Bin | `getDeletedProjects` | Restore / Delete permanently |
+| Bin | `getDeletedProjects` | Restore / Purge |
 
 **Bin keeps the behaviour the modal had**, and this is the part most at risk of
 being lost in the move: restore, and a permanent purge whose button asks for a
-second click (`"Delete permanently"` → `"Confirm?"`) rather than stacking a
+second click (`"Purge"` → `"Confirm?"`; labelled "Delete permanently" until
+2026-10-02, renamed to match the CLI's `purge`) rather than stacking a
 confirmation on top. It never offers Open, Edit or Detect type — the directory
 is gone. Favourites keeps open and un-favourite via the standard menu.
 
@@ -360,7 +361,7 @@ shared behaviour:
 | `Sidebar.svelte` | the rail: All, Favourites, groups, Ungrouped, Bin |
 | `SidebarEntry.svelte` | one entry — icon, colour, label, count |
 | `ProjectActionsMenu.svelte` | the standard `⋯` menu, extracted once |
-| `BinActions.svelte` | Restore / Delete permanently, with the two-click confirm |
+| `BinActions.svelte` | Restore / Purge, with the two-click confirm |
 | `ProjectMark.svelte` | icon + colour pip |
 | `ProjectRow.svelte` | list presentation (today's card) |
 | `ProjectTile.svelte` | grid presentation |
