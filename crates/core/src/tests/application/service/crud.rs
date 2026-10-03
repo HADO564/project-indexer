@@ -425,3 +425,81 @@ fn update_refuses_a_folder_that_does_not_exist() {
         .unwrap_err();
     assert!(matches!(err, ProjectError::InvalidDirectory(_)));
 }
+
+// Renaming with `update`: one name, one project, ignoring case.
+
+fn mk_update_name(name: &str) -> UpdateProject {
+    UpdateProject {
+        name: Some(name.to_string()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn update_refuses_a_name_another_project_has_ignoring_case_and_changes_nothing() {
+    let svc = service(Arc::new(FakeLauncher::default()));
+    svc.create("Api".into(), tmpdir("rename-owner"), None, None)
+        .unwrap();
+    let p = svc
+        .create("App".into(), tmpdir("rename-blocked"), None, None)
+        .unwrap();
+    let before = svc.get(&p.id).unwrap();
+
+    for clash in ["Api", "api", "  API  "] {
+        let err = svc.update(&p.id, mk_update_name(clash)).unwrap_err();
+        assert!(matches!(err, ProjectError::DuplicateName(_)), "{clash:?}");
+    }
+    let after = svc.get(&p.id).unwrap();
+    assert_eq!(after.name, "App");
+    assert_eq!(after.updated_at, before.updated_at);
+}
+
+#[test]
+fn update_may_change_only_the_case_of_its_own_name() {
+    let svc = service(Arc::new(FakeLauncher::default()));
+    let p = svc
+        .create("app".into(), tmpdir("rename-case"), None, None)
+        .unwrap();
+    assert_eq!(
+        svc.update(&p.id, mk_update_name("App")).unwrap().name,
+        "App"
+    );
+}
+
+#[test]
+fn update_may_take_a_name_only_a_binned_project_had() {
+    use crate::ports::ProjectRepository;
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let svc = ProjectService::new(
+        repo.clone(),
+        Arc::new(FakeLauncher::default()),
+        Arc::new(DetectorRunner::default()),
+        repo.clone(),
+    );
+    let mut old = svc
+        .create("Old".into(), tmpdir("rename-binned"), None, None)
+        .unwrap();
+    old.mark_deleted();
+    repo.save(&old).unwrap();
+    let p = svc
+        .create("New".into(), tmpdir("rename-to-binned"), None, None)
+        .unwrap();
+    assert_eq!(
+        svc.update(&p.id, mk_update_name("Old")).unwrap().name,
+        "Old"
+    );
+}
+
+#[test]
+fn update_renames_to_a_free_name() {
+    let svc = service(Arc::new(FakeLauncher::default()));
+    svc.create("Other".into(), tmpdir("rename-other"), None, None)
+        .unwrap();
+    let p = svc
+        .create("Before".into(), tmpdir("rename-free"), None, None)
+        .unwrap();
+    assert_eq!(
+        svc.update(&p.id, mk_update_name("After")).unwrap().name,
+        "After"
+    );
+}

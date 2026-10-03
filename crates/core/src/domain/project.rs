@@ -118,14 +118,19 @@ impl Project {
         existing: &[Project],
     ) -> Result<(), ProjectError> {
         Self::check_for_duplicate_dir(directory, existing)?;
+        Self::check_for_duplicate_name(name, existing)
+    }
 
+    /// Refuses `name` if any of `existing` already has it, ignoring case and
+    /// surrounding spaces. `create` checks it, and so does renaming a project
+    /// with `update`.
+    pub fn check_for_duplicate_name(name: &str, existing: &[Project]) -> Result<(), ProjectError> {
         if existing
             .iter()
             .any(|p| p.name.trim().eq_ignore_ascii_case(name.trim()))
         {
             return Err(ProjectError::DuplicateName(name.to_string()));
         }
-
         Ok(())
     }
 
