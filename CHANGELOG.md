@@ -10,6 +10,17 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+### Fixed
+
+- **Changing a project's directory to another project's folder is refused.**
+  Creating a project already refused a folder another project had, but
+  editing one did not, so two projects could end up sharing a folder. Moving a
+  project now gets the same check — a folder only a binned project had is
+  still free.
+- **A project moved to another folder is re-detected.** Its git and Unreal
+  details described the old folder until you ran detection again by hand; they
+  now follow the move.
+
 ## [0.3.4] — 2026-10-02
 
 A small fix to the Bin.
