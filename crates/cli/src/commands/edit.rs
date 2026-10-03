@@ -31,6 +31,13 @@ pub struct EditArgs {
     #[arg(long, group = "change")]
     pub description: Option<String>,
 
+    /// Rename the project.
+    #[arg(long, group = "change")]
+    pub name: Option<String>,
+
+    /// Replace the notes. An empty string clears them.
+    #[arg(long, group = "change")]
+    pub notes: Option<String>,
     /// Add a tag. Repeat the flag or separate tags with commas. Adding a tag
     /// the project already has changes nothing.
     #[arg(long, group = "change", value_delimiter = ',')]
@@ -83,7 +90,9 @@ pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
         }
     } else {
         from_flags(
+            args.name,
             args.description,
+            args.notes,
             tags(&project.tags, args.add_tag, &args.remove_tag),
             properties(&project.properties, args.set, &args.unset),
         )
@@ -114,16 +123,26 @@ fn has_field_flag(args: &EditArgs) -> bool {
         || !args.remove_tag.is_empty()
         || !args.set.is_empty()
         || !args.unset.is_empty()
+        || args.name.is_some()
+        || args.notes.is_some()
 }
 
 /// The update the flags describe. Every field without a flag is `None`, which
 /// `update` reads as "leave alone".
 fn from_flags(
+    name: Option<String>,
     description: Option<String>,
+    notes: Option<String>,
     tags: Option<Vec<String>>,
     properties: Option<BTreeMap<String, String>>,
 ) -> UpdateProject {
+    // `UpdateProject.notes` is a box in a box: the outer one says whether to
+    // touch the notes at all, the inner one what to store. `--notes ""`
+    // clears them — `Some(None)` — as an emptied notes box does in the app.
+    let notes = notes.map(|text| if text.is_empty() { None } else { Some(text) });
     UpdateProject {
+        name,
+        notes,
         description,
         tags,
         properties,

@@ -140,35 +140,34 @@ impl Focus {
 }
 
 pub struct FormState {
-    /// The project's name, for the form's title. Not editable here.
-    title: String,
-    description: String,
-    edit_description: TextInput,
-    tags: Vec<String>,
-    edit_tags: TextInput,
+    /// The project as loaded: the form's title, and what `changes()` compares
+    /// every box against. Never edited — the boxes below are.
+    original: Project,
+
+    // The boxes, as the user has them now.
+    description: TextInput,
+    /// The tags as one comma-separated line, as the app's tag box has them.
+    tags: TextInput,
+    /// The full form's checkbox.
+    favorite: bool,
+    rows: Vec<PropertyRow>,
+
+    // The form's own state.
     focus: Focus,
     wrap: bool,
-    properties: BTreeMap<String, String>,
-    rows: Vec<PropertyRow>,
-    /// `Some(row)` while Ctrl+D waits for `y`; the next key answers it.
-    pending_delete: Option<usize>,
     /// Compact, or every field with `edit --full`.
     kind: FormKind,
-    /// The favourite flag as loaded, and as the full form's checkbox has it.
-    favorite: bool,
-    edit_favorite: bool,
+    /// `Some(row)` while Ctrl+D waits for `y`; the next key answers it.
+    pending_delete: Option<usize>,
 }
 
 impl FormState {
     pub fn new(project: &Project, wrap: bool, kind: FormKind) -> Self {
         Self {
-            title: project.name.clone(),
-            description: project.description.clone(),
-            edit_description: TextInput::new(&project.description),
-            tags: project.tags.clone(),
-            edit_tags: TextInput::new(&project.tags.join(", ")),
-            focus: Focus::Description,
-            properties: project.properties.clone(),
+            original: project.clone(),
+            description: TextInput::new(&project.description),
+            tags: TextInput::new(&project.tags.join(", ")),
+            favorite: project.favorite,
             rows: project
                 .properties
                 .iter()
@@ -177,18 +176,17 @@ impl FormState {
                     value: TextInput::new(value),
                 })
                 .collect(),
+            focus: Focus::Description,
             wrap,
-            pending_delete: None,
             kind,
-            favorite: project.favorite,
-            edit_favorite: project.favorite,
+            pending_delete: None,
         }
     }
 
     // Read-only views for `ui::form::draw`, which paints and decides nothing.
 
     pub fn title(&self) -> &str {
-        &self.title
+        &self.original.name
     }
 
     pub fn focus(&self) -> Focus {
@@ -202,15 +200,15 @@ impl FormState {
 
     /// Whether the favourite checkbox is ticked, as the form shows it now.
     pub fn favorite_checked(&self) -> bool {
-        self.edit_favorite
+        self.favorite
     }
 
     pub fn description_input(&self) -> &TextInput {
-        &self.edit_description
+        &self.description
     }
 
     pub fn tags_input(&self) -> &TextInput {
-        &self.edit_tags
+        &self.tags
     }
 
     pub fn rows(&self) -> &[PropertyRow] {
@@ -281,8 +279,8 @@ impl FormState {
     /// which is not one.
     fn focused_input(&mut self) -> Option<&mut TextInput> {
         match self.focus {
-            Focus::Description => Some(&mut self.edit_description),
-            Focus::Tags => Some(&mut self.edit_tags),
+            Focus::Description => Some(&mut self.description),
+            Focus::Tags => Some(&mut self.tags),
             Focus::Favorite => None,
             Focus::Name(i) => Some(&mut self.rows[i].name),
             Focus::Value(i) => Some(&mut self.rows[i].value),
@@ -294,10 +292,6 @@ impl FormState {
     pub fn handle(&mut self, key: KeyEvent) -> Action {
         // Windows reports releases too; acting on them would type every key
         // twice.
-        if key.code == KeyCode::Char(' ') && self.focus == Focus::Favorite {
-            self.edit_favorite = !self.edit_favorite;
-            return Action::Continue;
-        }
         if key.kind != KeyEventKind::Press {
             return Action::Continue;
         } else if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -395,7 +389,7 @@ impl FormState {
             // Space ticks or unticks the full form's favourite checkbox. Above
             // typing, so it is not swallowed as text; anywhere else Space types.
             KeyCode::Char(' ') if self.focus == Focus::Favorite => {
-                self.edit_favorite = !self.edit_favorite;
+                self.favorite = !self.favorite;
                 Action::Continue
             }
             KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -414,20 +408,21 @@ impl FormState {
     pub fn changes(&self) -> UpdateProject {
         // Core stores "no description" as `""`, so an emptied field is
         // `Some("")`, a real change, not `None`.
-        let description = if self.edit_description.value() != self.description {
-            Some(self.edit_description.value().to_string())
+        let description = if self.description.value() != self.original.description {
+            Some(self.description.value().to_string())
         } else {
             None
         };
 
         // Compared as core stores them: `rust` retyped over `Rust` is no
         // change. The list is sent as typed; core normalizes on save.
-        let typed_tags = parse_tags(self.edit_tags.value());
-        let tags = if normalize_tags(typed_tags.clone()) != normalize_tags(self.tags.clone()) {
-            Some(typed_tags)
-        } else {
-            None
-        };
+        let typed_tags = parse_tags(self.tags.value());
+        let tags =
+            if normalize_tags(typed_tags.clone()) != normalize_tags(self.original.tags.clone()) {
+                Some(typed_tags)
+            } else {
+                None
+            };
 
         // Names match ignoring case, as `edit::edited_properties` and the
         // search bar do: of two equal names the lower row wins. A blank row
@@ -441,17 +436,17 @@ impl FormState {
             typed.retain(|existing: &String, _| existing.trim().to_lowercase() != wanted);
             typed.insert(row.name.value().to_string(), row.value.value().to_string());
         }
-        let properties = if Self::lowercase_names(&typed) != Self::lowercase_names(&self.properties)
-        {
-            Some(typed)
-        } else {
-            None
-        };
+        let properties =
+            if Self::lowercase_names(&typed) != Self::lowercase_names(&self.original.properties) {
+                Some(typed)
+            } else {
+                None
+            };
 
         // Only when the box was left differently from how the project had it:
         // ticking and unticking again sends nothing.
-        let favorite = if self.edit_favorite != self.favorite {
-            Some(self.edit_favorite)
+        let favorite = if self.favorite != self.original.favorite {
+            Some(self.favorite)
         } else {
             None
         };

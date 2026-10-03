@@ -971,3 +971,18 @@ fn enter_on_the_checkbox_saves() {
     tab(&mut form, 2);
     assert!(matches!(form.handle(press(KeyCode::Enter)), Action::Save));
 }
+
+#[test]
+fn releasing_space_does_not_toggle_the_checkbox_back() {
+    // Windows reports a press and a release; only the press may toggle, or
+    // every Space would tick and untick again.
+    let mut form = full_form(false, true, true);
+    tab(&mut form, 2);
+    space(&mut form);
+    form.handle(KeyEvent::new_with_kind(
+        KeyCode::Char(' '),
+        KeyModifiers::NONE,
+        KeyEventKind::Release,
+    ));
+    assert_eq!(form.changes().favorite, Some(true));
+}
