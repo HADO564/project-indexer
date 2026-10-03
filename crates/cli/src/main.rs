@@ -59,6 +59,10 @@ struct Cli {
     invocation: Option<Invocation>,
 }
 
+// `Command` is far larger than `Observe`, which clippy flags because every
+// value takes the larger size. There is exactly one, parsed once per run, so
+// the bytes do not matter; boxing it would only add a `*` to every match.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand)]
 enum Invocation {
     #[command(flatten)]

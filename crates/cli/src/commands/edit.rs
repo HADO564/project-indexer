@@ -19,6 +19,7 @@ use std::collections::BTreeMap;
 use super::{find_one, Outcome, TrackerKind};
 use crate::context::Context;
 use crate::editor::FormKind;
+use std::path::PathBuf;
 
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("change").multiple(true)))]
@@ -70,6 +71,12 @@ pub struct EditArgs {
     /// field flag.
     #[arg(long, conflicts_with = "change")]
     pub full: bool,
+
+    /// Point the project at another folder — after moving or renaming it on
+    /// disk. It must exist, and no other project may have it. A relative path
+    /// is resolved from where you run the command.
+    #[arg(long, group = "change")]
+    pub directory: Option<PathBuf>,
 }
 
 pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
@@ -89,8 +96,15 @@ pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
             None => return Ok(Outcome::Cancelled),
         }
     } else {
+        // Absolute, and with symlinks resolved, as `add` stores a path: a
+        // relative one means nothing once the command has finished.
+        let directory = args
+            .directory
+            .map(|d| super::add::absolute(Some(d)))
+            .transpose()?;
         from_flags(
             args.name,
+            directory,
             args.description,
             args.notes,
             tags(&project.tags, args.add_tag, &args.remove_tag),
@@ -125,12 +139,14 @@ fn has_field_flag(args: &EditArgs) -> bool {
         || !args.unset.is_empty()
         || args.name.is_some()
         || args.notes.is_some()
+        || args.directory.is_some()
 }
 
 /// The update the flags describe. Every field without a flag is `None`, which
 /// `update` reads as "leave alone".
 fn from_flags(
     name: Option<String>,
+    directory: Option<String>,
     description: Option<String>,
     notes: Option<String>,
     tags: Option<Vec<String>>,
@@ -142,6 +158,7 @@ fn from_flags(
     let notes = notes.map(|text| if text.is_empty() { None } else { Some(text) });
     UpdateProject {
         name,
+        directory,
         notes,
         description,
         tags,
