@@ -134,7 +134,8 @@ between them is a natural point for a pull request.
 
 **Part 2 — `--full`, one field and its flag at a time**
 
-8. **`--full` and the favourite checkbox.** The flag (a usage error beside a
+8. ~~**`--full` and the favourite checkbox.**~~ *(done 2026-10-03; the
+   checkbox sits between the tags and the properties.)* The flag (a usage error beside a
    field flag, or without a terminal), `FormState` holding which form it is,
    and a checkbox input toggled with Space. Favourite's command-line way is
    the `favorite` / `unfavorite` verbs, so it needs no new flag.

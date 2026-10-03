@@ -123,6 +123,8 @@ pub enum Action {
 pub enum Focus {
     Description,
     Tags,
+    /// The favourite checkbox, in the full form only.
+    Favorite,
     Name(usize),
     Value(usize),
 }
@@ -152,6 +154,9 @@ pub struct FormState {
     pending_delete: Option<usize>,
     /// Compact, or every field with `edit --full`.
     kind: FormKind,
+    /// The favourite flag as loaded, and as the full form's checkbox has it.
+    favorite: bool,
+    edit_favorite: bool,
 }
 
 impl FormState {
@@ -175,6 +180,8 @@ impl FormState {
             wrap,
             pending_delete: None,
             kind,
+            favorite: project.favorite,
+            edit_favorite: project.favorite,
         }
     }
 
@@ -191,6 +198,11 @@ impl FormState {
     /// The compact form, or the full one `edit --full` asked for.
     pub fn kind(&self) -> FormKind {
         self.kind
+    }
+
+    /// Whether the favourite checkbox is ticked, as the form shows it now.
+    pub fn favorite_checked(&self) -> bool {
+        self.edit_favorite
     }
 
     pub fn description_input(&self) -> &TextInput {
@@ -210,16 +222,20 @@ impl FormState {
         self.pending_delete
     }
 
-    /// Tab / ↓. On the last box (the last row's value, or the tags when there
-    /// are no rows), wraps to the first or stays, per `wrap`.
+    /// Tab / ↓, in the order description, tags, the favourite checkbox (full
+    /// form only), then each row's name and value. On the last box, wraps to
+    /// the first or stays, per `wrap`.
     fn next_focus(&mut self) {
         let from = self.focus;
         self.focus = match self.focus {
             Focus::Description => Focus::Tags,
-            Focus::Tags if !self.rows.is_empty() => Focus::Name(0),
-            // No rows below: the tags are the last field.
-            Focus::Tags if self.wrap => Focus::Description,
+            // The full form's checkbox sits between the tags and the rows.
+            Focus::Tags if self.kind == FormKind::Full => Focus::Favorite,
+            Focus::Tags | Focus::Favorite if !self.rows.is_empty() => Focus::Name(0),
+            // No rows below: this is the last field.
+            Focus::Tags | Focus::Favorite if self.wrap => Focus::Description,
             Focus::Tags => Focus::Tags,
+            Focus::Favorite => Focus::Favorite,
             Focus::Name(i) => Focus::Value(i),
             Focus::Value(i) if i < self.rows.len() - 1 => Focus::Name(i + 1),
             Focus::Value(i) if i == self.rows.len() - 1 && self.wrap => Focus::Description,
@@ -228,8 +244,9 @@ impl FormState {
         self.leave_row(from);
     }
 
-    /// Shift+Tab / ↑. On the first field, wraps to the last box (the last
-    /// row's value, or the tags when there are no rows) or stays, per `wrap`.
+    /// Shift+Tab / ↑. On the first field, wraps to the last box — the last
+    /// row's value, else the checkbox in the full form, else the tags — or
+    /// stays, per `wrap`.
     fn previous_focus(&mut self) {
         let from = self.focus;
         self.focus = match self.focus {
@@ -237,10 +254,14 @@ impl FormState {
             Focus::Description if !self.rows.is_empty() && self.wrap => {
                 Focus::Value(self.rows.len() - 1)
             }
+            // No rows: the last field is the checkbox in the full form.
+            Focus::Description if self.wrap && self.kind == FormKind::Full => Focus::Favorite,
             Focus::Description if self.wrap => Focus::Tags,
             Focus::Description => Focus::Description,
+            Focus::Favorite => Focus::Tags,
             // Before the general arm: row 0 has no row above it, and `0 - 1`
-            // would panic.
+            // would panic. Above it is the checkbox in the full form.
+            Focus::Name(0) if self.kind == FormKind::Full => Focus::Favorite,
             Focus::Name(0) => Focus::Tags,
             Focus::Name(i) => Focus::Value(i - 1),
             Focus::Value(i) => Focus::Name(i),
@@ -248,12 +269,15 @@ impl FormState {
         self.leave_row(from);
     }
 
-    fn focused_input(&mut self) -> &mut TextInput {
+    /// The text box keys type into, or `None` on the favourite checkbox,
+    /// which is not one.
+    fn focused_input(&mut self) -> Option<&mut TextInput> {
         match self.focus {
-            Focus::Description => &mut self.edit_description,
-            Focus::Tags => &mut self.edit_tags,
-            Focus::Name(i) => &mut self.rows[i].name,
-            Focus::Value(i) => &mut self.rows[i].value,
+            Focus::Description => Some(&mut self.edit_description),
+            Focus::Tags => Some(&mut self.edit_tags),
+            Focus::Favorite => None,
+            Focus::Name(i) => Some(&mut self.rows[i].name),
+            Focus::Value(i) => Some(&mut self.rows[i].value),
         }
     }
 
@@ -262,6 +286,10 @@ impl FormState {
     pub fn handle(&mut self, key: KeyEvent) -> Action {
         // Windows reports releases too; acting on them would type every key
         // twice.
+        if key.code == KeyCode::Char(' ') && self.focus == Focus::Favorite {
+            self.edit_favorite = !self.edit_favorite;
+            return Action::Continue;
+        }
         if key.kind != KeyEventKind::Press {
             return Action::Continue;
         } else if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -311,27 +339,39 @@ impl FormState {
                 Action::Continue
             }
             KeyCode::Left => {
-                self.focused_input().left();
+                if let Some(input) = self.focused_input() {
+                    input.left();
+                }
                 Action::Continue
             }
             KeyCode::Right => {
-                self.focused_input().right();
+                if let Some(input) = self.focused_input() {
+                    input.right();
+                }
                 Action::Continue
             }
             KeyCode::Home => {
-                self.focused_input().home();
+                if let Some(input) = self.focused_input() {
+                    input.home();
+                }
                 Action::Continue
             }
             KeyCode::End => {
-                self.focused_input().end();
+                if let Some(input) = self.focused_input() {
+                    input.end();
+                }
                 Action::Continue
             }
             KeyCode::Backspace => {
-                self.focused_input().backspace();
+                if let Some(input) = self.focused_input() {
+                    input.backspace();
+                }
                 Action::Continue
             }
             KeyCode::Delete => {
-                self.focused_input().delete();
+                if let Some(input) = self.focused_input() {
+                    input.delete();
+                }
                 Action::Continue
             }
             KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -344,8 +384,17 @@ impl FormState {
             }
             // Typing. A Ctrl-held letter is a shortcut, never text: Ctrl+N
             // must not also type an `n`.
+            // Space ticks or unticks the full form's favourite checkbox. Above
+            // typing, so it is not swallowed as text; anywhere else Space types.
+            KeyCode::Char(' ') if self.focus == Focus::Favorite => {
+                self.edit_favorite = !self.edit_favorite;
+                Action::Continue
+            }
             KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.focused_input().insert(c);
+                // No text box under the checkbox: other characters do nothing.
+                if let Some(input) = self.focused_input() {
+                    input.insert(c);
+                }
                 Action::Continue
             }
             _ => Action::Continue,
@@ -391,9 +440,18 @@ impl FormState {
             None
         };
 
+        // Only when the box was left differently from how the project had it:
+        // ticking and unticking again sends nothing.
+        let favorite = if self.edit_favorite != self.favorite {
+            Some(self.edit_favorite)
+        } else {
+            None
+        };
+
         UpdateProject {
             description,
             tags,
+            favorite,
             properties,
             ..Default::default()
         }

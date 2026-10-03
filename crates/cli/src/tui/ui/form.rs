@@ -36,12 +36,15 @@ const MARKER_WIDTH: u16 = 4;
 /// Esc say what they do here; Ctrl+D is only offered on a row.
 fn hints(focus: Focus) -> Vec<&'static str> {
     let on_row = matches!(focus, Focus::Name(_) | Focus::Value(_));
-    let mut hints = vec![
-        if matches!(focus, Focus::Name(_)) {
-            "Enter value"
-        } else {
-            "Enter save"
-        },
+    let mut hints = vec![if matches!(focus, Focus::Name(_)) {
+        "Enter value"
+    } else {
+        "Enter save"
+    }];
+    if focus == Focus::Favorite {
+        hints.push("Space toggle");
+    }
+    hints.extend([
         if on_row {
             "Esc leave properties"
         } else {
@@ -49,7 +52,7 @@ fn hints(focus: Focus) -> Vec<&'static str> {
         },
         "Tab next",
         "Ctrl+N add property",
-    ];
+    ]);
     if on_row {
         hints.push("Ctrl+D delete");
     }
@@ -69,9 +72,12 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
     let inner = block.inner(frame.area()).inner(Margin::new(1, 0));
     frame.render_widget(block, frame.area());
 
-    let [description, tags, _, header, rows, _, hint] = Layout::vertical([
+    // The full form's extra lines take no height in the compact one.
+    let full = state.kind() == FormKind::Full;
+    let [description, tags, favorite, _, header, rows, _, hint] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(1),
+        Constraint::Length(u16::from(full)),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Fill(1),
@@ -95,6 +101,15 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
         state.tags_input(),
         focus == Focus::Tags,
     );
+    if full {
+        checkbox(
+            frame,
+            favorite,
+            "Favourite",
+            state.favorite_checked(),
+            focus == Focus::Favorite,
+        );
+    }
     properties(frame, header, rows, state);
     hint_line(frame, hint, state);
 }
@@ -103,16 +118,35 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
 fn field(frame: &mut Frame, area: Rect, label: &str, input: &TextInput, focused: bool) {
     let [label_area, input_area] =
         Layout::horizontal([Constraint::Length(LABEL_WIDTH), Constraint::Fill(1)]).areas(area);
-    let label = if focused {
+    frame.render_widget(Paragraph::new(label_line(label, focused)), label_area);
+    text_box(frame, input_area, input, focused, Style::new());
+}
+
+/// A field's label, marked `›` and bold when its field has focus.
+fn label_line(label: &str, focused: bool) -> Line<'static> {
+    if focused {
         Line::from(Span::styled(
             format!("› {label}"),
             Style::new().add_modifier(Modifier::BOLD),
         ))
     } else {
         Line::from(format!("  {label}"))
+    }
+}
+
+/// A labelled tick box: `[x]` or `[ ]`, reversed when focused, as a text box
+/// is. It holds no cursor — there is nothing to type into.
+fn checkbox(frame: &mut Frame, area: Rect, label: &str, checked: bool, focused: bool) {
+    let [label_area, box_area] =
+        Layout::horizontal([Constraint::Length(LABEL_WIDTH), Constraint::Length(3)]).areas(area);
+    frame.render_widget(Paragraph::new(label_line(label, focused)), label_area);
+    let style = if focused {
+        Style::new().add_modifier(Modifier::REVERSED)
+    } else {
+        Style::new()
     };
-    frame.render_widget(Paragraph::new(label), label_area);
-    text_box(frame, input_area, input, focused, Style::new());
+    let mark = if checked { "[x]" } else { "[ ]" };
+    frame.render_widget(Paragraph::new(mark).style(style), box_area);
 }
 
 fn properties(frame: &mut Frame, header: Rect, area: Rect, state: &FormState) {

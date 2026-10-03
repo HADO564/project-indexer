@@ -225,3 +225,29 @@ fn the_full_form_says_so_in_its_title() {
     let form = FormState::new(&project(json!({})), true, FormKind::Full);
     assert!(screen(&render(&form, 60, 11))[0].starts_with("┌ Edit app · all fields ─"));
 }
+
+#[test]
+fn the_full_form_draws_the_favourite_checkbox_under_the_tags() {
+    let mut form = FormState::new(&project(json!({"Client": "Acme"})), true, FormKind::Full);
+    let terminal = render(&form, 60, 12);
+    let lines = screen(&terminal);
+    assert_eq!(
+        lines[3],
+        "│   Favourite     [ ]                                      │"
+    );
+    assert_eq!(
+        lines[5],
+        "│   Properties                                             │"
+    );
+
+    press(&mut form, KeyCode::Tab);
+    press(&mut form, KeyCode::Tab);
+    press(&mut form, KeyCode::Char(' '));
+    let terminal = render(&form, 60, 12);
+    assert_eq!(
+        screen(&terminal)[3],
+        "│ › Favourite     [x]                                      │"
+    );
+    assert!(modifier_at(&terminal, 18, 3).contains(Modifier::REVERSED));
+    assert!(screen(&terminal)[10].contains("Space toggle"));
+}

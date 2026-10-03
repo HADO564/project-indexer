@@ -832,3 +832,142 @@ fn esc_during_the_delete_question_only_answers_no() {
         Some(props(&[("ClientX", "Acme"), ("Stage", "beta")]))
     );
 }
+
+// The full form: the favourite checkbox, between the tags and the rows.
+
+fn full_form(favorite: bool, rows: bool, wrap: bool) -> FormState {
+    let mut project = project("A tool", &["Rust"]);
+    project.favorite = favorite;
+    if rows {
+        project.properties = props(&[("Stage", "beta"), ("Client", "Acme")]);
+    }
+    FormState::new(&project, wrap, FormKind::Full)
+}
+
+fn space(form: &mut FormState) {
+    form.handle(press(KeyCode::Char(' ')));
+}
+
+#[test]
+fn tab_from_the_tags_reaches_the_checkbox_and_space_ticks_it() {
+    let mut form = full_form(false, true, true);
+    tab(&mut form, 2);
+    space(&mut form);
+    let changes = form.changes();
+    assert_eq!(changes.favorite, Some(true));
+    assert_eq!(changes.tags, None, "the space was not typed into the tags");
+}
+
+#[test]
+fn ticking_and_unticking_again_sends_nothing() {
+    let mut form = full_form(false, true, true);
+    tab(&mut form, 2);
+    space(&mut form);
+    space(&mut form);
+    assert_eq!(form.changes().favorite, None);
+}
+
+#[test]
+fn a_favourite_loads_ticked_and_saving_it_untouched_keeps_it() {
+    let mut form = full_form(true, true, true);
+    assert_eq!(form.changes().favorite, None);
+    tab(&mut form, 2);
+    space(&mut form);
+    assert_eq!(form.changes().favorite, Some(false));
+}
+
+#[test]
+fn letters_and_editing_keys_do_nothing_on_the_checkbox() {
+    let mut form = full_form(false, true, true);
+    tab(&mut form, 2);
+    type_text(&mut form, "yes");
+    for code in [
+        KeyCode::Backspace,
+        KeyCode::Delete,
+        KeyCode::Left,
+        KeyCode::Right,
+        KeyCode::Home,
+        KeyCode::End,
+    ] {
+        form.handle(press(code));
+    }
+    assert!(
+        form.changes().is_empty(),
+        "nothing to type into, nothing changed"
+    );
+}
+
+#[test]
+fn space_still_types_a_space_in_a_text_box() {
+    let mut form = full_form(false, true, true);
+    space(&mut form);
+    assert_eq!(form.changes().description.as_deref(), Some("A tool "));
+}
+
+#[test]
+fn tab_from_the_checkbox_reaches_the_first_row() {
+    let mut form = full_form(false, true, true);
+    tab(&mut form, 3);
+    type_text(&mut form, "1");
+    assert_eq!(
+        form.changes().properties,
+        Some(props(&[("Client1", "Acme"), ("Stage", "beta")]))
+    );
+}
+
+#[test]
+fn shift_tab_from_the_first_row_reaches_the_checkbox() {
+    let mut form = full_form(false, true, true);
+    tab(&mut form, 3); // Client's name
+    shift_tab(&mut form, 1);
+    space(&mut form);
+    assert_eq!(form.changes().favorite, Some(true));
+}
+
+#[test]
+fn shift_tab_from_the_checkbox_reaches_the_tags() {
+    let mut form = full_form(false, true, true);
+    tab(&mut form, 2);
+    shift_tab(&mut form, 1);
+    type_text(&mut form, ", Go");
+    assert_eq!(form.changes().tags, Some(vec!["Rust".into(), "Go".into()]));
+}
+
+#[test]
+fn with_no_rows_the_checkbox_is_last_wrapping_both_ways() {
+    let mut form = full_form(false, false, true);
+    shift_tab(&mut form, 1); // the description wraps back to the checkbox
+    space(&mut form);
+    assert_eq!(form.changes().favorite, Some(true));
+    tab(&mut form, 1); // and forward to the description
+    type_text(&mut form, "!");
+    assert_eq!(form.changes().description.as_deref(), Some("A tool!"));
+}
+
+#[test]
+fn without_wrap_tab_stays_on_the_checkbox_when_it_is_last() {
+    let mut form = full_form(false, false, false);
+    tab(&mut form, 5);
+    space(&mut form);
+    assert_eq!(form.changes().favorite, Some(true));
+}
+
+#[test]
+fn the_compact_form_has_no_checkbox() {
+    let mut form = form_with_rows(true);
+    tab(&mut form, 2); // straight from the tags to Client's name
+    type_text(&mut form, "X");
+    let changes = form.changes();
+    assert_eq!(changes.favorite, None);
+    assert_eq!(
+        changes.properties,
+        Some(props(&[("ClientX", "Acme"), ("Stage", "beta")]))
+    );
+}
+
+#[test]
+fn enter_on_the_checkbox_saves() {
+    let mut form = full_form(false, true, true);
+    tab(&mut form, 2);
+    assert!(matches!(form.handle(press(KeyCode::Enter)), Action::Save));
+}
