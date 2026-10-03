@@ -268,3 +268,160 @@ fn update_clears_group_without_needing_one_to_exist() {
     assert!(cleared.group_id.is_none());
     assert!(svc.get(&p.id).unwrap().group_id.is_none());
 }
+
+// Moving a project with `update`: one folder, one project, and the trackers
+// follow the folder.
+
+fn mk_update_directory(path: &str) -> UpdateProject {
+    UpdateProject {
+        directory: Some(path.to_string()),
+        ..Default::default()
+    }
+}
+
+/// Finds git only in folders whose name ends in `-git`, so a move between
+/// two folders shows whether detection ran on the new one.
+struct GitWhereNamed;
+impl crate::detectors::Detector for GitWhereNamed {
+    fn kind(&self) -> &'static str {
+        "git"
+    }
+    fn detect(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<Option<Tracker>, crate::error::DetectorError> {
+        if !path.to_string_lossy().ends_with("-git") {
+            return Ok(None);
+        }
+        Ok(Some(Tracker::Git(crate::detectors::git::GitInfo {
+            repo_root: path.display().to_string(),
+            dirty: false,
+            detached_head: false,
+            repo_url: None,
+            web_url: None,
+            contributors: Vec::new(),
+            curr_branch: Some("main".into()),
+            branches: None,
+            commit_hash: None,
+        })))
+    }
+}
+
+fn service_finding_git_where_named() -> ProjectService {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    ProjectService::new(
+        repo.clone(),
+        Arc::new(FakeLauncher::default()),
+        Arc::new(DetectorRunner::new(vec![Box::new(GitWhereNamed)])),
+        repo,
+    )
+}
+
+#[test]
+fn update_moves_a_project_to_an_existing_folder() {
+    let svc = service(Arc::new(FakeLauncher::default()));
+    let p = svc
+        .create("Mover".into(), tmpdir("move-from"), None, None)
+        .unwrap();
+    let to = tmpdir("move-to");
+    let moved = svc.update(&p.id, mk_update_directory(&to)).unwrap();
+    assert_eq!(moved.directory, to);
+    assert_eq!(svc.get(&p.id).unwrap().directory, to);
+}
+
+#[test]
+fn update_refuses_a_folder_another_project_has_and_changes_nothing() {
+    let svc = service(Arc::new(FakeLauncher::default()));
+    let taken = tmpdir("move-taken");
+    svc.create("Owner".into(), taken.clone(), None, None)
+        .unwrap();
+    let p = svc
+        .create("Mover".into(), tmpdir("move-blocked"), None, None)
+        .unwrap();
+    let before = svc.get(&p.id).unwrap();
+
+    let err = svc.update(&p.id, mk_update_directory(&taken)).unwrap_err();
+
+    assert!(matches!(err, ProjectError::DuplicateDirectory(_)));
+    let after = svc.get(&p.id).unwrap();
+    assert_eq!(after.directory, before.directory);
+    assert_eq!(after.updated_at, before.updated_at);
+}
+
+#[test]
+fn update_may_take_a_folder_only_a_binned_project_had() {
+    // `create` ignores the bin too: a binned project's folder is gone, so
+    // whatever is there now is free to track.
+    use crate::ports::ProjectRepository;
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let svc = ProjectService::new(
+        repo.clone(),
+        Arc::new(FakeLauncher::default()),
+        Arc::new(DetectorRunner::default()),
+        repo.clone(),
+    );
+    let dir = tmpdir("move-binned");
+    let mut old = svc.create("Old".into(), dir.clone(), None, None).unwrap();
+    old.mark_deleted();
+    repo.save(&old).unwrap();
+    let p = svc
+        .create("Mover".into(), tmpdir("move-to-binned"), None, None)
+        .unwrap();
+    assert_eq!(
+        svc.update(&p.id, mk_update_directory(&dir))
+            .unwrap()
+            .directory,
+        dir
+    );
+}
+
+#[test]
+fn update_to_the_same_folder_is_not_a_move() {
+    // Its own folder is not "taken by another project", and nothing is
+    // re-detected.
+    let svc = service_finding_git_where_named();
+    let dir = tmpdir("stay-git");
+    let p = svc
+        .create("Stayer".into(), dir.clone(), None, None)
+        .unwrap();
+    assert_eq!(p.trackers.len(), 1);
+    let same = svc.update(&p.id, mk_update_directory(&dir)).unwrap();
+    assert_eq!(same.directory, dir);
+    let kinds = |trackers: &[Tracker]| trackers.iter().map(Tracker::kind).collect::<Vec<_>>();
+    assert_eq!(kinds(&same.trackers), kinds(&p.trackers));
+}
+
+#[test]
+fn update_re_detects_the_trackers_of_a_moved_project() {
+    let svc = service_finding_git_where_named();
+    let p = svc
+        .create("Plain".into(), tmpdir("move-plain"), None, None)
+        .unwrap();
+    assert!(p.trackers.is_empty());
+
+    let to = tmpdir("move-into-git");
+    let moved = svc.update(&p.id, mk_update_directory(&to)).unwrap();
+    assert_eq!(moved.trackers.len(), 1, "detected in the new folder");
+    assert_eq!(moved.trackers[0].kind(), "Git");
+
+    let back = svc
+        .update(&p.id, mk_update_directory(&tmpdir("move-plain")))
+        .unwrap();
+    assert!(
+        back.trackers.is_empty(),
+        "the old folder's trackers do not linger"
+    );
+}
+
+#[test]
+fn update_refuses_a_folder_that_does_not_exist() {
+    let svc = service(Arc::new(FakeLauncher::default()));
+    let p = svc
+        .create("Mover".into(), tmpdir("move-nowhere"), None, None)
+        .unwrap();
+    let missing = std::env::temp_dir().join("pi-svc-there-is-no-such-folder");
+    let err = svc
+        .update(&p.id, mk_update_directory(&missing.to_string_lossy()))
+        .unwrap_err();
+    assert!(matches!(err, ProjectError::InvalidDirectory(_)));
+}

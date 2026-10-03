@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::application::inspection::{results_from, DirectoryState, ProjectInspection};
 use crate::detectors::DetectorRunner;
 use crate::domain::naming::{disambiguate, suggest_project_name, taken_names_from};
+use crate::domain::normalize::normalize_directory;
 use crate::domain::sorting::{filter_deleted, filter_favorites, sort_projects, SortOptions};
 use crate::domain::{Project, Tracker, UpdateProject};
 use crate::error::ProjectError;

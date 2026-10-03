@@ -117,13 +117,7 @@ impl Project {
         directory: &str,
         existing: &[Project],
     ) -> Result<(), ProjectError> {
-        let normalized_directory = normalize_directory(directory);
-        if existing
-            .iter()
-            .any(|p| normalize_directory(&p.directory) == normalized_directory)
-        {
-            return Err(ProjectError::DuplicateDirectory(directory.to_string()));
-        }
+        Self::check_for_duplicate_dir(directory, existing)?;
 
         if existing
             .iter()
@@ -132,6 +126,23 @@ impl Project {
             return Err(ProjectError::DuplicateName(name.to_string()));
         }
 
+        Ok(())
+    }
+
+    /// Refuses `directory` if any of `existing` already has it, compared as
+    /// stored: trimmed, with either slash. One folder, one project — `create`
+    /// checks it, and so does moving a project with `update`.
+    pub fn check_for_duplicate_dir(
+        directory: &str,
+        existing: &[Project],
+    ) -> Result<(), ProjectError> {
+        let normalized_directory = normalize_directory(directory);
+        if existing
+            .iter()
+            .any(|p| normalize_directory(&p.directory) == normalized_directory)
+        {
+            return Err(ProjectError::DuplicateDirectory(directory.to_string()));
+        }
         Ok(())
     }
 
