@@ -131,3 +131,25 @@ mod linux {
         assert_eq!(args, ["100%", "/home/me/proj"]);
     }
 }
+
+/// The picker stores a bundle's path, and a bundle is a folder, not a file:
+/// it must still count as installed, or every app picked would read as
+/// missing the moment the project is opened.
+#[cfg(target_os = "macos")]
+#[test]
+fn an_app_bundle_path_is_available() {
+    let root = tempfile::tempdir().unwrap();
+    let app = root.path().join("Zed.app");
+    std::fs::create_dir_all(app.join("Contents")).unwrap();
+    assert!(open_with_app_available(&app.to_string_lossy()));
+    assert!(!open_with_app_available(
+        &root.path().join("Gone.app").to_string_lossy()
+    ));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_plain_folder_is_not_an_app() {
+    let root = tempfile::tempdir().unwrap();
+    assert!(!open_with_app_available(&root.path().to_string_lossy()));
+}

@@ -10,6 +10,21 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+### Added
+
+- **macOS: the "Open with" box suggests your installed apps.** As on Windows
+  and Linux, typing in it now lists the best matches from `/Applications`,
+  `~/Applications` and the system's own apps, folders inside them included;
+  picking one stores the app's location. macOS previously had no list at all,
+  so an app had to be typed by name.
+
+### Fixed
+
+- **macOS: an app chosen by its location is no longer reported as missing.**
+  An app on macOS is a folder (`WezTerm.app`), and the check made before
+  opening a project only accepted a file, so it would have refused every app
+  the new list stores.
+
 ## [0.3.4] — 2026-10-02
 
 A small fix to the Bin.

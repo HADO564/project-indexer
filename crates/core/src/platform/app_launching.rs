@@ -4,6 +4,7 @@
 //! a machine and running one are different jobs — and every test for this half
 //! was sitting in a file named for the other.
 
+use super::app_discovery::is_app_bundle;
 #[cfg(target_os = "linux")]
 use super::desktop_entry::{is_path_field_code, quote_arg, split_with};
 
@@ -41,12 +42,15 @@ fn program_from_open_with(open_with: &str) -> String {
 /// Checks whether `program` exists: as a path on its own when it looks like
 /// one (absolute, or containing a separator), otherwise by searching `PATH`
 /// the way the OS would when launching a bare command name.
+///
+/// On macOS a path may also be an application bundle — a `.app` folder, which
+/// is what the picker stores — and `open -a` launches it.
 fn command_exists(program: &str) -> bool {
     use std::path::Path;
 
     let path = Path::new(program);
     if path.is_absolute() || program.contains(std::path::MAIN_SEPARATOR) {
-        return path.is_file();
+        return path.is_file() || (cfg!(target_os = "macos") && is_app_bundle(path));
     }
 
     let Some(path_var) = std::env::var_os("PATH") else {
