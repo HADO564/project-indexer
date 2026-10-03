@@ -139,7 +139,8 @@ between them is a natural point for a pull request.
    field flag, or without a terminal), `FormState` holding which form it is,
    and a checkbox input toggled with Space. Favourite's command-line way is
    the `favorite` / `unfavorite` verbs, so it needs no new flag.
-9. **Name and notes** — `--name`, `--notes` and their text fields. `--notes ""`
+9. ~~**Name and notes**~~ *(done 2026-10-03; the name comes first in the
+   full form, which opens on it, and notes follow the checkbox.)* — `--name`, `--notes` and their text fields. `--notes ""`
    clears the notes (`UpdateProject.notes` is `Some(None)`).
 10. **Directory** — `--directory` and a text field. Core validates the path;
     folder browsing can come later.

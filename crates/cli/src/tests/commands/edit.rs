@@ -277,6 +277,8 @@ fn full_beside_a_field_flag_is_a_usage_error() {
         ["--remove-tag", "rust"],
         ["--set", "k=v"],
         ["--unset", "k"],
+        ["--name", "x"],
+        ["--notes", "x"],
     ] {
         let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", flag[0], flag[1]])
             .expect_err("--full only chooses the form");
@@ -286,4 +288,42 @@ fn full_beside_a_field_flag_is_a_usage_error() {
             "{flag:?}"
         );
     }
+}
+
+// `--name` and `--notes`.
+
+fn saved(ctx: &crate::context::Context) -> indexer_core::Project {
+    ctx.projects.get("app-0000-4000-8000-000000000000").unwrap()
+}
+
+#[test]
+fn name_renames_the_project() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--name", "app2"]).unwrap();
+    assert_eq!(saved(&ctx).name, "app2");
+}
+
+#[test]
+fn an_empty_name_is_refused_by_core() {
+    let ctx = context(true, Scripted(never_asked));
+    assert!(run(&ctx, &["indexer", "edit", "app", "--name", "  "]).is_err());
+    assert_eq!(saved(&ctx).name, "app");
+}
+
+#[test]
+fn notes_are_set_then_cleared_by_an_empty_string() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--notes", "remember"]).unwrap();
+    assert_eq!(saved(&ctx).notes.as_deref(), Some("remember"));
+    run(&ctx, &["indexer", "edit", "app", "--notes", ""]).unwrap();
+    assert_eq!(saved(&ctx).notes, None);
+}
+
+#[test]
+fn notes_alone_leave_the_other_fields_alone() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--notes", "x"]).unwrap();
+    let project = saved(&ctx);
+    assert_eq!(project.name, "app");
+    assert_eq!(project.description, "");
 }

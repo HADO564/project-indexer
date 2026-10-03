@@ -227,27 +227,49 @@ fn the_full_form_says_so_in_its_title() {
 }
 
 #[test]
-fn the_full_form_draws_the_favourite_checkbox_under_the_tags() {
+fn the_full_form_draws_name_checkbox_and_notes() {
     let mut form = FormState::new(&project(json!({"Client": "Acme"})), true, FormKind::Full);
-    let terminal = render(&form, 60, 12);
+    let terminal = render(&form, 60, 14);
     let lines = screen(&terminal);
     assert_eq!(
-        lines[3],
+        lines[1],
+        "│ › Name          app                                      │"
+    );
+    assert_eq!(
+        lines[2],
+        "│   Description   A tool                                   │"
+    );
+    assert_eq!(
+        lines[4],
         "│   Favourite     [ ]                                      │"
     );
     assert_eq!(
         lines[5],
+        "│   Notes                                                  │"
+    );
+    assert_eq!(
+        lines[7],
         "│   Properties                                             │"
     );
 
-    press(&mut form, KeyCode::Tab);
-    press(&mut form, KeyCode::Tab);
+    for _ in 0..3 {
+        press(&mut form, KeyCode::Tab);
+    }
     press(&mut form, KeyCode::Char(' '));
-    let terminal = render(&form, 60, 12);
+    let terminal = render(&form, 60, 14);
     assert_eq!(
-        screen(&terminal)[3],
+        screen(&terminal)[4],
         "│ › Favourite     [x]                                      │"
     );
-    assert!(modifier_at(&terminal, 18, 3).contains(Modifier::REVERSED));
-    assert!(screen(&terminal)[10].contains("Space toggle"));
+    assert!(modifier_at(&terminal, 18, 4).contains(Modifier::REVERSED));
+    assert!(screen(&terminal)[12].contains("Space toggle"));
+}
+
+#[test]
+fn the_compact_form_draws_no_name_checkbox_or_notes() {
+    let terminal = render(&form(), 60, 11);
+    let text = screen(&terminal).join("\n");
+    assert!(!text.contains("Name "), "{text}");
+    assert!(!text.contains("Favourite"), "{text}");
+    assert!(!text.contains("Notes"), "{text}");
 }

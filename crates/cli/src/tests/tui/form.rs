@@ -833,7 +833,9 @@ fn esc_during_the_delete_question_only_answers_no() {
     );
 }
 
-// The full form: the favourite checkbox, between the tags and the rows.
+// The full form. Its order: name, description, tags, the favourite
+// checkbox, notes, then the rows — so from the name, the checkbox is three
+// Tabs away and the first row five.
 
 fn full_form(favorite: bool, rows: bool, wrap: bool) -> FormState {
     let mut project = project("A tool", &["Rust"]);
@@ -848,10 +850,32 @@ fn space(form: &mut FormState) {
     form.handle(press(KeyCode::Char(' ')));
 }
 
+const TO_CHECKBOX: usize = 3;
+const TO_NOTES: usize = 4;
+const TO_FIRST_ROW: usize = 5;
+
+#[test]
+fn the_full_form_starts_on_the_name() {
+    let mut form = full_form(false, true, true);
+    type_text(&mut form, "2");
+    let changes = form.changes();
+    assert_eq!(changes.name.as_deref(), Some("app2"));
+    assert_eq!(changes.description, None);
+}
+
+#[test]
+fn the_compact_form_still_starts_on_the_description() {
+    let mut form = form();
+    type_text(&mut form, "!");
+    let changes = form.changes();
+    assert_eq!(changes.description.as_deref(), Some("A tool!"));
+    assert_eq!(changes.name, None);
+}
+
 #[test]
 fn tab_from_the_tags_reaches_the_checkbox_and_space_ticks_it() {
     let mut form = full_form(false, true, true);
-    tab(&mut form, 2);
+    tab(&mut form, TO_CHECKBOX);
     space(&mut form);
     let changes = form.changes();
     assert_eq!(changes.favorite, Some(true));
@@ -861,7 +885,7 @@ fn tab_from_the_tags_reaches_the_checkbox_and_space_ticks_it() {
 #[test]
 fn ticking_and_unticking_again_sends_nothing() {
     let mut form = full_form(false, true, true);
-    tab(&mut form, 2);
+    tab(&mut form, TO_CHECKBOX);
     space(&mut form);
     space(&mut form);
     assert_eq!(form.changes().favorite, None);
@@ -871,7 +895,7 @@ fn ticking_and_unticking_again_sends_nothing() {
 fn a_favourite_loads_ticked_and_saving_it_untouched_keeps_it() {
     let mut form = full_form(true, true, true);
     assert_eq!(form.changes().favorite, None);
-    tab(&mut form, 2);
+    tab(&mut form, TO_CHECKBOX);
     space(&mut form);
     assert_eq!(form.changes().favorite, Some(false));
 }
@@ -879,7 +903,7 @@ fn a_favourite_loads_ticked_and_saving_it_untouched_keeps_it() {
 #[test]
 fn letters_and_editing_keys_do_nothing_on_the_checkbox() {
     let mut form = full_form(false, true, true);
-    tab(&mut form, 2);
+    tab(&mut form, TO_CHECKBOX);
     type_text(&mut form, "yes");
     for code in [
         KeyCode::Backspace,
@@ -898,58 +922,77 @@ fn letters_and_editing_keys_do_nothing_on_the_checkbox() {
 }
 
 #[test]
-fn space_still_types_a_space_in_a_text_box() {
+fn releasing_space_does_not_toggle_the_checkbox_back() {
+    // Windows reports a press and a release; only the press may toggle, or
+    // every Space would tick and untick again.
     let mut form = full_form(false, true, true);
+    tab(&mut form, TO_CHECKBOX);
     space(&mut form);
-    assert_eq!(form.changes().description.as_deref(), Some("A tool "));
+    form.handle(KeyEvent::new_with_kind(
+        KeyCode::Char(' '),
+        KeyModifiers::NONE,
+        KeyEventKind::Release,
+    ));
+    assert_eq!(form.changes().favorite, Some(true));
 }
 
 #[test]
-fn tab_from_the_checkbox_reaches_the_first_row() {
+fn space_still_types_a_space_in_a_text_box() {
     let mut form = full_form(false, true, true);
-    tab(&mut form, 3);
+    space(&mut form);
+    assert_eq!(form.changes().name.as_deref(), Some("app "));
+}
+
+#[test]
+fn tab_from_the_checkbox_reaches_the_notes_then_the_first_row() {
+    let mut form = full_form(false, true, true);
+    tab(&mut form, TO_NOTES);
+    type_text(&mut form, "n");
+    tab(&mut form, TO_FIRST_ROW - TO_NOTES);
     type_text(&mut form, "1");
+    let changes = form.changes();
+    assert_eq!(changes.notes, Some(Some("n".into())));
     assert_eq!(
-        form.changes().properties,
+        changes.properties,
         Some(props(&[("Client1", "Acme"), ("Stage", "beta")]))
     );
 }
 
 #[test]
-fn shift_tab_from_the_first_row_reaches_the_checkbox() {
+fn shift_tab_from_the_first_row_reaches_the_notes() {
     let mut form = full_form(false, true, true);
-    tab(&mut form, 3); // Client's name
+    tab(&mut form, TO_FIRST_ROW);
     shift_tab(&mut form, 1);
-    space(&mut form);
-    assert_eq!(form.changes().favorite, Some(true));
+    type_text(&mut form, "n");
+    assert_eq!(form.changes().notes, Some(Some("n".into())));
 }
 
 #[test]
 fn shift_tab_from_the_checkbox_reaches_the_tags() {
     let mut form = full_form(false, true, true);
-    tab(&mut form, 2);
+    tab(&mut form, TO_CHECKBOX);
     shift_tab(&mut form, 1);
     type_text(&mut form, ", Go");
     assert_eq!(form.changes().tags, Some(vec!["Rust".into(), "Go".into()]));
 }
 
 #[test]
-fn with_no_rows_the_checkbox_is_last_wrapping_both_ways() {
+fn with_no_rows_the_notes_are_last_wrapping_both_ways() {
     let mut form = full_form(false, false, true);
-    shift_tab(&mut form, 1); // the description wraps back to the checkbox
-    space(&mut form);
-    assert_eq!(form.changes().favorite, Some(true));
-    tab(&mut form, 1); // and forward to the description
-    type_text(&mut form, "!");
-    assert_eq!(form.changes().description.as_deref(), Some("A tool!"));
+    shift_tab(&mut form, 1); // the name wraps back to the notes
+    type_text(&mut form, "n");
+    assert_eq!(form.changes().notes, Some(Some("n".into())));
+    tab(&mut form, 1); // and forward to the name
+    type_text(&mut form, "2");
+    assert_eq!(form.changes().name.as_deref(), Some("app2"));
 }
 
 #[test]
-fn without_wrap_tab_stays_on_the_checkbox_when_it_is_last() {
+fn without_wrap_tab_stays_on_the_notes_when_they_are_last() {
     let mut form = full_form(false, false, false);
-    tab(&mut form, 5);
-    space(&mut form);
-    assert_eq!(form.changes().favorite, Some(true));
+    tab(&mut form, 9);
+    type_text(&mut form, "n");
+    assert_eq!(form.changes().notes, Some(Some("n".into())));
 }
 
 #[test]
@@ -968,21 +1011,59 @@ fn the_compact_form_has_no_checkbox() {
 #[test]
 fn enter_on_the_checkbox_saves() {
     let mut form = full_form(false, true, true);
-    tab(&mut form, 2);
+    tab(&mut form, TO_CHECKBOX);
     assert!(matches!(form.handle(press(KeyCode::Enter)), Action::Save));
 }
 
+// The name and the notes.
+
+fn with_notes(notes: Option<&str>) -> FormState {
+    let mut project = project("A tool", &["Rust"]);
+    project.notes = notes.map(str::to_string);
+    FormState::new(&project, true, FormKind::Full)
+}
+
 #[test]
-fn releasing_space_does_not_toggle_the_checkbox_back() {
-    // Windows reports a press and a release; only the press may toggle, or
-    // every Space would tick and untick again.
-    let mut form = full_form(false, true, true);
-    tab(&mut form, 2);
-    space(&mut form);
-    form.handle(KeyEvent::new_with_kind(
-        KeyCode::Char(' '),
-        KeyModifiers::NONE,
-        KeyEventKind::Release,
-    ));
-    assert_eq!(form.changes().favorite, Some(true));
+fn an_emptied_name_is_sent_for_core_to_refuse() {
+    let mut form = full_form(false, false, true);
+    clear(&mut form);
+    assert_eq!(form.changes().name.as_deref(), Some(""));
+}
+
+#[test]
+fn notes_load_into_their_box() {
+    let mut form = with_notes(Some("old"));
+    tab(&mut form, TO_NOTES);
+    type_text(&mut form, "er");
+    assert_eq!(form.changes().notes, Some(Some("older".into())));
+}
+
+#[test]
+fn no_notes_and_an_untouched_empty_box_is_no_change() {
+    assert_eq!(with_notes(None).changes().notes, None);
+}
+
+#[test]
+fn emptying_the_notes_clears_them() {
+    let mut form = with_notes(Some("old"));
+    tab(&mut form, TO_NOTES);
+    clear(&mut form);
+    assert_eq!(form.changes().notes, Some(None), "a box in a box: clear");
+}
+
+#[test]
+fn typing_notes_where_there_were_none_sets_them() {
+    let mut form = with_notes(None);
+    tab(&mut form, TO_NOTES);
+    type_text(&mut form, "new");
+    assert_eq!(form.changes().notes, Some(Some("new".into())));
+}
+
+#[test]
+fn notes_retyped_unchanged_are_no_change() {
+    let mut form = with_notes(Some("old"));
+    tab(&mut form, TO_NOTES);
+    form.handle(press(KeyCode::Backspace));
+    type_text(&mut form, "d");
+    assert_eq!(form.changes().notes, None);
 }

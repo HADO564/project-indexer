@@ -121,10 +121,15 @@ pub enum Action {
 // `Copy`: the focus is a small value, read and replaced whole, never shared.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
+    /// The project's name box, in the full form only. Not `Name`: that is a
+    /// property row's name.
+    ProjectName,
     Description,
     Tags,
     /// The favourite checkbox, in the full form only.
     Favorite,
+    /// The notes box, in the full form only.
+    Notes,
     Name(usize),
     Value(usize),
 }
@@ -144,12 +149,16 @@ pub struct FormState {
     /// every box against. Never edited — the boxes below are.
     original: Project,
 
-    // The boxes, as the user has them now.
+    // The boxes, as the user has them now, in the full form's order.
+    /// The project's name, in the full form.
+    name: TextInput,
     description: TextInput,
     /// The tags as one comma-separated line, as the app's tag box has them.
     tags: TextInput,
     /// The full form's checkbox.
     favorite: bool,
+    /// One line, as the app's notes box; empty means no notes.
+    notes: TextInput,
     rows: Vec<PropertyRow>,
 
     // The form's own state.
@@ -165,6 +174,7 @@ impl FormState {
     pub fn new(project: &Project, wrap: bool, kind: FormKind) -> Self {
         Self {
             original: project.clone(),
+            name: TextInput::new(&project.name),
             description: TextInput::new(&project.description),
             tags: TextInput::new(&project.tags.join(", ")),
             favorite: project.favorite,
@@ -176,9 +186,14 @@ impl FormState {
                     value: TextInput::new(value),
                 })
                 .collect(),
-            focus: Focus::Description,
+            // The first box in `order`: the name, in the full form.
+            focus: match kind {
+                FormKind::Compact => Focus::Description,
+                FormKind::Full => Focus::ProjectName,
+            },
             wrap,
             kind,
+            notes: TextInput::new(project.notes.as_deref().unwrap_or_default()),
             pending_delete: None,
         }
     }
@@ -203,6 +218,14 @@ impl FormState {
         self.favorite
     }
 
+    pub fn name_input(&self) -> &TextInput {
+        &self.name
+    }
+
+    pub fn notes_input(&self) -> &TextInput {
+        &self.notes
+    }
+
     pub fn description_input(&self) -> &TextInput {
         &self.description
     }
@@ -224,9 +247,14 @@ impl FormState {
     /// the full form adds is a line here, and `next_focus` and
     /// `previous_focus` follow.
     fn order(&self) -> Vec<Focus> {
-        let mut order = vec![Focus::Description, Focus::Tags];
-        if self.kind == FormKind::Full {
-            order.push(Focus::Favorite);
+        let full = self.kind == FormKind::Full;
+        let mut order = Vec::new();
+        if full {
+            order.push(Focus::ProjectName);
+        }
+        order.extend([Focus::Description, Focus::Tags]);
+        if full {
+            order.extend([Focus::Favorite, Focus::Notes]);
         }
         for row in 0..self.rows.len() {
             order.push(Focus::Name(row));
@@ -279,6 +307,8 @@ impl FormState {
     /// which is not one.
     fn focused_input(&mut self) -> Option<&mut TextInput> {
         match self.focus {
+            Focus::ProjectName => Some(&mut self.name),
+            Focus::Notes => Some(&mut self.notes),
             Focus::Description => Some(&mut self.description),
             Focus::Tags => Some(&mut self.tags),
             Focus::Favorite => None,
@@ -406,6 +436,14 @@ impl FormState {
     /// Only the fields that differ from the project as loaded; everything
     /// else `None`, so saving an untouched form writes nothing.
     pub fn changes(&self) -> UpdateProject {
+        // An emptied name is sent too, and core refuses it — as it refuses a
+        // nameless project anywhere.
+        let name = if self.name.value() != self.original.name {
+            Some(self.name.value().to_string())
+        } else {
+            None
+        };
+
         // Core stores "no description" as `""`, so an emptied field is
         // `Some("")`, a real change, not `None`.
         let description = if self.description.value() != self.original.description {
@@ -451,10 +489,25 @@ impl FormState {
             None
         };
 
+        // A box in a box, as `--notes` builds it: "no notes" and an empty box
+        // are the same, and emptying the box clears them (`Some(None)`).
+        let notes = if self.notes.value() != self.original.notes.as_deref().unwrap_or_default() {
+            let text = self.notes.value();
+            Some(if text.is_empty() {
+                None
+            } else {
+                Some(text.to_string())
+            })
+        } else {
+            None
+        };
+
         UpdateProject {
+            name,
             description,
             tags,
             favorite,
+            notes,
             properties,
             ..Default::default()
         }
