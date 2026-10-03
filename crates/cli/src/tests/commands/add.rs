@@ -32,7 +32,7 @@ fn no_directory_means_the_current_one() {
     // because that is the promise: both spellings of "here" go through the
     // same call, so a symlinked working directory cannot produce two strings.
     let here = std::fs::canonicalize(".").unwrap();
-    assert_eq!(absolute(None).unwrap(), here.to_string_lossy());
+    assert_eq!(absolute(None, "track").unwrap(), here.to_string_lossy());
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn a_relative_path_is_stored_absolute() {
     let child = dir.path().join("app");
     std::fs::create_dir(&child).unwrap();
 
-    let stored = absolute(Some(child.join("..").join("app"))).unwrap();
+    let stored = absolute(Some(child.join("..").join("app")), "track").unwrap();
 
     assert_eq!(
         stored,
@@ -59,7 +59,7 @@ fn a_file_is_refused() {
     let file = dir.path().join("Cargo.toml");
     std::fs::write(&file, "").unwrap();
 
-    let error = absolute(Some(file)).unwrap_err().to_string();
+    let error = absolute(Some(file), "track").unwrap_err().to_string();
 
     assert!(
         error.contains("is not a directory"),
@@ -71,7 +71,7 @@ fn a_file_is_refused() {
 fn a_missing_directory_is_refused() {
     let dir = tempfile::tempdir().unwrap();
 
-    let error = absolute(Some(dir.path().join("nope")))
+    let error = absolute(Some(dir.path().join("nope")), "track")
         .unwrap_err()
         .to_string();
 
@@ -79,4 +79,13 @@ fn a_missing_directory_is_refused() {
         error.contains("cannot track"),
         "a typo should be reported, not tracked: {error}"
     );
+}
+
+#[test]
+fn the_caller_names_the_action_in_the_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let error = absolute(Some(dir.path().join("nope")), "move to")
+        .unwrap_err()
+        .to_string();
+    assert!(error.starts_with("cannot move to "), "{error}");
 }

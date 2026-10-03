@@ -75,19 +75,21 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
     // The full form's extra lines take no height in the compact one.
     let full = state.kind() == FormKind::Full;
     let extra = Constraint::Length(u16::from(full));
-    let [name, description, tags, favorite, notes, _, header, rows, _, hint] = Layout::vertical([
-        extra,
-        Constraint::Length(1),
-        Constraint::Length(1),
-        extra,
-        extra,
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Fill(1),
-        Constraint::Length(1),
-        Constraint::Length(1),
-    ])
-    .areas(inner);
+    let [name, directory, description, tags, favorite, notes, _, header, rows, _, hint] =
+        Layout::vertical([
+            extra,
+            extra,
+            Constraint::Length(1),
+            Constraint::Length(1),
+            extra,
+            extra,
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .areas(inner);
 
     let focus = state.focus();
     if full {
@@ -97,6 +99,13 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
             "Name",
             state.name_input(),
             focus == Focus::ProjectName,
+        );
+        field(
+            frame,
+            directory,
+            "Directory",
+            state.directory_input(),
+            focus == Focus::Directory,
         );
     }
     field(
@@ -271,8 +280,17 @@ fn scrolled(input: &TextInput, width: u16) -> (String, u16) {
     (visible, columns(&chars[start..cursor]) as u16)
 }
 
-/// The keys, or while Ctrl+D waits, its question in their place.
+/// The keys; or in their place, why a save could not go ahead, or while
+/// Ctrl+D waits, its question.
 fn hint_line(frame: &mut Frame, area: Rect, state: &FormState) {
+    if let Some(error) = state.error() {
+        let line = Line::from(Span::styled(
+            format!("Not saved: {error}"),
+            Style::new().add_modifier(Modifier::BOLD),
+        ));
+        frame.render_widget(Paragraph::new(line), area);
+        return;
+    }
     let line = match state.pending_delete() {
         Some(i) => {
             let name = state.rows()[i].name().value();

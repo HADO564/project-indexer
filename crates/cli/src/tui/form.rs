@@ -124,6 +124,8 @@ pub enum Focus {
     /// The project's name box, in the full form only. Not `Name`: that is a
     /// property row's name.
     ProjectName,
+    /// The project's folder, in the full form only.
+    Directory,
     Description,
     Tags,
     /// The favourite checkbox, in the full form only.
@@ -152,6 +154,9 @@ pub struct FormState {
     // The boxes, as the user has them now, in the full form's order.
     /// The project's name, in the full form.
     name: TextInput,
+    /// The project's folder as typed, in the full form. Sent as typed;
+    /// `TerminalEditor` resolves it before saving.
+    directory: TextInput,
     description: TextInput,
     /// The tags as one comma-separated line, as the app's tag box has them.
     tags: TextInput,
@@ -168,6 +173,8 @@ pub struct FormState {
     kind: FormKind,
     /// `Some(row)` while Ctrl+D waits for `y`; the next key answers it.
     pending_delete: Option<usize>,
+    /// Why the last save could not go ahead, shown until the next key.
+    error: Option<String>,
 }
 
 impl FormState {
@@ -175,6 +182,7 @@ impl FormState {
         Self {
             original: project.clone(),
             name: TextInput::new(&project.name),
+            directory: TextInput::new(&project.directory),
             description: TextInput::new(&project.description),
             tags: TextInput::new(&project.tags.join(", ")),
             favorite: project.favorite,
@@ -195,6 +203,7 @@ impl FormState {
             kind,
             notes: TextInput::new(project.notes.as_deref().unwrap_or_default()),
             pending_delete: None,
+            error: None,
         }
     }
 
@@ -220,6 +229,22 @@ impl FormState {
 
     pub fn name_input(&self) -> &TextInput {
         &self.name
+    }
+
+    pub fn directory_input(&self) -> &TextInput {
+        &self.directory
+    }
+
+    /// Why the last save could not go ahead, while it is shown.
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
+    /// Keeps the form open with `message` in place of the hints, when what
+    /// was typed cannot be saved — a directory that does not resolve. The
+    /// next key clears it; nothing typed is lost.
+    pub fn show_error(&mut self, message: String) {
+        self.error = Some(message);
     }
 
     pub fn notes_input(&self) -> &TextInput {
@@ -250,7 +275,7 @@ impl FormState {
         let full = self.kind == FormKind::Full;
         let mut order = Vec::new();
         if full {
-            order.push(Focus::ProjectName);
+            order.extend([Focus::ProjectName, Focus::Directory]);
         }
         order.extend([Focus::Description, Focus::Tags]);
         if full {
@@ -308,6 +333,7 @@ impl FormState {
     fn focused_input(&mut self) -> Option<&mut TextInput> {
         match self.focus {
             Focus::ProjectName => Some(&mut self.name),
+            Focus::Directory => Some(&mut self.directory),
             Focus::Notes => Some(&mut self.notes),
             Focus::Description => Some(&mut self.description),
             Focus::Tags => Some(&mut self.tags),
@@ -329,6 +355,9 @@ impl FormState {
             // handle it or it cannot be quit that way.
             return Action::Cancel;
         }
+        // An error from the last save stays up until the next key, which
+        // then does what it always does — the user carries on editing.
+        self.error = None;
         // Ctrl+D asked "delete this row?": this key is the answer, whatever
         // it is. `take` closes the question either way; only `y` deletes,
         // and the key does nothing else.
@@ -444,6 +473,14 @@ impl FormState {
             None
         };
 
+        // Sent as typed — relative, `~/…` or empty — for `TerminalEditor` to
+        // resolve; only a box left as loaded is no change.
+        let directory = if self.directory.value() != self.original.directory {
+            Some(self.directory.value().to_string())
+        } else {
+            None
+        };
+
         // Core stores "no description" as `""`, so an emptied field is
         // `Some("")`, a real change, not `None`.
         let description = if self.description.value() != self.original.description {
@@ -504,6 +541,7 @@ impl FormState {
 
         UpdateProject {
             name,
+            directory,
             description,
             tags,
             favorite,

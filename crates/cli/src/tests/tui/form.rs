@@ -833,9 +833,9 @@ fn esc_during_the_delete_question_only_answers_no() {
     );
 }
 
-// The full form. Its order: name, description, tags, the favourite
-// checkbox, notes, then the rows — so from the name, the checkbox is three
-// Tabs away and the first row five.
+// The full form. Its order: name, directory, description, tags, the
+// favourite checkbox, notes, then the rows — so from the name, the checkbox
+// is four Tabs away and the first row six.
 
 fn full_form(favorite: bool, rows: bool, wrap: bool) -> FormState {
     let mut project = project("A tool", &["Rust"]);
@@ -850,9 +850,10 @@ fn space(form: &mut FormState) {
     form.handle(press(KeyCode::Char(' ')));
 }
 
-const TO_CHECKBOX: usize = 3;
-const TO_NOTES: usize = 4;
-const TO_FIRST_ROW: usize = 5;
+const TO_DIRECTORY: usize = 1;
+const TO_CHECKBOX: usize = 4;
+const TO_NOTES: usize = 5;
+const TO_FIRST_ROW: usize = 6;
 
 #[test]
 fn the_full_form_starts_on_the_name() {
@@ -1066,4 +1067,53 @@ fn notes_retyped_unchanged_are_no_change() {
     form.handle(press(KeyCode::Backspace));
     type_text(&mut form, "d");
     assert_eq!(form.changes().notes, None);
+}
+
+// The directory box: sent as typed, for `TerminalEditor` to resolve.
+
+#[test]
+fn the_directory_box_starts_with_the_stored_folder_and_is_no_change_untouched() {
+    let form = full_form(false, false, true);
+    assert_eq!(form.directory_input().value(), "/home/me/work/app");
+    assert_eq!(form.changes().directory, None);
+}
+
+#[test]
+fn the_directory_box_follows_the_name_and_is_sent_as_typed() {
+    let mut form = full_form(false, false, true);
+    tab(&mut form, TO_DIRECTORY);
+    clear(&mut form);
+    type_text(&mut form, "~/elsewhere");
+    let changes = form.changes();
+    assert_eq!(changes.directory.as_deref(), Some("~/elsewhere"));
+    assert_eq!(changes.name, None);
+}
+
+#[test]
+fn an_emptied_directory_box_is_sent_for_the_editor_to_refuse() {
+    let mut form = full_form(false, false, true);
+    tab(&mut form, TO_DIRECTORY);
+    clear(&mut form);
+    assert_eq!(form.changes().directory.as_deref(), Some(""));
+}
+
+#[test]
+fn the_compact_form_has_no_directory_box() {
+    let mut form = form();
+    shift_tab(&mut form, 1); // the description wraps back to the tags
+    type_text(&mut form, ", Go");
+    let changes = form.changes();
+    assert_eq!(changes.directory, None);
+    assert!(changes.tags.is_some());
+}
+
+#[test]
+fn an_error_stays_until_the_next_key_and_nothing_typed_is_lost() {
+    let mut form = full_form(false, false, true);
+    type_text(&mut form, "2");
+    form.show_error("cannot move to /nope".into());
+    assert_eq!(form.error(), Some("cannot move to /nope"));
+    type_text(&mut form, "3");
+    assert_eq!(form.error(), None);
+    assert_eq!(form.changes().name.as_deref(), Some("app23"));
 }

@@ -142,7 +142,10 @@ between them is a natural point for a pull request.
 9. ~~**Name and notes**~~ *(done 2026-10-03; the name comes first in the
    full form, which opens on it, and notes follow the checkbox.)* — `--name`, `--notes` and their text fields. `--notes ""`
    clears the notes (`UpdateProject.notes` is `Some(None)`).
-10. **Directory** — `--directory` and a text field. Core validates the path;
+10. ~~**Directory**~~ *(done 2026-10-04. Core refuses another project's
+    folder on any move and re-detects the trackers; the CLI makes the path
+    absolute, expands `~` in the form's box, and keeps the form open with
+    the reason when the typed folder does not resolve.)* — `--directory` and a text field. Core validates the path;
     folder browsing can come later.
 11. **Open with** — `--open-with` and a text field (`""` clears it); a picker
     over `platform::list_installed_apps` can come later.

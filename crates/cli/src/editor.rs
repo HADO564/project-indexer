@@ -7,10 +7,12 @@
 //! whatever it returns is saved by the same one `update` the flags make.
 
 use std::io::{stderr, stdin, IsTerminal};
+use std::path::PathBuf;
 
+use anyhow::bail;
 use indexer_core::{Project, UpdateProject};
 
-use crate::commands::Failure;
+use crate::commands::{add, Failure};
 use crate::settings;
 use crate::tui;
 use crate::tui::form::{Action, FormState};
@@ -78,13 +80,53 @@ impl ProjectEditor for TerminalEditor {
         let mut state = FormState::new(project, wrap, kind);
         // The session is dropped at the end of this block, which puts the
         // terminal back before anything is printed about the edit.
-        let action = {
+        let changes = {
             let mut session = tui::terminal::enter()?;
-            tui::run_form(&mut session.terminal, &mut state)?
+            loop {
+                match tui::run_form(&mut session.terminal, &mut state)? {
+                    Action::Save => {
+                        let mut changes = state.changes();
+                        // A directory that does not resolve keeps the form
+                        // open with the reason, rather than closing it and
+                        // losing every other edit over a typo.
+                        match resolve_directory(&mut changes) {
+                            Ok(()) => break Some(changes),
+                            Err(e) => state.show_error(format!("{e:#}")),
+                        }
+                    }
+                    Action::Cancel | Action::Continue => break None,
+                }
+            }
         };
-        Ok(match action {
-            Action::Save => Some(state.changes()),
-            Action::Cancel | Action::Continue => None,
-        })
+        Ok(changes)
+    }
+}
+
+/// Turns the directory typed into the form into the one to store: `~` for
+/// the home folder, as a shell would have expanded it for `--directory`, then
+/// absolute with symlinks resolved, as `add` stores a path. An emptied box is
+/// refused here, with a reason, rather than as a missing folder named "".
+pub(crate) fn resolve_directory(changes: &mut UpdateProject) -> anyhow::Result<()> {
+    let Some(typed) = changes.directory.take() else {
+        return Ok(());
+    };
+    let typed = typed.trim();
+    if typed.is_empty() {
+        bail!("a project needs a directory");
+    }
+    changes.directory = Some(add::absolute(
+        Some(expand_home(typed, dirs::home_dir())),
+        "move to",
+    )?);
+    Ok(())
+}
+
+/// A leading `~` or `~/` as the home folder. `~name` — another user's home —
+/// is left alone, as is everything when the home folder is unknown.
+pub(crate) fn expand_home(typed: &str, home: Option<PathBuf>) -> PathBuf {
+    match (typed.strip_prefix('~'), home) {
+        (Some(""), Some(home)) => home,
+        (Some(rest), Some(home)) if rest.starts_with(['/', '\\']) => home.join(&rest[1..]),
+        _ => PathBuf::from(typed),
     }
 }

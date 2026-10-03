@@ -227,9 +227,9 @@ fn the_full_form_says_so_in_its_title() {
 }
 
 #[test]
-fn the_full_form_draws_name_checkbox_and_notes() {
+fn the_full_form_draws_name_directory_checkbox_and_notes() {
     let mut form = FormState::new(&project(json!({"Client": "Acme"})), true, FormKind::Full);
-    let terminal = render(&form, 60, 14);
+    let terminal = render(&form, 60, 15);
     let lines = screen(&terminal);
     assert_eq!(
         lines[1],
@@ -237,32 +237,48 @@ fn the_full_form_draws_name_checkbox_and_notes() {
     );
     assert_eq!(
         lines[2],
+        "│   Directory     /home/me/work/app                        │"
+    );
+    assert_eq!(
+        lines[3],
         "│   Description   A tool                                   │"
     );
     assert_eq!(
-        lines[4],
+        lines[5],
         "│   Favourite     [ ]                                      │"
     );
     assert_eq!(
-        lines[5],
+        lines[6],
         "│   Notes                                                  │"
     );
     assert_eq!(
-        lines[7],
+        lines[8],
         "│   Properties                                             │"
     );
 
-    for _ in 0..3 {
+    for _ in 0..4 {
         press(&mut form, KeyCode::Tab);
     }
     press(&mut form, KeyCode::Char(' '));
-    let terminal = render(&form, 60, 14);
+    let terminal = render(&form, 60, 15);
     assert_eq!(
-        screen(&terminal)[4],
+        screen(&terminal)[5],
         "│ › Favourite     [x]                                      │"
     );
-    assert!(modifier_at(&terminal, 18, 4).contains(Modifier::REVERSED));
-    assert!(screen(&terminal)[12].contains("Space toggle"));
+    assert!(modifier_at(&terminal, 18, 5).contains(Modifier::REVERSED));
+    assert!(screen(&terminal)[13].contains("Space toggle"));
+}
+
+#[test]
+fn a_save_that_could_not_go_ahead_says_why_in_place_of_the_hints() {
+    let mut form = form();
+    form.show_error("cannot move to /nope: No such file or directory".into());
+    let terminal = render(&form, 70, 11);
+    assert_eq!(
+        screen(&terminal)[9],
+        "│ Not saved: cannot move to /nope: No such file or directory         │"
+    );
+    assert!(modifier_at(&terminal, 2, 9).contains(Modifier::BOLD));
 }
 
 #[test]

@@ -279,6 +279,7 @@ fn full_beside_a_field_flag_is_a_usage_error() {
         ["--unset", "k"],
         ["--name", "x"],
         ["--notes", "x"],
+        ["--directory", "x"],
     ] {
         let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", flag[0], flag[1]])
             .expect_err("--full only chooses the form");
@@ -326,4 +327,84 @@ fn notes_alone_leave_the_other_fields_alone() {
     let project = saved(&ctx);
     assert_eq!(project.name, "app");
     assert_eq!(project.description, "");
+}
+
+// `--directory`.
+
+#[test]
+fn directory_moves_the_project_and_stores_the_path_absolute() {
+    let ctx = context(true, Scripted(never_asked));
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("moved")).unwrap();
+    let roundabout = dir.path().join("moved").join("..").join("moved");
+    run(
+        &ctx,
+        &[
+            "indexer",
+            "edit",
+            "app",
+            "--directory",
+            &roundabout.to_string_lossy(),
+        ],
+    )
+    .unwrap();
+    let expected = std::fs::canonicalize(dir.path().join("moved")).unwrap();
+    assert_eq!(saved(&ctx).directory, expected.to_string_lossy());
+}
+
+#[test]
+fn directory_refuses_a_missing_folder_and_saves_nothing() {
+    let ctx = context(true, Scripted(never_asked));
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("nope");
+    let error = run(
+        &ctx,
+        &[
+            "indexer",
+            "edit",
+            "app",
+            "--directory",
+            &missing.to_string_lossy(),
+        ],
+    )
+    .unwrap_err();
+    assert!(
+        format!("{error:#}").starts_with("cannot move to "),
+        "{error:#}"
+    );
+    assert_eq!(saved(&ctx).directory, "/home/me/work/app");
+}
+
+#[test]
+fn directory_refuses_another_projects_folder() {
+    let ctx = context(true, Scripted(never_asked));
+    let dir = tempfile::tempdir().unwrap();
+    let taken = std::fs::canonicalize(dir.path()).unwrap();
+    ctx.projects
+        .create(
+            "Other".into(),
+            taken.to_string_lossy().into_owned(),
+            None,
+            None,
+        )
+        .unwrap();
+    let error = run(
+        &ctx,
+        &[
+            "indexer",
+            "edit",
+            "app",
+            "--directory",
+            &taken.to_string_lossy(),
+        ],
+    )
+    .unwrap_err();
+    assert!(
+        matches!(
+            error.downcast_ref::<indexer_core::ProjectError>(),
+            Some(indexer_core::ProjectError::DuplicateDirectory(_))
+        ),
+        "{error:#}"
+    );
+    assert_eq!(saved(&ctx).directory, "/home/me/work/app");
 }

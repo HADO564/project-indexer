@@ -100,7 +100,7 @@ pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
         // relative one means nothing once the command has finished.
         let directory = args
             .directory
-            .map(|d| super::add::absolute(Some(d)))
+            .map(|d| super::add::absolute(Some(d), "move to"))
             .transpose()?;
         from_flags(
             args.name,

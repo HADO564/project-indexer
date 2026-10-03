@@ -2,6 +2,7 @@
 //! `indexer-core`'s `src/tests/`.
 
 mod commands;
+mod editor;
 mod output;
 mod paths;
 mod settings;

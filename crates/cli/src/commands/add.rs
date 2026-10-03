@@ -15,7 +15,7 @@ pub struct AddArgs {
 }
 
 pub fn run(args: AddArgs, ctx: &Context) -> anyhow::Result<Outcome> {
-    let directory = absolute(args.directory)?;
+    let directory = absolute(args.directory, "track")?;
 
     // Asked before ensuring, because `ensure_project` is a get-or-create and
     // will not say which of the two it did. "already tracked" and "now tracked"
@@ -50,10 +50,13 @@ pub fn run(args: AddArgs, ctx: &Context) -> anyhow::Result<Outcome> {
 /// Canonicalising touches the disk, so a missing directory fails here. That is
 /// the intended behaviour: `add ~/typo` should say so rather than track a
 /// folder that is not there.
-pub(crate) fn absolute(directory: Option<PathBuf>) -> anyhow::Result<String> {
+/// `action` names what the caller does with the folder, for the error when it
+/// cannot be found — `track` for `add`, `move to` for `edit --directory` — so
+/// both share one rule for resolving a path and only the wording differs.
+pub(crate) fn absolute(directory: Option<PathBuf>, action: &str) -> anyhow::Result<String> {
     let directory = directory.unwrap_or_else(|| PathBuf::from("."));
     let resolved = std::fs::canonicalize(&directory)
-        .with_context(|| format!("cannot track {}", directory.display()))?;
+        .with_context(|| format!("cannot {action} {}", directory.display()))?;
     // Canonicalising succeeds for a file too, and a tracked file would break
     // every detector downstream.
     if !resolved.is_dir() {
