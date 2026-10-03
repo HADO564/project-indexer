@@ -222,49 +222,57 @@ impl FormState {
         self.pending_delete
     }
 
-    /// Tab / ↓, in the order description, tags, the favourite checkbox (full
-    /// form only), then each row's name and value. On the last box, wraps to
-    /// the first or stays, per `wrap`.
+    /// Every box Tab visits, in order. The one place the order lives: a field
+    /// the full form adds is a line here, and `next_focus` and
+    /// `previous_focus` follow.
+    fn order(&self) -> Vec<Focus> {
+        let mut order = vec![Focus::Description, Focus::Tags];
+        if self.kind == FormKind::Full {
+            order.push(Focus::Favorite);
+        }
+        for row in 0..self.rows.len() {
+            order.push(Focus::Name(row));
+            order.push(Focus::Value(row));
+        }
+        order
+    }
+
+    /// Where the focus sits in `order`. Focus only ever points at a box that
+    /// exists — leaving or deleting a row moves it first — so it is always
+    /// found.
+    fn position(&self, order: &[Focus]) -> usize {
+        order
+            .iter()
+            .position(|&focus| focus == self.focus)
+            .expect("focus is always on a box in the order")
+    }
+
+    /// Tab / ↓: the next box in `order`. On the last, wraps to the first or
+    /// stays, per `wrap`.
     fn next_focus(&mut self) {
         let from = self.focus;
-        self.focus = match self.focus {
-            Focus::Description => Focus::Tags,
-            // The full form's checkbox sits between the tags and the rows.
-            Focus::Tags if self.kind == FormKind::Full => Focus::Favorite,
-            Focus::Tags | Focus::Favorite if !self.rows.is_empty() => Focus::Name(0),
-            // No rows below: this is the last field.
-            Focus::Tags | Focus::Favorite if self.wrap => Focus::Description,
-            Focus::Tags => Focus::Tags,
-            Focus::Favorite => Focus::Favorite,
-            Focus::Name(i) => Focus::Value(i),
-            Focus::Value(i) if i < self.rows.len() - 1 => Focus::Name(i + 1),
-            Focus::Value(i) if i == self.rows.len() - 1 && self.wrap => Focus::Description,
-            Focus::Value(i) => Focus::Value(i),
+        let order = self.order();
+        let at = self.position(&order);
+        self.focus = match order.get(at + 1) {
+            Some(&next) => next,
+            None if self.wrap => order[0],
+            None => self.focus,
         };
         self.leave_row(from);
     }
 
-    /// Shift+Tab / ↑. On the first field, wraps to the last box — the last
-    /// row's value, else the checkbox in the full form, else the tags — or
-    /// stays, per `wrap`.
+    /// Shift+Tab / ↑: the previous box in `order`. On the first, wraps to the
+    /// last or stays, per `wrap`.
     fn previous_focus(&mut self) {
         let from = self.focus;
-        self.focus = match self.focus {
-            Focus::Tags => Focus::Description,
-            Focus::Description if !self.rows.is_empty() && self.wrap => {
-                Focus::Value(self.rows.len() - 1)
-            }
-            // No rows: the last field is the checkbox in the full form.
-            Focus::Description if self.wrap && self.kind == FormKind::Full => Focus::Favorite,
-            Focus::Description if self.wrap => Focus::Tags,
-            Focus::Description => Focus::Description,
-            Focus::Favorite => Focus::Tags,
-            // Before the general arm: row 0 has no row above it, and `0 - 1`
-            // would panic. Above it is the checkbox in the full form.
-            Focus::Name(0) if self.kind == FormKind::Full => Focus::Favorite,
-            Focus::Name(0) => Focus::Tags,
-            Focus::Name(i) => Focus::Value(i - 1),
-            Focus::Value(i) => Focus::Name(i),
+        let order = self.order();
+        let at = self.position(&order);
+        self.focus = if at > 0 {
+            order[at - 1]
+        } else if self.wrap {
+            order[order.len() - 1]
+        } else {
+            self.focus
         };
         self.leave_row(from);
     }
