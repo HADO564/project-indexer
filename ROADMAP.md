@@ -21,7 +21,7 @@ is in [`docs/architecture.md`](docs/architecture.md). The CLI's design contract 
 
 ## Where things stand
 
-**v0.3.4** is the current release; **v0.2.0** was the first under the new
+**v0.3.5** is the current release; **v0.2.0** was the first under the new
 licence. The
 app tracks projects, detects git and
 Unreal Engine trackers, opens projects in your installed applications, and runs

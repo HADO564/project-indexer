@@ -25,6 +25,26 @@ project is built, tested and worked on live in
   details described the old folder until you ran detection again by hand; they
   now follow the move.
 
+## [0.3.5] — 2026-10-04
+
+The "Open with" box comes to macOS: it now suggests your installed apps,
+as it already did on Windows and Linux.
+
+### Added
+
+- **macOS: the "Open with" box suggests your installed apps.** As on Windows
+  and Linux, typing in it now lists the best matches from `/Applications`,
+  `~/Applications` and the system's own apps, folders inside them included;
+  picking one stores the app's location. macOS previously had no list at all,
+  so an app had to be typed by name.
+
+### Fixed
+
+- **macOS: an app chosen by its location is no longer reported as missing.**
+  An app on macOS is a folder (`WezTerm.app`), and the check made before
+  opening a project only accepted a file, so it would have refused every app
+  the new list stores.
+
 ## [0.3.4] — 2026-10-02
 
 A small fix to the Bin.
@@ -271,7 +291,8 @@ The feature set below is what 0.1.1 ships.
 - Projects are stored in SQLite at `projects.db` in the platform config
   directory, with synchronous transactional writes.
 
-[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/HADO564/project-indexer/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/HADO564/project-indexer/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/HADO564/project-indexer/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/HADO564/project-indexer/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/HADO564/project-indexer/compare/v0.3.1...v0.3.2
