@@ -77,6 +77,13 @@ pub struct EditArgs {
     /// is resolved from where you run the command.
     #[arg(long, group = "change")]
     pub directory: Option<PathBuf>,
+
+    /// The app to open the project with: its name, or where it is installed.
+    /// Stored as typed, less any spaces around it, and only checked when you
+    /// `open` the project. An empty string clears it, so the system's default
+    /// app opens it again.
+    #[arg(long, group = "change")]
+    pub open_with: Option<String>,
 }
 
 pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
@@ -109,6 +116,7 @@ pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
             args.notes,
             tags(&project.tags, args.add_tag, &args.remove_tag),
             properties(&project.properties, args.set, &args.unset),
+            args.open_with,
         )
     };
 
@@ -140,6 +148,7 @@ fn has_field_flag(args: &EditArgs) -> bool {
         || args.name.is_some()
         || args.notes.is_some()
         || args.directory.is_some()
+        || args.open_with.is_some()
 }
 
 /// The update the flags describe. Every field without a flag is `None`, which
@@ -151,11 +160,22 @@ fn from_flags(
     notes: Option<String>,
     tags: Option<Vec<String>>,
     properties: Option<BTreeMap<String, String>>,
+    open_with: Option<String>,
 ) -> UpdateProject {
     // `UpdateProject.notes` is a box in a box: the outer one says whether to
     // touch the notes at all, the inner one what to store. `--notes ""`
     // clears them — `Some(None)` — as an emptied notes box does in the app.
     let notes = notes.map(|text| if text.is_empty() { None } else { Some(text) });
+    // The same box in a box, trimmed: spaces around an app's name are never
+    // part of it, and the launcher would read a blank one as no app anyway.
+    let open_with = open_with.map(|text| {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
     UpdateProject {
         name,
         directory,
@@ -163,6 +183,7 @@ fn from_flags(
         description,
         tags,
         properties,
+        open_with,
         ..Default::default()
     }
 }

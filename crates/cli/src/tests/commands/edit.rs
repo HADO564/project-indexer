@@ -280,6 +280,7 @@ fn full_beside_a_field_flag_is_a_usage_error() {
         ["--name", "x"],
         ["--notes", "x"],
         ["--directory", "x"],
+        ["--open-with", "x"],
     ] {
         let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", flag[0], flag[1]])
             .expect_err("--full only chooses the form");
@@ -327,6 +328,33 @@ fn notes_alone_leave_the_other_fields_alone() {
     let project = saved(&ctx);
     assert_eq!(project.name, "app");
     assert_eq!(project.description, "");
+}
+
+// `--open-with`.
+
+#[test]
+fn open_with_is_set_trimmed_then_cleared_by_an_empty_string() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--open-with", " code "]).unwrap();
+    assert_eq!(saved(&ctx).open_with.as_deref(), Some("code"));
+    run(&ctx, &["indexer", "edit", "app", "--open-with", ""]).unwrap();
+    assert_eq!(saved(&ctx).open_with, None);
+}
+
+#[test]
+fn open_with_of_only_spaces_clears_it() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--open-with", "code"]).unwrap();
+    run(&ctx, &["indexer", "edit", "app", "--open-with", "   "]).unwrap();
+    assert_eq!(saved(&ctx).open_with, None);
+}
+
+#[test]
+fn another_flag_leaves_open_with_alone() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--open-with", "code"]).unwrap();
+    run(&ctx, &["indexer", "edit", "app", "--notes", "x"]).unwrap();
+    assert_eq!(saved(&ctx).open_with.as_deref(), Some("code"));
 }
 
 // `--directory`.

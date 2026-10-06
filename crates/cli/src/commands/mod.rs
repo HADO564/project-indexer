@@ -30,6 +30,10 @@ use crate::output::color::Color;
 
 pub use failure::Failure;
 
+// `Edit` carries every field flag, so it is far larger than the rest. As with
+// `Invocation` in `main.rs`: one value, parsed once per run, so the bytes do
+// not matter.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// List tracked projects.
