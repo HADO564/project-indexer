@@ -75,12 +75,13 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
     // The full form's extra lines take no height in the compact one.
     let full = state.kind() == FormKind::Full;
     let extra = Constraint::Length(u16::from(full));
-    let [name, directory, description, tags, favorite, notes, _, header, rows, _, hint] =
+    let [name, directory, description, tags, favorite, notes, open_with, _, header, rows, _, hint] =
         Layout::vertical([
             extra,
             extra,
             Constraint::Length(1),
             Constraint::Length(1),
+            extra,
             extra,
             extra,
             Constraint::Length(1),
@@ -136,6 +137,13 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
             "Notes",
             state.notes_input(),
             focus == Focus::Notes,
+        );
+        field(
+            frame,
+            open_with,
+            "Open with",
+            state.open_with_input(),
+            focus == Focus::OpenWith,
         );
     }
     properties(frame, header, rows, state);

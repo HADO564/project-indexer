@@ -132,6 +132,8 @@ pub enum Focus {
     Favorite,
     /// The notes box, in the full form only.
     Notes,
+    /// The open-with box, in the full form only.
+    OpenWith,
     Name(usize),
     Value(usize),
 }
@@ -164,6 +166,8 @@ pub struct FormState {
     favorite: bool,
     /// One line, as the app's notes box; empty means no notes.
     notes: TextInput,
+    /// The app to open the project with; empty means the system's default.
+    open_with: TextInput,
     rows: Vec<PropertyRow>,
 
     // The form's own state.
@@ -202,6 +206,7 @@ impl FormState {
             wrap,
             kind,
             notes: TextInput::new(project.notes.as_deref().unwrap_or_default()),
+            open_with: TextInput::new(project.open_with.as_deref().unwrap_or_default()),
             pending_delete: None,
             error: None,
         }
@@ -251,6 +256,10 @@ impl FormState {
         &self.notes
     }
 
+    pub fn open_with_input(&self) -> &TextInput {
+        &self.open_with
+    }
+
     pub fn description_input(&self) -> &TextInput {
         &self.description
     }
@@ -279,7 +288,7 @@ impl FormState {
         }
         order.extend([Focus::Description, Focus::Tags]);
         if full {
-            order.extend([Focus::Favorite, Focus::Notes]);
+            order.extend([Focus::Favorite, Focus::Notes, Focus::OpenWith]);
         }
         for row in 0..self.rows.len() {
             order.push(Focus::Name(row));
@@ -340,6 +349,7 @@ impl FormState {
             Focus::Favorite => None,
             Focus::Name(i) => Some(&mut self.rows[i].name),
             Focus::Value(i) => Some(&mut self.rows[i].value),
+            Focus::OpenWith => Some(&mut self.open_with),
         }
     }
 
@@ -539,6 +549,19 @@ impl FormState {
             None
         };
 
+        // The same, trimmed as `--open-with` is: spaces around an app's name
+        // are never part of it, so adding one is no change.
+        let typed = self.open_with.value().trim();
+        let open_with = if typed != self.original.open_with.as_deref().unwrap_or_default() {
+            Some(if typed.is_empty() {
+                None
+            } else {
+                Some(typed.to_string())
+            })
+        } else {
+            None
+        };
+
         UpdateProject {
             name,
             directory,
@@ -546,6 +569,7 @@ impl FormState {
             tags,
             favorite,
             notes,
+            open_with,
             properties,
             ..Default::default()
         }

@@ -5,7 +5,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use serde_json::json;
 
 use crate::editor::FormKind;
-use crate::tui::form::{Action, FormState, TextInput};
+use crate::tui::form::{Action, Focus, FormState, TextInput};
 
 // The cursor is private, so these tests find it the way a person would: by
 // typing a marker and looking where it landed.
@@ -834,8 +834,8 @@ fn esc_during_the_delete_question_only_answers_no() {
 }
 
 // The full form. Its order: name, directory, description, tags, the
-// favourite checkbox, notes, then the rows — so from the name, the checkbox
-// is four Tabs away and the first row six.
+// favourite checkbox, notes, open with, then the rows — so from the name,
+// the checkbox is four Tabs away and the first row seven.
 
 fn full_form(favorite: bool, rows: bool, wrap: bool) -> FormState {
     let mut project = project("A tool", &["Rust"]);
@@ -853,7 +853,8 @@ fn space(form: &mut FormState) {
 const TO_DIRECTORY: usize = 1;
 const TO_CHECKBOX: usize = 4;
 const TO_NOTES: usize = 5;
-const TO_FIRST_ROW: usize = 6;
+const TO_OPEN_WITH: usize = 6;
+const TO_FIRST_ROW: usize = 7;
 
 #[test]
 fn the_full_form_starts_on_the_name() {
@@ -945,14 +946,17 @@ fn space_still_types_a_space_in_a_text_box() {
 }
 
 #[test]
-fn tab_from_the_checkbox_reaches_the_notes_then_the_first_row() {
+fn tab_from_the_checkbox_reaches_the_notes_then_open_with_then_the_first_row() {
     let mut form = full_form(false, true, true);
     tab(&mut form, TO_NOTES);
     type_text(&mut form, "n");
-    tab(&mut form, TO_FIRST_ROW - TO_NOTES);
+    tab(&mut form, TO_OPEN_WITH - TO_NOTES);
+    type_text(&mut form, "code");
+    tab(&mut form, TO_FIRST_ROW - TO_OPEN_WITH);
     type_text(&mut form, "1");
     let changes = form.changes();
     assert_eq!(changes.notes, Some(Some("n".into())));
+    assert_eq!(changes.open_with, Some(Some("code".into())));
     assert_eq!(
         changes.properties,
         Some(props(&[("Client1", "Acme"), ("Stage", "beta")]))
@@ -960,12 +964,12 @@ fn tab_from_the_checkbox_reaches_the_notes_then_the_first_row() {
 }
 
 #[test]
-fn shift_tab_from_the_first_row_reaches_the_notes() {
+fn shift_tab_from_the_first_row_reaches_open_with() {
     let mut form = full_form(false, true, true);
     tab(&mut form, TO_FIRST_ROW);
     shift_tab(&mut form, 1);
-    type_text(&mut form, "n");
-    assert_eq!(form.changes().notes, Some(Some("n".into())));
+    type_text(&mut form, "code");
+    assert_eq!(form.changes().open_with, Some(Some("code".into())));
 }
 
 #[test]
@@ -978,22 +982,22 @@ fn shift_tab_from_the_checkbox_reaches_the_tags() {
 }
 
 #[test]
-fn with_no_rows_the_notes_are_last_wrapping_both_ways() {
+fn with_no_rows_open_with_is_last_wrapping_both_ways() {
     let mut form = full_form(false, false, true);
-    shift_tab(&mut form, 1); // the name wraps back to the notes
-    type_text(&mut form, "n");
-    assert_eq!(form.changes().notes, Some(Some("n".into())));
+    shift_tab(&mut form, 1); // the name wraps back to open with
+    type_text(&mut form, "code");
+    assert_eq!(form.changes().open_with, Some(Some("code".into())));
     tab(&mut form, 1); // and forward to the name
     type_text(&mut form, "2");
     assert_eq!(form.changes().name.as_deref(), Some("app2"));
 }
 
 #[test]
-fn without_wrap_tab_stays_on_the_notes_when_they_are_last() {
+fn without_wrap_tab_stays_on_open_with_when_it_is_last() {
     let mut form = full_form(false, false, false);
     tab(&mut form, 9);
-    type_text(&mut form, "n");
-    assert_eq!(form.changes().notes, Some(Some("n".into())));
+    type_text(&mut form, "code");
+    assert_eq!(form.changes().open_with, Some(Some("code".into())));
 }
 
 #[test]
@@ -1067,6 +1071,72 @@ fn notes_retyped_unchanged_are_no_change() {
     form.handle(press(KeyCode::Backspace));
     type_text(&mut form, "d");
     assert_eq!(form.changes().notes, None);
+}
+
+// Open with: the notes' twin, but trimmed, as `--open-with` is.
+
+fn with_open_with(open_with: Option<&str>) -> FormState {
+    let mut project = project("A tool", &["Rust"]);
+    project.open_with = open_with.map(str::to_string);
+    FormState::new(&project, true, FormKind::Full)
+}
+
+#[test]
+fn open_with_loads_into_its_box_and_untouched_is_no_change() {
+    let form = with_open_with(Some("code"));
+    assert_eq!(form.open_with_input().value(), "code");
+    assert_eq!(form.changes().open_with, None);
+    assert_eq!(with_open_with(None).changes().open_with, None);
+}
+
+#[test]
+fn typing_an_app_where_there_was_none_sets_it_trimmed() {
+    let mut form = with_open_with(None);
+    tab(&mut form, TO_OPEN_WITH);
+    type_text(&mut form, "  Visual Studio Code ");
+    assert_eq!(
+        form.changes().open_with,
+        Some(Some("Visual Studio Code".into()))
+    );
+}
+
+#[test]
+fn emptying_open_with_clears_it() {
+    let mut form = with_open_with(Some("code"));
+    tab(&mut form, TO_OPEN_WITH);
+    clear(&mut form);
+    assert_eq!(
+        form.changes().open_with,
+        Some(None),
+        "a box in a box: clear"
+    );
+}
+
+#[test]
+fn spaces_around_the_stored_app_are_no_change() {
+    let mut form = with_open_with(Some("code"));
+    tab(&mut form, TO_OPEN_WITH);
+    type_text(&mut form, "  ");
+    assert_eq!(form.changes().open_with, None);
+}
+
+#[test]
+fn only_spaces_where_there_was_no_app_are_no_change() {
+    let mut form = with_open_with(None);
+    tab(&mut form, TO_OPEN_WITH);
+    type_text(&mut form, "   ");
+    assert_eq!(form.changes().open_with, None);
+}
+
+#[test]
+fn the_compact_form_never_reaches_open_with() {
+    let mut project = project("A tool", &["Rust"]);
+    project.open_with = Some("code".into());
+    let mut form = FormState::new(&project, true, FormKind::Compact);
+    for _ in 0..4 {
+        assert_ne!(form.focus(), Focus::OpenWith);
+        tab(&mut form, 1);
+    }
 }
 
 // The directory box: sent as typed, for `TerminalEditor` to resolve.

@@ -147,7 +147,10 @@ between them is a natural point for a pull request.
     absolute, expands `~` in the form's box, and keeps the form open with
     the reason when the typed folder does not resolve.)* — `--directory` and a text field. Core validates the path;
     folder browsing can come later.
-11. **Open with** — `--open-with` and a text field (`""` clears it); a picker
+11. ~~**Open with**~~ *(done 2026-10-06. Stored as typed less surrounding
+    spaces, so blank clears it, and never checked on save: `open` checks it.
+    `edit` only stores the app; opening once with another is `open --with`,
+    for later.)* — `--open-with` and a text field (`""` clears it); a picker
     over `platform::list_installed_apps` can come later.
 12. **Group** — `--group <name>`, resolved to an id through `ctx.groups`
     (a name no group has, or one several groups share, is an error), and

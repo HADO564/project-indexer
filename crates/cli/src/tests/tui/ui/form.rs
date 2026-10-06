@@ -227,7 +227,7 @@ fn the_full_form_says_so_in_its_title() {
 }
 
 #[test]
-fn the_full_form_draws_name_directory_checkbox_and_notes() {
+fn the_full_form_draws_name_directory_checkbox_notes_and_open_with() {
     let mut form = FormState::new(&project(json!({"Client": "Acme"})), true, FormKind::Full);
     let terminal = render(&form, 60, 15);
     let lines = screen(&terminal);
@@ -252,7 +252,11 @@ fn the_full_form_draws_name_directory_checkbox_and_notes() {
         "│   Notes                                                  │"
     );
     assert_eq!(
-        lines[8],
+        lines[7],
+        "│   Open with                                              │"
+    );
+    assert_eq!(
+        lines[9],
         "│   Properties                                             │"
     );
 
@@ -288,4 +292,5 @@ fn the_compact_form_draws_no_name_checkbox_or_notes() {
     assert!(!text.contains("Name "), "{text}");
     assert!(!text.contains("Favourite"), "{text}");
     assert!(!text.contains("Notes"), "{text}");
+    assert!(!text.contains("Open with"), "{text}");
 }
