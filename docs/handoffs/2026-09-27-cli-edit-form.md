@@ -134,21 +134,42 @@ between them is a natural point for a pull request.
 
 **Part 2 — `--full`, one field and its flag at a time**
 
-8. **`--full` and the favourite checkbox.** The flag (a usage error beside a
+8. ~~**`--full` and the favourite checkbox.**~~ *(done 2026-10-03; the
+   checkbox sits between the tags and the properties.)* The flag (a usage error beside a
    field flag, or without a terminal), `FormState` holding which form it is,
    and a checkbox input toggled with Space. Favourite's command-line way is
    the `favorite` / `unfavorite` verbs, so it needs no new flag.
-9. **Name and notes** — `--name`, `--notes` and their text fields. `--notes ""`
+9. ~~**Name and notes**~~ *(done 2026-10-03; the name comes first in the
+   full form, which opens on it, and notes follow the checkbox.)* — `--name`, `--notes` and their text fields. `--notes ""`
    clears the notes (`UpdateProject.notes` is `Some(None)`).
-10. **Directory** — `--directory` and a text field. Core validates the path;
+10. ~~**Directory**~~ *(done 2026-10-04. Core refuses another project's
+    folder on any move and re-detects the trackers; the CLI makes the path
+    absolute, expands `~` in the form's box, and keeps the form open with
+    the reason when the typed folder does not resolve.)* — `--directory` and a text field. Core validates the path;
     folder browsing can come later.
-11. **Open with** — `--open-with` and a text field (`""` clears it); a picker
+11. ~~**Open with**~~ *(done 2026-10-06. Stored as typed less surrounding
+    spaces, so blank clears it, and never checked on save: `open` checks it.
+    `edit` only stores the app; opening once with another is `open --with`,
+    for later.)* — `--open-with` and a text field (`""` clears it); a picker
     over `platform::list_installed_apps` can come later.
-12. **Group** — `--group <name>`, resolved to an id through `ctx.groups`
+12. ~~**Group**~~ *(done 2026-10-07. `--group <name>` moves the project,
+    `--ungroup` or `--group ""` takes it out; the name is trimmed and matched
+    ignoring case, as core compares group names, and a miss lists the groups.
+    The form's line follows the GUI's order and wording — after Open with,
+    "Ungrouped" first — and ←/→ wrap per `form-wrap`. The choice is kept as an
+    id, so a group deleted while the form is open is no change until another
+    is picked.)* — `--group <name>`, resolved to an id through `ctx.groups`
     (a name no group has, or one several groups share, is an error), and
     `--group ""` to ungroup; in the form, a choice cycled with ←/→ rather than
     typed.
-13. **Colour and icon** — `--color` (a palette name or `#rrggbb`, core's rule)
+13. ~~**Colour and icon**~~ *(done 2026-10-07. `crates/cli/src/appearance.rs`
+    checks both before core, so a typo is refused with the choices: a colour
+    against core's palette, an icon against a copy of the app's bundled list —
+    a test fails if `src/lib/icons.ts` drifts — or the app's custom icons for
+    `custom:<name>`. Both are saved lowercase, as the app does. The form's
+    colour box shows a swatch once it holds a colour; a bad value keeps the
+    form open with the reason. On a short terminal the blank lines go first,
+    so a property row and the hints stay.)* — `--color` (a palette name or `#rrggbb`, core's rule)
     and `--icon` (a bundled name or an existing `custom:<name>`; uploading a
     custom icon stays in the GUI). Text fields first; a swatch row and an icon
     list can come later.

@@ -47,7 +47,48 @@ impl ProjectService {
                 return Err(ProjectError::GroupNotFound(group_id.clone()));
             }
         }
+        // A move — a directory that differs from the stored one once both
+        // are normalised. Rewriting the same folder another way is not one.
+        let moved_to = update
+            .directory
+            .as_deref()
+            .filter(|new| normalize_directory(new) != normalize_directory(&project.directory))
+            .map(str::to_string);
+        // Renaming to the name it has, in any case, is no clash: the project
+        // itself is left out of `others` below.
+        let renamed_to = update.name.as_deref();
+        if moved_to.is_some() || renamed_to.is_some() {
+            let others: Vec<Project> = self
+                .repo
+                .list()?
+                .into_iter()
+                .filter(|p| !p.is_deleted && p.id != project.id)
+                .collect();
+            // One folder, one project, as `create` enforces: otherwise two
+            // records would share a folder and neither could be found by it.
+            if let Some(directory) = &moved_to {
+                Project::check_for_duplicate_dir(directory, &others)?;
+            }
+            // One name, one project, ignoring case: `show api` could not tell
+            // two projects called `api` apart, nor could the app's list.
+            if let Some(name) = renamed_to {
+                Project::check_for_duplicate_name(name, &others)?;
+            }
+        }
+
         project.update(update)?;
+
+        // The trackers describe the folder they were detected in, so a moved
+        // project is detected afresh, best-effort as `create` does: a detector
+        // that fails is reported and does not undo the move.
+        if moved_to.is_some() {
+            let detection = self.detectors.detect_project(Path::new(&project.directory));
+            project.trackers = detection.trackers();
+            for error in detection.errors() {
+                eprintln!("Detector error for '{}': {}", project.directory, error);
+            }
+        }
+
         self.repo.save(&project)?;
         Ok(project)
     }

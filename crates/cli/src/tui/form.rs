@@ -1,7 +1,8 @@
+use crate::editor::FormKind;
 use std::collections::BTreeMap;
 
 use indexer_core::domain::normalize::normalize_tags;
-use indexer_core::{Project, UpdateProject};
+use indexer_core::{Group, Project, UpdateProject};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 /// One line of editable text and where the cursor is in it.
@@ -120,8 +121,25 @@ pub enum Action {
 // `Copy`: the focus is a small value, read and replaced whole, never shared.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
+    /// The project's name box, in the full form only. Not `Name`: that is a
+    /// property row's name.
+    ProjectName,
+    /// The project's folder, in the full form only.
+    Directory,
     Description,
     Tags,
+    /// The favourite checkbox, in the full form only.
+    Favorite,
+    /// The notes box, in the full form only.
+    Notes,
+    /// The open-with box, in the full form only.
+    OpenWith,
+    /// The group choice, in the full form only: picked with ←/→, not typed.
+    Group,
+    /// The project's own colour, in the full form only.
+    Color,
+    /// The project's own icon, in the full form only.
+    Icon,
     Name(usize),
     Value(usize),
 }
@@ -137,30 +155,59 @@ impl Focus {
 }
 
 pub struct FormState {
-    /// The project's name, for the form's title. Not editable here.
-    title: String,
-    description: String,
-    edit_description: TextInput,
-    tags: Vec<String>,
-    edit_tags: TextInput,
+    /// The project as loaded: the form's title, and what `changes()` compares
+    /// every box against. Never edited — the boxes below are.
+    original: Project,
+
+    // The boxes, as the user has them now, in the full form's order.
+    /// The project's name, in the full form.
+    name: TextInput,
+    /// The project's folder as typed, in the full form. Sent as typed;
+    /// `TerminalEditor` resolves it before saving.
+    directory: TextInput,
+    description: TextInput,
+    /// The tags as one comma-separated line, as the app's tag box has them.
+    tags: TextInput,
+    /// The full form's checkbox.
+    favorite: bool,
+    /// One line, as the app's notes box; empty means no notes.
+    notes: TextInput,
+    /// The app to open the project with; empty means the system's default.
+    open_with: TextInput,
+    /// The chosen group's id, or `None` for ungrouped. Kept as the id rather
+    /// than a place in `groups`, so a group deleted elsewhere while the form
+    /// is open is still "no change" until the user picks another.
+    group: Option<String>,
+    /// A palette name or `#rrggbb`, as typed; empty means none. Sent as typed,
+    /// for `TerminalEditor` to check, as the directory is.
+    color: TextInput,
+    /// A bundled icon's name or `custom:<name>`, as typed; empty means none.
+    icon: TextInput,
+    rows: Vec<PropertyRow>,
+
+    // The form's own state.
     focus: Focus,
     wrap: bool,
-    properties: BTreeMap<String, String>,
-    rows: Vec<PropertyRow>,
+    /// Compact, or every field with `edit --full`.
+    kind: FormKind,
+    /// What ←/→ cycle through on the group line, after "Ungrouped", in the
+    /// sidebar's order. Empty in the compact form, which has no group line.
+    groups: Vec<Group>,
     /// `Some(row)` while Ctrl+D waits for `y`; the next key answers it.
     pending_delete: Option<usize>,
+    /// Why the last save could not go ahead, shown until the next key.
+    error: Option<String>,
 }
 
 impl FormState {
-    pub fn new(project: &Project, wrap: bool) -> Self {
+    pub fn new(project: &Project, wrap: bool, kind: FormKind) -> Self {
         Self {
-            title: project.name.clone(),
-            description: project.description.clone(),
-            edit_description: TextInput::new(&project.description),
-            tags: project.tags.clone(),
-            edit_tags: TextInput::new(&project.tags.join(", ")),
-            focus: Focus::Description,
-            properties: project.properties.clone(),
+            original: project.clone(),
+            name: TextInput::new(&project.name),
+            directory: TextInput::new(&project.directory),
+            description: TextInput::new(&project.description),
+            tags: TextInput::new(&project.tags.join(", ")),
+            favorite: project.favorite,
             rows: project
                 .properties
                 .iter()
@@ -169,27 +216,111 @@ impl FormState {
                     value: TextInput::new(value),
                 })
                 .collect(),
+            // The first box in `order`: the name, in the full form.
+            focus: match kind {
+                FormKind::Compact => Focus::Description,
+                FormKind::Full => Focus::ProjectName,
+            },
             wrap,
+            kind,
+            notes: TextInput::new(project.notes.as_deref().unwrap_or_default()),
+            open_with: TextInput::new(project.open_with.as_deref().unwrap_or_default()),
+            group: project.group_id.clone(),
+            color: TextInput::new(project.color.as_deref().unwrap_or_default()),
+            icon: TextInput::new(project.icon.as_deref().unwrap_or_default()),
+            groups: Vec::new(),
             pending_delete: None,
+            error: None,
         }
+    }
+
+    /// The groups the group line offers. The form cannot read the database,
+    /// so `TerminalEditor` hands them in.
+    pub fn with_groups(mut self, groups: Vec<Group>) -> Self {
+        self.groups = groups;
+        self
     }
 
     // Read-only views for `ui::form::draw`, which paints and decides nothing.
 
     pub fn title(&self) -> &str {
-        &self.title
+        &self.original.name
     }
 
     pub fn focus(&self) -> Focus {
         self.focus
     }
 
+    /// The compact form, or the full one `edit --full` asked for.
+    pub fn kind(&self) -> FormKind {
+        self.kind
+    }
+
+    /// Whether the favourite checkbox is ticked, as the form shows it now.
+    pub fn favorite_checked(&self) -> bool {
+        self.favorite
+    }
+
+    pub fn name_input(&self) -> &TextInput {
+        &self.name
+    }
+
+    pub fn directory_input(&self) -> &TextInput {
+        &self.directory
+    }
+
+    /// Why the last save could not go ahead, while it is shown.
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
+    /// Keeps the form open with `message` in place of the hints, when what
+    /// was typed cannot be saved — a directory that does not resolve. The
+    /// next key clears it; nothing typed is lost.
+    pub fn show_error(&mut self, message: String) {
+        self.error = Some(message);
+    }
+
+    pub fn notes_input(&self) -> &TextInput {
+        &self.notes
+    }
+
+    pub fn open_with_input(&self) -> &TextInput {
+        &self.open_with
+    }
+
+    /// The group line's text: the chosen group's name, "Ungrouped", or, for
+    /// a group deleted while the form was open, a note saying so.
+    pub fn group_label(&self) -> &str {
+        match &self.group {
+            None => "Ungrouped",
+            Some(id) => self
+                .groups
+                .iter()
+                .find(|g| &g.id == id)
+                .map_or("(deleted group)", |g| g.name.as_str()),
+        }
+    }
+
+    pub fn color_input(&self) -> &TextInput {
+        &self.color
+    }
+
+    pub fn icon_input(&self) -> &TextInput {
+        &self.icon
+    }
+
+    /// Whether there is any group to pick; with none, ←/→ have nothing to do.
+    pub fn has_groups(&self) -> bool {
+        !self.groups.is_empty()
+    }
+
     pub fn description_input(&self) -> &TextInput {
-        &self.edit_description
+        &self.description
     }
 
     pub fn tags_input(&self) -> &TextInput {
-        &self.edit_tags
+        &self.tags
     }
 
     pub fn rows(&self) -> &[PropertyRow] {
@@ -201,50 +332,113 @@ impl FormState {
         self.pending_delete
     }
 
-    /// Tab / ↓. On the last box (the last row's value, or the tags when there
-    /// are no rows), wraps to the first or stays, per `wrap`.
+    /// Every box Tab visits, in order. The one place the order lives: a field
+    /// the full form adds is a line here, and `next_focus` and
+    /// `previous_focus` follow.
+    fn order(&self) -> Vec<Focus> {
+        let full = self.kind == FormKind::Full;
+        let mut order = Vec::new();
+        if full {
+            order.extend([Focus::ProjectName, Focus::Directory]);
+        }
+        order.extend([Focus::Description, Focus::Tags]);
+        if full {
+            order.extend([
+                Focus::Favorite,
+                Focus::Notes,
+                Focus::OpenWith,
+                Focus::Group,
+                Focus::Color,
+                Focus::Icon,
+            ]);
+        }
+        for row in 0..self.rows.len() {
+            order.push(Focus::Name(row));
+            order.push(Focus::Value(row));
+        }
+        order
+    }
+
+    /// Where the focus sits in `order`. Focus only ever points at a box that
+    /// exists — leaving or deleting a row moves it first — so it is always
+    /// found.
+    fn position(&self, order: &[Focus]) -> usize {
+        order
+            .iter()
+            .position(|&focus| focus == self.focus)
+            .expect("focus is always on a box in the order")
+    }
+
+    /// Tab / ↓: the next box in `order`. On the last, wraps to the first or
+    /// stays, per `wrap`.
     fn next_focus(&mut self) {
         let from = self.focus;
-        self.focus = match self.focus {
-            Focus::Description => Focus::Tags,
-            Focus::Tags if !self.rows.is_empty() => Focus::Name(0),
-            // No rows below: the tags are the last field.
-            Focus::Tags if self.wrap => Focus::Description,
-            Focus::Tags => Focus::Tags,
-            Focus::Name(i) => Focus::Value(i),
-            Focus::Value(i) if i < self.rows.len() - 1 => Focus::Name(i + 1),
-            Focus::Value(i) if i == self.rows.len() - 1 && self.wrap => Focus::Description,
-            Focus::Value(i) => Focus::Value(i),
+        let order = self.order();
+        let at = self.position(&order);
+        self.focus = match order.get(at + 1) {
+            Some(&next) => next,
+            None if self.wrap => order[0],
+            None => self.focus,
         };
         self.leave_row(from);
     }
 
-    /// Shift+Tab / ↑. On the first field, wraps to the last box (the last
-    /// row's value, or the tags when there are no rows) or stays, per `wrap`.
+    /// Shift+Tab / ↑: the previous box in `order`. On the first, wraps to the
+    /// last or stays, per `wrap`.
     fn previous_focus(&mut self) {
         let from = self.focus;
-        self.focus = match self.focus {
-            Focus::Tags => Focus::Description,
-            Focus::Description if !self.rows.is_empty() && self.wrap => {
-                Focus::Value(self.rows.len() - 1)
-            }
-            Focus::Description if self.wrap => Focus::Tags,
-            Focus::Description => Focus::Description,
-            // Before the general arm: row 0 has no row above it, and `0 - 1`
-            // would panic.
-            Focus::Name(0) => Focus::Tags,
-            Focus::Name(i) => Focus::Value(i - 1),
-            Focus::Value(i) => Focus::Name(i),
+        let order = self.order();
+        let at = self.position(&order);
+        self.focus = if at > 0 {
+            order[at - 1]
+        } else if self.wrap {
+            order[order.len() - 1]
+        } else {
+            self.focus
         };
         self.leave_row(from);
     }
 
-    fn focused_input(&mut self) -> &mut TextInput {
+    /// ←/→ on the group line: the next or previous choice in "Ungrouped",
+    /// then each group. At the ends it wraps or stays, per `wrap`, as Tab
+    /// does. A deleted group is in neither place, so either key starts over
+    /// from "Ungrouped".
+    fn cycle_group(&mut self, forward: bool) {
+        let choices: Vec<Option<&String>> = std::iter::once(None)
+            .chain(self.groups.iter().map(|g| Some(&g.id)))
+            .collect();
+        let last = choices.len() - 1;
+        let next = match choices.iter().position(|c| *c == self.group.as_ref()) {
+            None => 0,
+            Some(at) if forward && at < last => at + 1,
+            Some(at) if !forward && at > 0 => at - 1,
+            Some(_) if self.wrap => {
+                if forward {
+                    0
+                } else {
+                    last
+                }
+            }
+            Some(at) => at,
+        };
+        self.group = choices[next].cloned();
+    }
+
+    /// The text box keys type into, or `None` on the favourite checkbox and
+    /// the group line, which are not ones.
+    fn focused_input(&mut self) -> Option<&mut TextInput> {
         match self.focus {
-            Focus::Description => &mut self.edit_description,
-            Focus::Tags => &mut self.edit_tags,
-            Focus::Name(i) => &mut self.rows[i].name,
-            Focus::Value(i) => &mut self.rows[i].value,
+            Focus::ProjectName => Some(&mut self.name),
+            Focus::Directory => Some(&mut self.directory),
+            Focus::Notes => Some(&mut self.notes),
+            Focus::Description => Some(&mut self.description),
+            Focus::Tags => Some(&mut self.tags),
+            Focus::Favorite | Focus::Group => None,
+            Focus::Name(i) => Some(&mut self.rows[i].name),
+            Focus::Value(i) => Some(&mut self.rows[i].value),
+            Focus::OpenWith => Some(&mut self.open_with),
+            Focus::Color => Some(&mut self.color),
+            Focus::Icon => Some(&mut self.icon),
         }
     }
 
@@ -260,6 +454,9 @@ impl FormState {
             // handle it or it cannot be quit that way.
             return Action::Cancel;
         }
+        // An error from the last save stays up until the next key, which
+        // then does what it always does — the user carries on editing.
+        self.error = None;
         // Ctrl+D asked "delete this row?": this key is the answer, whatever
         // it is. `take` closes the question either way; only `y` deletes,
         // and the key does nothing else.
@@ -301,28 +498,50 @@ impl FormState {
                 self.previous_focus();
                 Action::Continue
             }
+            // On the group line ←/→ choose; everywhere else they move the
+            // cursor.
+            KeyCode::Left if self.focus == Focus::Group => {
+                self.cycle_group(false);
+                Action::Continue
+            }
+            KeyCode::Right if self.focus == Focus::Group => {
+                self.cycle_group(true);
+                Action::Continue
+            }
             KeyCode::Left => {
-                self.focused_input().left();
+                if let Some(input) = self.focused_input() {
+                    input.left();
+                }
                 Action::Continue
             }
             KeyCode::Right => {
-                self.focused_input().right();
+                if let Some(input) = self.focused_input() {
+                    input.right();
+                }
                 Action::Continue
             }
             KeyCode::Home => {
-                self.focused_input().home();
+                if let Some(input) = self.focused_input() {
+                    input.home();
+                }
                 Action::Continue
             }
             KeyCode::End => {
-                self.focused_input().end();
+                if let Some(input) = self.focused_input() {
+                    input.end();
+                }
                 Action::Continue
             }
             KeyCode::Backspace => {
-                self.focused_input().backspace();
+                if let Some(input) = self.focused_input() {
+                    input.backspace();
+                }
                 Action::Continue
             }
             KeyCode::Delete => {
-                self.focused_input().delete();
+                if let Some(input) = self.focused_input() {
+                    input.delete();
+                }
                 Action::Continue
             }
             KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -335,8 +554,17 @@ impl FormState {
             }
             // Typing. A Ctrl-held letter is a shortcut, never text: Ctrl+N
             // must not also type an `n`.
+            // Space ticks or unticks the full form's favourite checkbox. Above
+            // typing, so it is not swallowed as text; anywhere else Space types.
+            KeyCode::Char(' ') if self.focus == Focus::Favorite => {
+                self.favorite = !self.favorite;
+                Action::Continue
+            }
             KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.focused_input().insert(c);
+                // No text box under the checkbox: other characters do nothing.
+                if let Some(input) = self.focused_input() {
+                    input.insert(c);
+                }
                 Action::Continue
             }
             _ => Action::Continue,
@@ -346,22 +574,39 @@ impl FormState {
     /// Only the fields that differ from the project as loaded; everything
     /// else `None`, so saving an untouched form writes nothing.
     pub fn changes(&self) -> UpdateProject {
+        // An emptied name is sent too, and core refuses it — as it refuses a
+        // nameless project anywhere.
+        let name = if self.name.value() != self.original.name {
+            Some(self.name.value().to_string())
+        } else {
+            None
+        };
+
+        // Sent as typed — relative, `~/…` or empty — for `TerminalEditor` to
+        // resolve; only a box left as loaded is no change.
+        let directory = if self.directory.value() != self.original.directory {
+            Some(self.directory.value().to_string())
+        } else {
+            None
+        };
+
         // Core stores "no description" as `""`, so an emptied field is
         // `Some("")`, a real change, not `None`.
-        let description = if self.edit_description.value() != self.description {
-            Some(self.edit_description.value().to_string())
+        let description = if self.description.value() != self.original.description {
+            Some(self.description.value().to_string())
         } else {
             None
         };
 
         // Compared as core stores them: `rust` retyped over `Rust` is no
         // change. The list is sent as typed; core normalizes on save.
-        let typed_tags = parse_tags(self.edit_tags.value());
-        let tags = if normalize_tags(typed_tags.clone()) != normalize_tags(self.tags.clone()) {
-            Some(typed_tags)
-        } else {
-            None
-        };
+        let typed_tags = parse_tags(self.tags.value());
+        let tags =
+            if normalize_tags(typed_tags.clone()) != normalize_tags(self.original.tags.clone()) {
+                Some(typed_tags)
+            } else {
+                None
+            };
 
         // Names match ignoring case, as `edit::edited_properties` and the
         // search bar do: of two equal names the lower row wins. A blank row
@@ -375,18 +620,85 @@ impl FormState {
             typed.retain(|existing: &String, _| existing.trim().to_lowercase() != wanted);
             typed.insert(row.name.value().to_string(), row.value.value().to_string());
         }
-        let properties = if Self::lowercase_names(&typed) != Self::lowercase_names(&self.properties)
-        {
-            Some(typed)
+        let properties =
+            if Self::lowercase_names(&typed) != Self::lowercase_names(&self.original.properties) {
+                Some(typed)
+            } else {
+                None
+            };
+
+        // Only when the box was left differently from how the project had it:
+        // ticking and unticking again sends nothing.
+        let favorite = if self.favorite != self.original.favorite {
+            Some(self.favorite)
         } else {
             None
         };
 
+        // A box in a box, as `--notes` builds it: "no notes" and an empty box
+        // are the same, and emptying the box clears them (`Some(None)`).
+        let notes = if self.notes.value() != self.original.notes.as_deref().unwrap_or_default() {
+            let text = self.notes.value();
+            Some(if text.is_empty() {
+                None
+            } else {
+                Some(text.to_string())
+            })
+        } else {
+            None
+        };
+
+        // The same, trimmed as `--open-with` is: spaces around an app's name
+        // are never part of it, so adding one is no change.
+        let typed = self.open_with.value().trim();
+        let open_with = if typed != self.original.open_with.as_deref().unwrap_or_default() {
+            Some(if typed.is_empty() {
+                None
+            } else {
+                Some(typed.to_string())
+            })
+        } else {
+            None
+        };
+
+        // The id as chosen against the id as loaded: cycling all the way
+        // round back to the start is no change.
+        let group_id = if self.group != self.original.group_id {
+            Some(self.group.clone())
+        } else {
+            None
+        };
+
+        // Trimmed, and compared ignoring case, as both are saved lowercased: `Cyan` over a stored `cyan` is no change. Anything else
+        // goes as typed, for `TerminalEditor` to check against the palette
+        // and the icons before saving.
+        let color = cleared_or_typed(
+            self.color.value(),
+            self.original.color.as_deref(),
+            |typed, stored| typed.eq_ignore_ascii_case(stored),
+        );
+        // Icons too: bundled and custom names alike are stored lowercase.
+        let icon = cleared_or_typed(
+            self.icon.value(),
+            self.original.icon.as_deref(),
+            |typed, stored| typed.eq_ignore_ascii_case(stored),
+        );
+
+        // Every field by name, with no `..Default::default()`: a field core
+        // adds to `UpdateProject` will not compile here until the form
+        // decides what to do with it.
         UpdateProject {
+            name,
+            directory,
             description,
             tags,
+            favorite,
+            notes,
+            open_with,
+            group_id,
+            color,
+            icon,
             properties,
-            ..Default::default()
         }
     }
 
@@ -465,6 +777,23 @@ impl FormState {
             Focus::Value(i) if i > r => Focus::Value(i - 1),
             other => other,
         };
+    }
+}
+
+/// A trimmed box as a box in a box: `None` when it still says what was
+/// stored (`same` decides), `Some(None)` when emptied, else the text.
+fn cleared_or_typed(
+    typed: &str,
+    stored: Option<&str>,
+    same: fn(&str, &str) -> bool,
+) -> Option<Option<String>> {
+    let typed = typed.trim();
+    if same(typed, stored.unwrap_or_default()) {
+        None
+    } else if typed.is_empty() {
+        Some(None)
+    } else {
+        Some(Some(typed.to_string()))
     }
 }
 

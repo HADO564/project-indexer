@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use indexer_core::{
-    DetectorRunner, GroupService, Project, ProjectRepository, ProjectService, ScanService,
+    DetectorRunner, Group, GroupService, Project, ProjectRepository, ProjectService, ScanService,
     SqliteRepository, UpdateProject,
 };
 use serde_json::json;
@@ -14,7 +14,7 @@ use serde_json::json;
 use crate::commands::{self, Outcome};
 use crate::confirm::Confirmer;
 use crate::context::Context;
-use crate::editor::ProjectEditor;
+use crate::editor::{FormKind, ProjectEditor};
 use crate::launcher::SystemLauncher;
 use crate::{Cli, Invocation};
 
@@ -33,8 +33,29 @@ impl Confirmer for Answer {
 pub struct Scripted(pub fn(&Project) -> Option<UpdateProject>);
 
 impl ProjectEditor for Scripted {
-    fn edit(&self, project: &Project) -> anyhow::Result<Option<UpdateProject>> {
+    fn edit(
+        &self,
+        project: &Project,
+        _groups: Vec<Group>,
+        _kind: FormKind,
+    ) -> anyhow::Result<Option<UpdateProject>> {
         Ok((self.0)(project))
+    }
+}
+
+/// Stands in for the form and checks which one `edit` asked for, then
+/// cancels — so a test sees the kind arrive without a write to look at.
+pub struct Expecting(pub FormKind);
+
+impl ProjectEditor for Expecting {
+    fn edit(
+        &self,
+        _project: &Project,
+        _groups: Vec<Group>,
+        kind: FormKind,
+    ) -> anyhow::Result<Option<UpdateProject>> {
+        assert_eq!(kind, self.0, "edit asked for the wrong form");
+        Ok(None)
     }
 }
 
@@ -46,7 +67,7 @@ pub fn never_asked(_: &Project) -> Option<UpdateProject> {
 
 /// A `Context` over an in-memory database, wired as `Context::open` wires the
 /// real one, holding one live project `app` and one binned project `old`.
-pub fn context(consent: bool, editor: Scripted) -> Context {
+pub fn context(consent: bool, editor: impl ProjectEditor + 'static) -> Context {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     repo.save(&project("app", false)).unwrap();
     repo.save(&project("old", true)).unwrap();

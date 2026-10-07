@@ -6,6 +6,7 @@ use ratatui::style::Modifier;
 use ratatui::Terminal;
 use serde_json::json;
 
+use crate::editor::FormKind;
 use crate::tui::form::FormState;
 use crate::tui::ui::form::draw;
 
@@ -24,7 +25,11 @@ fn project(properties: serde_json::Value) -> Project {
 }
 
 fn form() -> FormState {
-    FormState::new(&project(json!({"Client": "Acme", "Stage": "beta"})), true)
+    FormState::new(
+        &project(json!({"Client": "Acme", "Stage": "beta"})),
+        true,
+        FormKind::Compact,
+    )
 }
 
 fn press(form: &mut FormState, code: KeyCode) {
@@ -115,7 +120,7 @@ fn focus_on_a_row_marks_it_and_reverses_that_box() {
 
 #[test]
 fn no_properties_says_how_to_add_one() {
-    let form = FormState::new(&project(json!({})), true);
+    let form = FormState::new(&project(json!({})), true, FormKind::Compact);
     let terminal = render(&form, 60, 11);
     assert_eq!(
         screen(&terminal)[4],
@@ -152,7 +157,7 @@ fn a_long_value_scrolls_to_keep_the_cursor_in_view() {
 
 #[test]
 fn the_cursor_counts_columns_for_wide_characters() {
-    let mut form = FormState::new(&project(json!({})), true);
+    let mut form = FormState::new(&project(json!({})), true, FormKind::Compact);
     press(&mut form, KeyCode::End);
     for _ in 0..10 {
         press(&mut form, KeyCode::Backspace);
@@ -170,6 +175,7 @@ fn rows_scroll_to_keep_the_focused_row_on_screen() {
     let mut form = FormState::new(
         &project(json!({"A": "1", "B": "2", "C": "3", "D": "4", "E": "5"})),
         true,
+        FormKind::Compact,
     );
     // The last value: Shift+Tab from the description wraps there.
     press(&mut form, KeyCode::BackTab);
@@ -212,4 +218,182 @@ fn the_hints_follow_the_focus() {
 
     press(&mut form, KeyCode::Enter); // Client's value
     assert!(line(&form).starts_with("Enter save · Esc leave properties"));
+}
+
+#[test]
+fn the_full_form_says_so_in_its_title() {
+    let form = FormState::new(&project(json!({})), true, FormKind::Full);
+    assert!(screen(&render(&form, 60, 11))[0].starts_with("┌ Edit app · all fields ─"));
+}
+
+#[test]
+fn the_full_form_draws_every_field() {
+    let mut form = FormState::new(&project(json!({"Client": "Acme"})), true, FormKind::Full);
+    let terminal = render(&form, 60, 17);
+    let lines = screen(&terminal);
+    assert_eq!(
+        lines[1],
+        "│ › Name          app                                      │"
+    );
+    assert_eq!(
+        lines[2],
+        "│   Directory     /home/me/work/app                        │"
+    );
+    assert_eq!(
+        lines[3],
+        "│   Description   A tool                                   │"
+    );
+    assert_eq!(
+        lines[5],
+        "│   Favourite     [ ]                                      │"
+    );
+    assert_eq!(
+        lines[6],
+        "│   Notes                                                  │"
+    );
+    assert_eq!(
+        lines[7],
+        "│   Open with                                              │"
+    );
+    assert_eq!(
+        lines[8],
+        "│   Group           Ungrouped  no groups yet · make one in │"
+    );
+    assert_eq!(
+        lines[9],
+        "│   Colour                                                 │"
+    );
+    assert_eq!(
+        lines[10],
+        "│   Icon                                                   │"
+    );
+    assert_eq!(
+        lines[12],
+        "│   Properties                                             │"
+    );
+
+    for _ in 0..4 {
+        press(&mut form, KeyCode::Tab);
+    }
+    press(&mut form, KeyCode::Char(' '));
+    let terminal = render(&form, 60, 17);
+    assert_eq!(
+        screen(&terminal)[5],
+        "│ › Favourite     [x]                                      │"
+    );
+    assert!(modifier_at(&terminal, 18, 5).contains(Modifier::REVERSED));
+    assert!(screen(&terminal)[15].contains("Space toggle"));
+}
+
+#[test]
+fn a_save_that_could_not_go_ahead_says_why_in_place_of_the_hints() {
+    let mut form = form();
+    form.show_error("cannot move to /nope: No such file or directory".into());
+    let terminal = render(&form, 70, 11);
+    assert_eq!(
+        screen(&terminal)[9],
+        "│ Not saved: cannot move to /nope: No such file or directory         │"
+    );
+    assert!(modifier_at(&terminal, 2, 9).contains(Modifier::BOLD));
+}
+
+#[test]
+fn the_compact_form_draws_no_name_checkbox_or_notes() {
+    let terminal = render(&form(), 60, 11);
+    let text = screen(&terminal).join("\n");
+    assert!(!text.contains("Name "), "{text}");
+    assert!(!text.contains("Favourite"), "{text}");
+    assert!(!text.contains("Notes"), "{text}");
+    assert!(!text.contains("Open with"), "{text}");
+}
+
+#[test]
+fn the_focused_group_line_shows_its_choice_between_arrows() {
+    let mut project = project(json!({}));
+    project.group_id = Some("w".into());
+    let mut work =
+        indexer_core::Group::new("Work".into(), "cyan".into(), "folder".into(), 0).unwrap();
+    work.id = "w".into();
+    let mut form = FormState::new(&project, true, FormKind::Full).with_groups(vec![work]);
+    for _ in 0..7 {
+        press(&mut form, KeyCode::Tab);
+    }
+    let terminal = render(&form, 60, 17);
+    assert_eq!(
+        screen(&terminal)[8],
+        "│ › Group         ‹ Work ›                                 │"
+    );
+    assert!(modifier_at(&terminal, 18, 8).contains(Modifier::REVERSED));
+    assert!(screen(&terminal)[15].contains("←→ choose"));
+}
+
+#[test]
+fn a_colour_the_palette_knows_gets_a_swatch_in_that_colour() {
+    let mut project = project(json!({}));
+    project.color = Some("cyan".into());
+    let form = FormState::new(&project, true, FormKind::Full);
+    let terminal = render(&form, 60, 17);
+    let line = &screen(&terminal)[9];
+    assert!(
+        line.contains("Colour        cyan") && line.ends_with(" ██ │"),
+        "{line}"
+    );
+    if std::env::var_os("NO_COLOR").is_none() {
+        let cell = &terminal.backend().buffer()[(57, 9)];
+        assert_eq!(cell.fg, ratatui::style::Color::Rgb(0x56, 0xc8, 0xc4));
+    }
+}
+
+#[test]
+fn a_box_that_is_not_a_colour_yet_has_no_swatch() {
+    let mut project = project(json!({}));
+    project.color = Some("cya".into());
+    let form = FormState::new(&project, true, FormKind::Full);
+    let terminal = render(&form, 60, 17);
+    assert!(!screen(&terminal)[9].contains('█'));
+}
+
+#[test]
+fn a_short_terminal_drops_the_blank_lines_before_a_property_or_the_hints() {
+    let form = FormState::new(&project(json!({"Client": "Acme"})), true, FormKind::Full);
+    let text = screen(&render(&form, 60, 16)).join("\n");
+    assert!(text.contains("Client"), "{text}");
+    assert!(text.contains("Enter save"), "{text}");
+}
+
+#[test]
+fn the_frame_takes_the_project_colour_and_follows_the_colour_box() {
+    if std::env::var_os("NO_COLOR").is_some() {
+        return;
+    }
+    let mut project = project(json!({}));
+    project.color = Some("violet".into());
+    let mut form = FormState::new(&project, true, FormKind::Full);
+    let terminal = render(&form, 60, 17);
+    let corner = &terminal.backend().buffer()[(0, 0)];
+    assert_eq!(corner.fg, ratatui::style::Color::Rgb(0xa9, 0x8c, 0xf0));
+    let title = &terminal.backend().buffer()[(2, 0)];
+    assert_eq!(title.symbol(), "E");
+    assert_eq!(title.fg, ratatui::style::Color::Rgb(0xa9, 0x8c, 0xf0));
+
+    // Retyped as another colour: the frame follows before anything is saved.
+    for _ in 0..8 {
+        press(&mut form, KeyCode::Tab);
+    }
+    for _ in 0.."violet".len() {
+        press(&mut form, KeyCode::Backspace);
+    }
+    for c in "#ff8800".chars() {
+        press(&mut form, KeyCode::Char(c));
+    }
+    let terminal = render(&form, 60, 17);
+    let corner = &terminal.backend().buffer()[(0, 0)];
+    assert_eq!(corner.fg, ratatui::style::Color::Rgb(0xff, 0x88, 0x00));
+}
+
+#[test]
+fn a_project_without_a_colour_keeps_the_plain_frame() {
+    let terminal = render(&form(), 60, 11);
+    let corner = &terminal.backend().buffer()[(0, 0)];
+    assert_eq!(corner.fg, ratatui::style::Color::Reset);
 }

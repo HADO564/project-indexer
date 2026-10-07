@@ -7,10 +7,10 @@ use clap::Parser;
 
 use indexer_core::UpdateProject;
 
-use super::support::{context, never_asked, run, Scripted};
+use super::support::{context, never_asked, run, Expecting, Scripted};
 use crate::commands::edit::{edited_properties, edited_tags, EditArgs};
 use crate::commands::{Command, Failure, Outcome};
-use crate::editor::{ProjectEditor, TerminalEditor};
+use crate::editor::{FormKind, ProjectEditor, TerminalEditor};
 use crate::{Cli, Invocation};
 
 /// The parsed `EditArgs`, or a panic naming what came back instead.
@@ -228,7 +228,7 @@ fn the_terminal_editor_refuses_under_json_with_a_usage_error() {
     // tests run. `main` turns a `Failure::Usage` into prose and exit code 2.
     let project = super::support::project("app", false);
     let err = TerminalEditor::new(true)
-        .edit(&project)
+        .edit(&project, Vec::new(), FormKind::Compact)
         .expect_err("no form under --json");
     assert!(matches!(
         err.downcast_ref::<Failure>(),
@@ -253,4 +253,312 @@ fn an_editor_saved_untouched_writes_nothing() {
         before,
         "no write, so `updated_at` does not move"
     );
+}
+
+// `--full` chooses the form, and nothing else.
+
+#[test]
+fn a_bare_edit_asks_for_the_compact_form() {
+    let ctx = context(true, Expecting(FormKind::Compact));
+    assert!(run(&ctx, &["indexer", "edit", "app"]).is_ok());
+}
+
+#[test]
+fn full_asks_for_the_full_form() {
+    let ctx = context(true, Expecting(FormKind::Full));
+    assert!(run(&ctx, &["indexer", "edit", "app", "--full"]).is_ok());
+}
+
+#[test]
+fn full_beside_a_field_flag_is_a_usage_error() {
+    for flag in [
+        ["--description", "x"],
+        ["--add-tag", "rust"],
+        ["--remove-tag", "rust"],
+        ["--set", "k=v"],
+        ["--unset", "k"],
+        ["--name", "x"],
+        ["--notes", "x"],
+        ["--directory", "x"],
+        ["--open-with", "x"],
+        ["--group", "x"],
+        ["--color", "x"],
+        ["--icon", "x"],
+    ] {
+        let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", flag[0], flag[1]])
+            .expect_err("--full only chooses the form");
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::ArgumentConflict,
+            "{flag:?}"
+        );
+    }
+}
+
+// `--name` and `--notes`.
+
+fn saved(ctx: &crate::context::Context) -> indexer_core::Project {
+    ctx.projects.get("app-0000-4000-8000-000000000000").unwrap()
+}
+
+#[test]
+fn name_renames_the_project() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--name", "app2"]).unwrap();
+    assert_eq!(saved(&ctx).name, "app2");
+}
+
+#[test]
+fn an_empty_name_is_refused_by_core() {
+    let ctx = context(true, Scripted(never_asked));
+    assert!(run(&ctx, &["indexer", "edit", "app", "--name", "  "]).is_err());
+    assert_eq!(saved(&ctx).name, "app");
+}
+
+#[test]
+fn notes_are_set_then_cleared_by_an_empty_string() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--notes", "remember"]).unwrap();
+    assert_eq!(saved(&ctx).notes.as_deref(), Some("remember"));
+    run(&ctx, &["indexer", "edit", "app", "--notes", ""]).unwrap();
+    assert_eq!(saved(&ctx).notes, None);
+}
+
+#[test]
+fn notes_alone_leave_the_other_fields_alone() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--notes", "x"]).unwrap();
+    let project = saved(&ctx);
+    assert_eq!(project.name, "app");
+    assert_eq!(project.description, "");
+}
+
+// `--open-with`.
+
+#[test]
+fn open_with_is_set_trimmed_then_cleared_by_an_empty_string() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--open-with", " code "]).unwrap();
+    assert_eq!(saved(&ctx).open_with.as_deref(), Some("code"));
+    run(&ctx, &["indexer", "edit", "app", "--open-with", ""]).unwrap();
+    assert_eq!(saved(&ctx).open_with, None);
+}
+
+#[test]
+fn open_with_of_only_spaces_clears_it() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--open-with", "code"]).unwrap();
+    run(&ctx, &["indexer", "edit", "app", "--open-with", "   "]).unwrap();
+    assert_eq!(saved(&ctx).open_with, None);
+}
+
+#[test]
+fn another_flag_leaves_open_with_alone() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--open-with", "code"]).unwrap();
+    run(&ctx, &["indexer", "edit", "app", "--notes", "x"]).unwrap();
+    assert_eq!(saved(&ctx).open_with.as_deref(), Some("code"));
+}
+
+// `--group` and `--ungroup`.
+
+fn with_groups(ctx: &crate::context::Context) -> (String, String) {
+    let work = ctx
+        .groups
+        .create("Work".into(), "cyan".into(), "folder".into())
+        .unwrap();
+    let clients = ctx
+        .groups
+        .create("Clients".into(), "gold".into(), "star".into())
+        .unwrap();
+    (work.id, clients.id)
+}
+
+#[test]
+fn group_puts_the_project_in_a_group_matched_ignoring_case() {
+    let ctx = context(true, Scripted(never_asked));
+    let (work, _) = with_groups(&ctx);
+    run(&ctx, &["indexer", "edit", "app", "--group", " work "]).unwrap();
+    assert_eq!(saved(&ctx).group_id, Some(work));
+}
+
+#[test]
+fn group_moves_the_project_out_of_its_old_group() {
+    let ctx = context(true, Scripted(never_asked));
+    let (_, clients) = with_groups(&ctx);
+    run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
+    run(&ctx, &["indexer", "edit", "app", "--group", "Clients"]).unwrap();
+    assert_eq!(saved(&ctx).group_id, Some(clients));
+}
+
+#[test]
+fn ungroup_and_an_empty_group_both_take_it_out() {
+    let ctx = context(true, Scripted(never_asked));
+    with_groups(&ctx);
+    for clear in [&["--ungroup"][..], &["--group", ""], &["--group", "  "]] {
+        run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
+        let mut argv = vec!["indexer", "edit", "app"];
+        argv.extend_from_slice(clear);
+        run(&ctx, &argv).unwrap();
+        assert_eq!(saved(&ctx).group_id, None, "{clear:?}");
+    }
+}
+
+#[test]
+fn an_unknown_group_is_an_error_naming_the_groups_and_changes_nothing() {
+    let ctx = context(true, Scripted(never_asked));
+    with_groups(&ctx);
+    run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
+    let err = run(
+        &ctx,
+        &["indexer", "edit", "app", "--group", "Wrok", "--notes", "x"],
+    )
+    .unwrap_err()
+    .to_string();
+    assert_eq!(err, "no group named \"Wrok\". Groups: Work, Clients");
+    let project = saved(&ctx);
+    assert!(project.group_id.is_some(), "still in Work");
+    assert_eq!(project.notes, None, "nothing else was saved either");
+}
+
+#[test]
+fn another_flag_leaves_the_group_alone() {
+    let ctx = context(true, Scripted(never_asked));
+    let (work, _) = with_groups(&ctx);
+    run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
+    run(&ctx, &["indexer", "edit", "app", "--notes", "x"]).unwrap();
+    assert_eq!(saved(&ctx).group_id, Some(work));
+}
+
+#[test]
+fn full_beside_ungroup_is_a_usage_error() {
+    let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", "--ungroup"])
+        .expect_err("--full only chooses the form");
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+#[test]
+fn group_and_ungroup_together_are_a_usage_error() {
+    let err = Cli::try_parse_from(["indexer", "edit", "app", "--group", "Work", "--ungroup"])
+        .expect_err("one or the other");
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+// `--color` and `--icon`.
+
+#[test]
+fn color_is_stored_lowercased_then_cleared_by_an_empty_string() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--color", "#FF8800"]).unwrap();
+    assert_eq!(saved(&ctx).color.as_deref(), Some("#ff8800"));
+    run(&ctx, &["indexer", "edit", "app", "--color", ""]).unwrap();
+    assert_eq!(saved(&ctx).color, None);
+}
+
+#[test]
+fn a_bad_color_is_refused_and_changes_nothing() {
+    let ctx = context(true, Scripted(never_asked));
+    assert!(run(
+        &ctx,
+        &["indexer", "edit", "app", "--color", "red", "--notes", "x"]
+    )
+    .is_err());
+    let project = saved(&ctx);
+    assert_eq!((project.color, project.notes), (None, None));
+}
+
+#[test]
+fn icon_is_set_then_cleared_by_an_empty_string() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--icon", "Rocket"]).unwrap();
+    assert_eq!(saved(&ctx).icon.as_deref(), Some("rocket"));
+    run(&ctx, &["indexer", "edit", "app", "--icon", ""]).unwrap();
+    assert_eq!(saved(&ctx).icon, None);
+}
+
+#[test]
+fn an_unknown_icon_is_refused() {
+    let ctx = context(true, Scripted(never_asked));
+    assert!(run(&ctx, &["indexer", "edit", "app", "--icon", "rockt"]).is_err());
+    assert_eq!(saved(&ctx).icon, None);
+}
+
+// `--directory`.
+
+#[test]
+fn directory_moves_the_project_and_stores_the_path_absolute() {
+    let ctx = context(true, Scripted(never_asked));
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("moved")).unwrap();
+    let roundabout = dir.path().join("moved").join("..").join("moved");
+    run(
+        &ctx,
+        &[
+            "indexer",
+            "edit",
+            "app",
+            "--directory",
+            &roundabout.to_string_lossy(),
+        ],
+    )
+    .unwrap();
+    let expected = std::fs::canonicalize(dir.path().join("moved")).unwrap();
+    assert_eq!(saved(&ctx).directory, expected.to_string_lossy());
+}
+
+#[test]
+fn directory_refuses_a_missing_folder_and_saves_nothing() {
+    let ctx = context(true, Scripted(never_asked));
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("nope");
+    let error = run(
+        &ctx,
+        &[
+            "indexer",
+            "edit",
+            "app",
+            "--directory",
+            &missing.to_string_lossy(),
+        ],
+    )
+    .unwrap_err();
+    assert!(
+        format!("{error:#}").starts_with("cannot move to "),
+        "{error:#}"
+    );
+    assert_eq!(saved(&ctx).directory, "/home/me/work/app");
+}
+
+#[test]
+fn directory_refuses_another_projects_folder() {
+    let ctx = context(true, Scripted(never_asked));
+    let dir = tempfile::tempdir().unwrap();
+    let taken = std::fs::canonicalize(dir.path()).unwrap();
+    ctx.projects
+        .create(
+            "Other".into(),
+            taken.to_string_lossy().into_owned(),
+            None,
+            None,
+        )
+        .unwrap();
+    let error = run(
+        &ctx,
+        &[
+            "indexer",
+            "edit",
+            "app",
+            "--directory",
+            &taken.to_string_lossy(),
+        ],
+    )
+    .unwrap_err();
+    assert!(
+        matches!(
+            error.downcast_ref::<indexer_core::ProjectError>(),
+            Some(indexer_core::ProjectError::DuplicateDirectory(_))
+        ),
+        "{error:#}"
+    );
+    assert_eq!(saved(&ctx).directory, "/home/me/work/app");
 }

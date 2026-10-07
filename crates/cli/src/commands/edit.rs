@@ -17,7 +17,10 @@ use indexer_core::domain::UpdateProject;
 use std::collections::BTreeMap;
 
 use super::{find_one, Outcome, TrackerKind};
+use crate::appearance;
 use crate::context::Context;
+use crate::editor::FormKind;
+use std::path::PathBuf;
 
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("change").multiple(true)))]
@@ -30,6 +33,13 @@ pub struct EditArgs {
     #[arg(long, group = "change")]
     pub description: Option<String>,
 
+    /// Rename the project.
+    #[arg(long, group = "change")]
+    pub name: Option<String>,
+
+    /// Replace the notes. An empty string clears them.
+    #[arg(long, group = "change")]
+    pub notes: Option<String>,
     /// Add a tag. Repeat the flag or separate tags with commas. Adding a tag
     /// the project already has changes nothing.
     #[arg(long, group = "change", value_delimiter = ',')]
@@ -56,25 +66,94 @@ pub struct EditArgs {
     /// Repeat the flag or separate the kinds with commas.
     #[arg(long, short = 't', value_enum, value_delimiter = ',')]
     pub tracker: Vec<TrackerKind>,
+
+    /// Open the form with every field, not just the description, tags and
+    /// properties. It only chooses the form, so it cannot be combined with a
+    /// field flag.
+    #[arg(long, conflicts_with = "change")]
+    pub full: bool,
+
+    /// Point the project at another folder — after moving or renaming it on
+    /// disk. It must exist, and no other project may have it. A relative path
+    /// is resolved from where you run the command.
+    #[arg(long, group = "change")]
+    pub directory: Option<PathBuf>,
+
+    /// The app to open the project with: its name, or where it is installed.
+    /// Stored as typed, less any spaces around it, and only checked when you
+    /// `open` the project. An empty string clears it, so the system's default
+    /// app opens it again.
+    #[arg(long, group = "change")]
+    pub open_with: Option<String>,
+
+    /// Put the project in this group, matched ignoring case. A project is in
+    /// one group at a time, so this moves it out of any other. An empty string
+    /// takes it out, as `--ungroup` does.
+    #[arg(long, group = "change")]
+    pub group: Option<String>,
+
+    /// Take the project out of its group.
+    #[arg(long, group = "change", conflicts_with = "group")]
+    pub ungroup: bool,
+
+    /// The project's own colour: cyan, gold, amber, rust, violet, green, blue
+    /// or pink, or #rrggbb. An empty string clears it.
+    #[arg(long, group = "change")]
+    pub color: Option<String>,
+
+    /// The project's own icon: a bundled one (folder, rocket, code, …) or
+    /// custom:<name> for one added in the app. An empty string clears it.
+    #[arg(long, group = "change")]
+    pub icon: Option<String>,
 }
 
 pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
     // Asked before `find_one` takes `args.project`: once one field has been
     // moved out of `args`, the struct can no longer be lent whole.
     let from_form = !has_field_flag(&args);
+    let kind = if args.full {
+        FormKind::Full
+    } else {
+        FormKind::Compact
+    };
     let project = find_one(ctx, args.project, super::unique_kinds(&args.tracker))?;
 
     let update = if from_form {
-        match ctx.editor.edit(&project)? {
+        // Only the full form has a group line to fill.
+        let groups = match kind {
+            FormKind::Full => ctx.groups.list()?,
+            FormKind::Compact => Vec::new(),
+        };
+        match ctx.editor.edit(&project, groups, kind)? {
             Some(update) => update,
             None => return Ok(Outcome::Cancelled),
         }
     } else {
-        from_flags(
-            args.description,
-            tags(&project.tags, args.add_tag, &args.remove_tag),
-            properties(&project.properties, args.set, &args.unset),
-        )
+        // Absolute, and with symlinks resolved, as `add` stores a path: a
+        // relative one means nothing once the command has finished.
+        let directory = args
+            .directory
+            .map(|d| super::add::absolute(Some(d), "move to"))
+            .transpose()?;
+        // Every field without a flag stays `None`, which `update` reads as
+        // "leave alone".
+        UpdateProject {
+            name: args.name,
+            directory,
+            description: args.description,
+            notes: cleared_if_empty(args.notes),
+            tags: tags(&project.tags, args.add_tag, &args.remove_tag),
+            properties: properties(&project.properties, args.set, &args.unset),
+            open_with: cleared_if_blank(args.open_with),
+            group_id: group_id(ctx, args.group, args.ungroup)?,
+            color: args.color.as_deref().map(appearance::color).transpose()?,
+            icon: args
+                .icon
+                .as_deref()
+                .map(appearance::checked_icon)
+                .transpose()?,
+            ..Default::default()
+        }
     };
 
     // A form saved untouched sends every field `None`. Writing that would
@@ -102,21 +181,58 @@ fn has_field_flag(args: &EditArgs) -> bool {
         || !args.remove_tag.is_empty()
         || !args.set.is_empty()
         || !args.unset.is_empty()
+        || args.name.is_some()
+        || args.notes.is_some()
+        || args.directory.is_some()
+        || args.open_with.is_some()
+        || args.group.is_some()
+        || args.ungroup
+        || args.color.is_some()
+        || args.icon.is_some()
 }
 
-/// The update the flags describe. Every field without a flag is `None`, which
-/// `update` reads as "leave alone".
-fn from_flags(
-    description: Option<String>,
-    tags: Option<Vec<String>>,
-    properties: Option<BTreeMap<String, String>>,
-) -> UpdateProject {
-    UpdateProject {
-        description,
-        tags,
-        properties,
-        ..Default::default()
+/// A box in a box, as `UpdateProject.notes` takes it: the outer one says
+/// whether to touch the field at all, the inner one what to store. `--notes ""`
+/// clears them — `Some(None)` — as an emptied notes box does in the app.
+fn cleared_if_empty(text: Option<String>) -> Option<Option<String>> {
+    text.map(|text| if text.is_empty() { None } else { Some(text) })
+}
+
+/// The same, trimmed, for `--open-with`: spaces around an app's name are never
+/// part of it, and the launcher would read a blank one as no app anyway.
+fn cleared_if_blank(text: Option<String>) -> Option<Option<String>> {
+    text.map(|text| {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+/// The group `--group` or `--ungroup` asks for, as `UpdateProject.group_id`
+/// takes it: `None` to leave it alone, `Some(None)` to take the project out,
+/// `Some(Some(id))` to put it in. The groups are read only when a name has to
+/// be looked up, so no other edit touches them.
+fn group_id(
+    ctx: &Context,
+    group: Option<String>,
+    ungroup: bool,
+) -> anyhow::Result<Option<Option<String>>> {
+    if ungroup {
+        return Ok(Some(None));
     }
+    let Some(name) = group else {
+        return Ok(None);
+    };
+    if name.trim().is_empty() {
+        return Ok(Some(None));
+    }
+    let groups = ctx.groups.list()?;
+    // `find` lends a group out of `groups`; the update keeps its own copy of
+    // the id, since `groups` is gone when this returns.
+    Ok(Some(Some(super::group::find(&groups, &name)?.id.clone())))
 }
 
 /// `None` unless a tag flag was given, so an edit of other fields never writes
