@@ -9,7 +9,7 @@ use crate::{Cli, Invocation};
 
 #[test]
 fn open_takes_a_project_and_the_tracker_flag() {
-    let cli = Cli::try_parse_from(["indexer", "open", "app", "-t", "git,unreal"])
+    let cli = Cli::try_parse_from(["dexily", "open", "app", "-t", "git,unreal"])
         .expect("arguments should parse");
     let Some(Invocation::Command(Command::Open(args))) = cli.invocation else {
         panic!("expected `open`");
@@ -21,7 +21,7 @@ fn open_takes_a_project_and_the_tracker_flag() {
 
 #[test]
 fn untrack_takes_a_project_and_the_tracker_flag() {
-    let cli = Cli::try_parse_from(["indexer", "untrack", "app", "--tracker", "git"])
+    let cli = Cli::try_parse_from(["dexily", "untrack", "app", "--tracker", "git"])
         .expect("arguments should parse");
     let Some(Invocation::Command(Command::Untrack(args))) = cli.invocation else {
         panic!("expected `untrack`");
@@ -33,7 +33,7 @@ fn untrack_takes_a_project_and_the_tracker_flag() {
 
 #[test]
 fn favorite_and_unfavorite_take_a_project_and_the_tracker_flag() {
-    let cli = Cli::try_parse_from(["indexer", "favorite", "app", "-t", "git"])
+    let cli = Cli::try_parse_from(["dexily", "favorite", "app", "-t", "git"])
         .expect("arguments should parse");
     let Some(Invocation::Command(Command::Favorite(args))) = cli.invocation else {
         panic!("expected `favorite`");
@@ -44,7 +44,7 @@ fn favorite_and_unfavorite_take_a_project_and_the_tracker_flag() {
     // Two verbs over one argument struct: `unfavorite` must parse into its own
     // variant, or `run` would store the wrong flag.
     let cli =
-        Cli::try_parse_from(["indexer", "unfavorite", "work/app"]).expect("arguments should parse");
+        Cli::try_parse_from(["dexily", "unfavorite", "work/app"]).expect("arguments should parse");
     let Some(Invocation::Command(Command::Unfavorite(args))) = cli.invocation else {
         panic!("expected `unfavorite`");
     };
@@ -54,7 +54,7 @@ fn favorite_and_unfavorite_take_a_project_and_the_tracker_flag() {
 
 #[test]
 fn edit_takes_a_project_and_a_description() {
-    let cli = Cli::try_parse_from(["indexer", "edit", "app", "--description", "The gateway"])
+    let cli = Cli::try_parse_from(["dexily", "edit", "app", "--description", "The gateway"])
         .expect("arguments should parse");
     let Some(Invocation::Command(Command::Edit(args))) = cli.invocation else {
         panic!("expected `edit`");
@@ -64,7 +64,7 @@ fn edit_takes_a_project_and_a_description() {
 
     // An empty description is a value — it clears the field — not a missing
     // flag, so it must reach `update` as `Some("")` rather than `None`.
-    let cli = Cli::try_parse_from(["indexer", "edit", "app", "--description", ""])
+    let cli = Cli::try_parse_from(["dexily", "edit", "app", "--description", ""])
         .expect("an empty description should parse");
     let Some(Invocation::Command(Command::Edit(args))) = cli.invocation else {
         panic!("expected `edit`");
@@ -77,7 +77,7 @@ fn a_bare_edit_parses() {
     // No longer refused by clap: with no field flag, `edit` asks its editor —
     // the form in a terminal, a usage error anywhere else
     // (`tests/commands/edit.rs`).
-    let cli = Cli::try_parse_from(["indexer", "edit", "app"]).expect("a bare edit should parse");
+    let cli = Cli::try_parse_from(["dexily", "edit", "app"]).expect("a bare edit should parse");
     let Some(Invocation::Command(Command::Edit(args))) = cli.invocation else {
         panic!("expected `edit`");
     };
@@ -89,16 +89,16 @@ fn a_bare_edit_parses() {
 fn a_project_is_required() {
     // Unlike `add`, whose directory defaults to the current one: there is no
     // sensible default project until `show .` and the TUI's selection exist.
-    assert!(Cli::try_parse_from(["indexer", "open"]).is_err());
-    assert!(Cli::try_parse_from(["indexer", "untrack"]).is_err());
-    assert!(Cli::try_parse_from(["indexer", "favorite"]).is_err());
-    assert!(Cli::try_parse_from(["indexer", "unfavorite"]).is_err());
-    assert!(Cli::try_parse_from(["indexer", "edit", "--description", "x"]).is_err());
+    assert!(Cli::try_parse_from(["dexily", "open"]).is_err());
+    assert!(Cli::try_parse_from(["dexily", "untrack"]).is_err());
+    assert!(Cli::try_parse_from(["dexily", "favorite"]).is_err());
+    assert!(Cli::try_parse_from(["dexily", "unfavorite"]).is_err());
+    assert!(Cli::try_parse_from(["dexily", "edit", "--description", "x"]).is_err());
 }
 
 #[test]
 fn yes_is_global_so_it_can_follow_the_project() {
-    let cli = Cli::try_parse_from(["indexer", "untrack", "app", "--yes"])
+    let cli = Cli::try_parse_from(["dexily", "untrack", "app", "--yes"])
         .expect("`--yes` should be accepted after the subcommand");
 
     assert!(cli.yes);

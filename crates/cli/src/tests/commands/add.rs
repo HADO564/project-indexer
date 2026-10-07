@@ -19,9 +19,9 @@ fn parsed(argv: &[&str]) -> AddArgs {
 
 #[test]
 fn the_directory_is_optional() {
-    assert_eq!(parsed(&["indexer", "add"]).directory, None);
+    assert_eq!(parsed(&["dexily", "add"]).directory, None);
     assert_eq!(
-        parsed(&["indexer", "add", "/home/me/code/app"]).directory,
+        parsed(&["dexily", "add", "/home/me/code/app"]).directory,
         Some(PathBuf::from("/home/me/code/app")),
     );
 }

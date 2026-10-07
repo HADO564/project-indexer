@@ -542,7 +542,7 @@ Curated and reordered from a broader architectural review. Prioritized by
       silently undo another. The long window is the GUI's, not the CLI's:
       `EditProjectForm.svelte` sends **every** field (name, description,
       tags, favourite, properties, …) as they were when the form opened. Open
-      the form, run `indexer edit app --add-tag rust` or `indexer favorite app`
+      the form, run `dexily edit app --add-tag rust` or `dexily favorite app`
       in a terminal, then press Save — the form writes its stale copy back and
       the CLI's change is gone, with no error. The CLI's own read-modify-write
       (`--add-tag`, `--set`) has the same flaw in a window of milliseconds;
@@ -623,12 +623,12 @@ Named here so the seams aren't rediscovered. Full designs are in the spec
 - **The CLI.** Designed in `docs/superpowers/specs/2026-09-14-cli-design.md` and
   planned in `docs/cli/ROADMAP.md`. Started 2026-09-14: `crates/cli` builds, and
   `list`, `show` and `config` run against the shared database; the rest is
-  stubs. Still to come: an observer (`indexer <cmd>` wraps a real command,
+  stubs. Still to come: an observer (`dexily <cmd>` wraps a real command,
   matches argv + cwd + exit code against recognizers, and records facts through
   `ProjectService` — `ensure_project` / `find_by_directory` / `refresh_trackers`,
   already added), the remaining subcommands with `--json`, and a keyboard-driven
   TUI whose every change goes through a command. No IPC with the GUI — both open
-  the same `projects.db`. The desktop app will also provide `indexer` from its
+  the same `projects.db`. The desktop app will also provide `dexily` from its
   own binary (`docs/handoffs/2026-09-15-gui-provides-indexer.md`).
 - **devmon.** A separate activity tracker that `ATTACH`es `projects.db`
   read-only for activity attribution. The persistence contract that keeps this

@@ -18,14 +18,14 @@ fn setting(argv: &[&str]) -> Setting {
 #[test]
 fn form_wrap_takes_on_or_off() {
     assert!(matches!(
-        setting(&["indexer", "config", "form-wrap", "on"]),
+        setting(&["dexily", "config", "form-wrap", "on"]),
         Setting::FormWrap {
             value: Some(Switch::On),
             reset: false
         }
     ));
     assert!(matches!(
-        setting(&["indexer", "config", "form-wrap", "off"]),
+        setting(&["dexily", "config", "form-wrap", "off"]),
         Setting::FormWrap {
             value: Some(Switch::Off),
             reset: false
@@ -36,7 +36,7 @@ fn form_wrap_takes_on_or_off() {
 #[test]
 fn form_wrap_alone_shows_the_current_value() {
     assert!(matches!(
-        setting(&["indexer", "config", "form-wrap"]),
+        setting(&["dexily", "config", "form-wrap"]),
         Setting::FormWrap {
             value: None,
             reset: false
@@ -46,10 +46,10 @@ fn form_wrap_alone_shows_the_current_value() {
 
 #[test]
 fn form_wrap_rejects_anything_but_on_or_off() {
-    assert!(Cli::try_parse_from(["indexer", "config", "form-wrap", "maybe"]).is_err());
+    assert!(Cli::try_parse_from(["dexily", "config", "form-wrap", "maybe"]).is_err());
 }
 
 #[test]
 fn form_wrap_reset_cannot_be_given_a_value_too() {
-    assert!(Cli::try_parse_from(["indexer", "config", "form-wrap", "off", "--reset"]).is_err());
+    assert!(Cli::try_parse_from(["dexily", "config", "form-wrap", "off", "--reset"]).is_err());
 }

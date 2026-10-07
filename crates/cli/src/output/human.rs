@@ -35,11 +35,11 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
                 // view has to, or `--view binned` on an empty bin would claim
                 // nothing is tracked at all.
                 match query {
-                    Some(query) => eprintln!("indexer: no projects match \"{query}\""),
+                    Some(query) => eprintln!("dexily: no projects match \"{query}\""),
                     None => match view {
-                        View::All => eprintln!("indexer: no projects tracked yet"),
-                        View::Favorites => eprintln!("indexer: no favourites yet"),
-                        View::Binned => eprintln!("indexer: the bin is empty"),
+                        View::All => eprintln!("dexily: no projects tracked yet"),
+                        View::Favorites => eprintln!("dexily: no favourites yet"),
+                        View::Binned => eprintln!("dexily: the bin is empty"),
                     },
                 }
                 return Ok(());
@@ -100,7 +100,7 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
         }
         Outcome::Groups { groups } => {
             if groups.is_empty() {
-                eprintln!("indexer: no groups yet — make one with `indexer group create <name>`");
+                eprintln!("dexily: no groups yet — make one with `dexily group create <name>`");
                 return Ok(());
             }
             let style = TableStyle {
@@ -114,16 +114,16 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
         }
         Outcome::GroupSaved { group, created } => {
             let verb = if *created { "created" } else { "updated" };
-            eprintln!("indexer: {verb} the group \"{}\"", group.name);
+            eprintln!("dexily: {verb} the group \"{}\"", group.name);
         }
         Outcome::GroupDeleted { group, members } => match members {
-            0 => eprintln!("indexer: deleted the group \"{}\"", group.name),
+            0 => eprintln!("dexily: deleted the group \"{}\"", group.name),
             1 => eprintln!(
-                "indexer: deleted the group \"{}\" — its 1 project is now ungrouped",
+                "dexily: deleted the group \"{}\" — its 1 project is now ungrouped",
                 group.name
             ),
             n => eprintln!(
-                "indexer: deleted the group \"{}\" — its {n} projects are now ungrouped",
+                "dexily: deleted the group \"{}\" — its {n} projects are now ungrouped",
                 group.name
             ),
         },
@@ -145,71 +145,71 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
         } => {
             if *already_tracked {
                 eprintln!(
-                    "indexer: already tracking \"{}\" at {}",
+                    "dexily: already tracking \"{}\" at {}",
                     project.name, project.directory
                 );
             } else {
                 eprintln!(
-                    "indexer: tracking \"{}\" at {}",
+                    "dexily: tracking \"{}\" at {}",
                     project.name, project.directory
                 );
             }
         }
         Outcome::Untracked { project } => {
             eprintln!(
-                "indexer: stopped tracking \"{}\" — {} is untouched",
+                "dexily: stopped tracking \"{}\" — {} is untouched",
                 project.name, project.directory
             );
         }
         Outcome::Opened { project } => {
-            eprintln!("indexer: opening \"{}\"", project.name);
+            eprintln!("dexily: opening \"{}\"", project.name);
         }
         Outcome::Favorited { project, favorite } => {
             if *favorite {
-                eprintln!("indexer: \"{}\" is now a favourite", project.name);
+                eprintln!("dexily: \"{}\" is now a favourite", project.name);
             } else {
-                eprintln!("indexer: \"{}\" is no longer a favourite", project.name);
+                eprintln!("dexily: \"{}\" is no longer a favourite", project.name);
             }
         }
         Outcome::Edited { project } => {
-            eprintln!("indexer: updated \"{}\"", project.name);
+            eprintln!("dexily: updated \"{}\"", project.name);
         }
         Outcome::Unchanged { project } => {
-            eprintln!("indexer: nothing changed in \"{}\"", project.name);
+            eprintln!("dexily: nothing changed in \"{}\"", project.name);
         }
         // The bin holds projects whose folder was deleted, so restoring brings
         // back the entry and not the files — said here, where a user expecting
         // their folder back would otherwise find out from `open`.
         Outcome::Restored { project } => {
             eprintln!(
-                "indexer: restored \"{}\" — the record only; files deleted from {} are not brought back",
+                "dexily: restored \"{}\" — the record only; files deleted from {} are not brought back",
                 project.name, project.directory
             );
         }
         Outcome::Purged { project } => {
             eprintln!(
-                "indexer: purged \"{}\" — its record is gone for good",
+                "dexily: purged \"{}\" — its record is gone for good",
                 project.name
             );
         }
-        Outcome::Cancelled => eprintln!("indexer: cancelled"),
+        Outcome::Cancelled => eprintln!("dexily: cancelled"),
         Outcome::Imported { report } => {
             // A summary, not a table: what matters is the counts and the rows
             // that failed. Prose, so it goes to stderr like every other
             // message that is not data.
             eprintln!(
-                "indexer: registered {}, skipped {} already tracked",
+                "dexily: registered {}, skipped {} already tracked",
                 report.imported.len(),
                 report.skipped
             );
             for failure in &report.failures {
                 // Listed, never fatal: one bad directory must not cost the run.
-                eprintln!("indexer: failed {}: {}", failure.directory, failure.message);
+                eprintln!("dexily: failed {}: {}", failure.directory, failure.message);
             }
         }
         Outcome::Scanned { root, report } => {
             if report.candidates.is_empty() {
-                eprintln!("indexer: no projects found under {root}");
+                eprintln!("dexily: no projects found under {root}");
             } else {
                 let style = TableStyle {
                     folder_color: color.then_some(look.folder),
@@ -220,25 +220,25 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
                 };
                 write!(out, "{}", candidate_table(&report.candidates, root, &style))?;
             }
-            // Prose on stderr, so `indexer scan … | wc -l` counts rows only.
+            // Prose on stderr, so `dexily scan … | wc -l` counts rows only.
             let tracked = report
                 .candidates
                 .iter()
                 .filter(|c| c.already_tracked)
                 .count();
             eprintln!(
-                "indexer: {} found under {root}, {tracked} already tracked, {} directories visited",
+                "dexily: {} found under {root}, {tracked} already tracked, {} directories visited",
                 report.candidates.len(),
                 report.visited
             );
             if !report.candidates.is_empty() {
-                eprintln!("indexer: re-run with --import to register them:");
-                eprintln!("  indexer scan {root} --import");
+                eprintln!("dexily: re-run with --import to register them:");
+                eprintln!("  dexily scan {root} --import");
             }
             if report.stopped_early {
                 // Never silent: an incomplete walk must not read as an empty disk.
                 eprintln!(
-                    "indexer: stopped at the {}-directory limit — results are incomplete",
+                    "dexily: stopped at the {}-directory limit — results are incomplete",
                     indexer_core::domain::scan::MAX_DIRECTORIES
                 );
             }

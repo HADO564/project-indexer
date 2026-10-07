@@ -33,7 +33,7 @@ fn parsed(argv: &[&str]) -> ScanArgs {
 
 #[test]
 fn the_directory_is_positional_and_everything_else_is_a_flag() {
-    let args = parsed(&["indexer", "scan", "/home/me/code"]);
+    let args = parsed(&["dexily", "scan", "/home/me/code"]);
 
     assert_eq!(args.directory.to_string_lossy(), "/home/me/code");
     assert_eq!(args.depth, 1, "a plain scan visits only the children");
@@ -45,7 +45,7 @@ fn the_directory_is_positional_and_everything_else_is_a_flag() {
 #[test]
 fn the_flags_parse() {
     let args = parsed(&[
-        "indexer",
+        "dexily",
         "scan",
         "/home/me/code",
         "--depth",

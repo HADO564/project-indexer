@@ -29,7 +29,7 @@ fn tags(list: &[&str]) -> Vec<String> {
 #[test]
 fn tag_flags_repeat_and_split_on_commas() {
     let args = parsed(&[
-        "indexer",
+        "dexily",
         "edit",
         "app",
         "--add-tag",
@@ -49,11 +49,11 @@ fn a_tag_flag_alone_counts_as_a_change() {
     // Each flag belongs to the `change` group, so either one satisfies the
     // "at least one change" rule without `--description`.
     assert_eq!(
-        parsed(&["indexer", "edit", "app", "--add-tag", "rust"]).add_tag,
+        parsed(&["dexily", "edit", "app", "--add-tag", "rust"]).add_tag,
         tags(&["rust"])
     );
     assert_eq!(
-        parsed(&["indexer", "edit", "app", "--remove-tag", "rust"]).remove_tag,
+        parsed(&["dexily", "edit", "app", "--remove-tag", "rust"]).remove_tag,
         tags(&["rust"])
     );
 }
@@ -111,7 +111,7 @@ fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
 #[test]
 fn set_splits_at_the_first_equals_and_keeps_commas() {
     let args = parsed(&[
-        "indexer",
+        "dexily",
         "edit",
         "app",
         "--set",
@@ -130,7 +130,7 @@ fn set_splits_at_the_first_equals_and_keeps_commas() {
 
 #[test]
 fn set_without_an_equals_is_a_usage_error() {
-    let err = Cli::try_parse_from(["indexer", "edit", "app", "--set", "client"])
+    let err = Cli::try_parse_from(["dexily", "edit", "app", "--set", "client"])
         .expect_err("a value with no `=` should be refused");
     assert_eq!(err.kind(), clap::error::ErrorKind::ValueValidation);
 }
@@ -189,7 +189,7 @@ fn a_bare_edit_saves_what_the_editor_returns() {
             })
         }),
     );
-    let Outcome::Edited { project } = run(&ctx, &["indexer", "edit", "app"]).unwrap() else {
+    let Outcome::Edited { project } = run(&ctx, &["dexily", "edit", "app"]).unwrap() else {
         panic!("expected `Edited`");
     };
     assert_eq!(project.description, "From the form");
@@ -203,7 +203,7 @@ fn a_bare_edit_saves_what_the_editor_returns() {
 fn cancelling_the_editor_changes_nothing() {
     let ctx = context(true, Scripted(|_| None));
     assert!(matches!(
-        run(&ctx, &["indexer", "edit", "app"]).unwrap(),
+        run(&ctx, &["dexily", "edit", "app"]).unwrap(),
         Outcome::Cancelled
     ));
     assert_eq!(
@@ -219,7 +219,7 @@ fn cancelling_the_editor_changes_nothing() {
 fn a_field_flag_never_opens_the_editor() {
     // `never_asked` panics if it is called.
     let ctx = context(true, Scripted(never_asked));
-    assert!(run(&ctx, &["indexer", "edit", "app", "--add-tag", "rust"]).is_ok());
+    assert!(run(&ctx, &["dexily", "edit", "app", "--add-tag", "rust"]).is_ok());
 }
 
 #[test]
@@ -244,7 +244,7 @@ fn an_editor_saved_untouched_writes_nothing() {
         .get("app-0000-4000-8000-000000000000")
         .unwrap()
         .updated_at;
-    let Outcome::Unchanged { project } = run(&ctx, &["indexer", "edit", "app"]).unwrap() else {
+    let Outcome::Unchanged { project } = run(&ctx, &["dexily", "edit", "app"]).unwrap() else {
         panic!("expected `Unchanged`");
     };
     assert_eq!(project.name, "app");
@@ -260,13 +260,13 @@ fn an_editor_saved_untouched_writes_nothing() {
 #[test]
 fn a_bare_edit_asks_for_the_compact_form() {
     let ctx = context(true, Expecting(FormKind::Compact));
-    assert!(run(&ctx, &["indexer", "edit", "app"]).is_ok());
+    assert!(run(&ctx, &["dexily", "edit", "app"]).is_ok());
 }
 
 #[test]
 fn full_asks_for_the_full_form() {
     let ctx = context(true, Expecting(FormKind::Full));
-    assert!(run(&ctx, &["indexer", "edit", "app", "--full"]).is_ok());
+    assert!(run(&ctx, &["dexily", "edit", "app", "--full"]).is_ok());
 }
 
 #[test]
@@ -285,7 +285,7 @@ fn full_beside_a_field_flag_is_a_usage_error() {
         ["--color", "x"],
         ["--icon", "x"],
     ] {
-        let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", flag[0], flag[1]])
+        let err = Cli::try_parse_from(["dexily", "edit", "app", "--full", flag[0], flag[1]])
             .expect_err("--full only chooses the form");
         assert_eq!(
             err.kind(),
@@ -304,30 +304,30 @@ fn saved(ctx: &crate::context::Context) -> indexer_core::Project {
 #[test]
 fn name_renames_the_project() {
     let ctx = context(true, Scripted(never_asked));
-    run(&ctx, &["indexer", "edit", "app", "--name", "app2"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--name", "app2"]).unwrap();
     assert_eq!(saved(&ctx).name, "app2");
 }
 
 #[test]
 fn an_empty_name_is_refused_by_core() {
     let ctx = context(true, Scripted(never_asked));
-    assert!(run(&ctx, &["indexer", "edit", "app", "--name", "  "]).is_err());
+    assert!(run(&ctx, &["dexily", "edit", "app", "--name", "  "]).is_err());
     assert_eq!(saved(&ctx).name, "app");
 }
 
 #[test]
 fn notes_are_set_then_cleared_by_an_empty_string() {
     let ctx = context(true, Scripted(never_asked));
-    run(&ctx, &["indexer", "edit", "app", "--notes", "remember"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--notes", "remember"]).unwrap();
     assert_eq!(saved(&ctx).notes.as_deref(), Some("remember"));
-    run(&ctx, &["indexer", "edit", "app", "--notes", ""]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--notes", ""]).unwrap();
     assert_eq!(saved(&ctx).notes, None);
 }
 
 #[test]
 fn notes_alone_leave_the_other_fields_alone() {
     let ctx = context(true, Scripted(never_asked));
-    run(&ctx, &["indexer", "edit", "app", "--notes", "x"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--notes", "x"]).unwrap();
     let project = saved(&ctx);
     assert_eq!(project.name, "app");
     assert_eq!(project.description, "");
@@ -338,25 +338,25 @@ fn notes_alone_leave_the_other_fields_alone() {
 #[test]
 fn open_with_is_set_trimmed_then_cleared_by_an_empty_string() {
     let ctx = context(true, Scripted(never_asked));
-    run(&ctx, &["indexer", "edit", "app", "--open-with", " code "]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--open-with", " code "]).unwrap();
     assert_eq!(saved(&ctx).open_with.as_deref(), Some("code"));
-    run(&ctx, &["indexer", "edit", "app", "--open-with", ""]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--open-with", ""]).unwrap();
     assert_eq!(saved(&ctx).open_with, None);
 }
 
 #[test]
 fn open_with_of_only_spaces_clears_it() {
     let ctx = context(true, Scripted(never_asked));
-    run(&ctx, &["indexer", "edit", "app", "--open-with", "code"]).unwrap();
-    run(&ctx, &["indexer", "edit", "app", "--open-with", "   "]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--open-with", "code"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--open-with", "   "]).unwrap();
     assert_eq!(saved(&ctx).open_with, None);
 }
 
 #[test]
 fn another_flag_leaves_open_with_alone() {
     let ctx = context(true, Scripted(never_asked));
-    run(&ctx, &["indexer", "edit", "app", "--open-with", "code"]).unwrap();
-    run(&ctx, &["indexer", "edit", "app", "--notes", "x"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--open-with", "code"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--notes", "x"]).unwrap();
     assert_eq!(saved(&ctx).open_with.as_deref(), Some("code"));
 }
 
@@ -378,7 +378,7 @@ fn with_groups(ctx: &crate::context::Context) -> (String, String) {
 fn group_puts_the_project_in_a_group_matched_ignoring_case() {
     let ctx = context(true, Scripted(never_asked));
     let (work, _) = with_groups(&ctx);
-    run(&ctx, &["indexer", "edit", "app", "--group", " work "]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--group", " work "]).unwrap();
     assert_eq!(saved(&ctx).group_id, Some(work));
 }
 
@@ -386,8 +386,8 @@ fn group_puts_the_project_in_a_group_matched_ignoring_case() {
 fn group_moves_the_project_out_of_its_old_group() {
     let ctx = context(true, Scripted(never_asked));
     let (_, clients) = with_groups(&ctx);
-    run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
-    run(&ctx, &["indexer", "edit", "app", "--group", "Clients"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--group", "Work"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--group", "Clients"]).unwrap();
     assert_eq!(saved(&ctx).group_id, Some(clients));
 }
 
@@ -396,8 +396,8 @@ fn ungroup_and_an_empty_group_both_take_it_out() {
     let ctx = context(true, Scripted(never_asked));
     with_groups(&ctx);
     for clear in [&["--ungroup"][..], &["--group", ""], &["--group", "  "]] {
-        run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
-        let mut argv = vec!["indexer", "edit", "app"];
+        run(&ctx, &["dexily", "edit", "app", "--group", "Work"]).unwrap();
+        let mut argv = vec!["dexily", "edit", "app"];
         argv.extend_from_slice(clear);
         run(&ctx, &argv).unwrap();
         assert_eq!(saved(&ctx).group_id, None, "{clear:?}");
@@ -408,10 +408,10 @@ fn ungroup_and_an_empty_group_both_take_it_out() {
 fn an_unknown_group_is_an_error_naming_the_groups_and_changes_nothing() {
     let ctx = context(true, Scripted(never_asked));
     with_groups(&ctx);
-    run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--group", "Work"]).unwrap();
     let err = run(
         &ctx,
-        &["indexer", "edit", "app", "--group", "Wrok", "--notes", "x"],
+        &["dexily", "edit", "app", "--group", "Wrok", "--notes", "x"],
     )
     .unwrap_err()
     .to_string();
@@ -425,21 +425,21 @@ fn an_unknown_group_is_an_error_naming_the_groups_and_changes_nothing() {
 fn another_flag_leaves_the_group_alone() {
     let ctx = context(true, Scripted(never_asked));
     let (work, _) = with_groups(&ctx);
-    run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
-    run(&ctx, &["indexer", "edit", "app", "--notes", "x"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--group", "Work"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--notes", "x"]).unwrap();
     assert_eq!(saved(&ctx).group_id, Some(work));
 }
 
 #[test]
 fn full_beside_ungroup_is_a_usage_error() {
-    let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", "--ungroup"])
+    let err = Cli::try_parse_from(["dexily", "edit", "app", "--full", "--ungroup"])
         .expect_err("--full only chooses the form");
     assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
 }
 
 #[test]
 fn group_and_ungroup_together_are_a_usage_error() {
-    let err = Cli::try_parse_from(["indexer", "edit", "app", "--group", "Work", "--ungroup"])
+    let err = Cli::try_parse_from(["dexily", "edit", "app", "--group", "Work", "--ungroup"])
         .expect_err("one or the other");
     assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
 }
@@ -449,9 +449,9 @@ fn group_and_ungroup_together_are_a_usage_error() {
 #[test]
 fn color_is_stored_lowercased_then_cleared_by_an_empty_string() {
     let ctx = context(true, Scripted(never_asked));
-    run(&ctx, &["indexer", "edit", "app", "--color", "#FF8800"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--color", "#FF8800"]).unwrap();
     assert_eq!(saved(&ctx).color.as_deref(), Some("#ff8800"));
-    run(&ctx, &["indexer", "edit", "app", "--color", ""]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--color", ""]).unwrap();
     assert_eq!(saved(&ctx).color, None);
 }
 
@@ -460,7 +460,7 @@ fn a_bad_color_is_refused_and_changes_nothing() {
     let ctx = context(true, Scripted(never_asked));
     assert!(run(
         &ctx,
-        &["indexer", "edit", "app", "--color", "red", "--notes", "x"]
+        &["dexily", "edit", "app", "--color", "red", "--notes", "x"]
     )
     .is_err());
     let project = saved(&ctx);
@@ -470,16 +470,16 @@ fn a_bad_color_is_refused_and_changes_nothing() {
 #[test]
 fn icon_is_set_then_cleared_by_an_empty_string() {
     let ctx = context(true, Scripted(never_asked));
-    run(&ctx, &["indexer", "edit", "app", "--icon", "Rocket"]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--icon", "Rocket"]).unwrap();
     assert_eq!(saved(&ctx).icon.as_deref(), Some("rocket"));
-    run(&ctx, &["indexer", "edit", "app", "--icon", ""]).unwrap();
+    run(&ctx, &["dexily", "edit", "app", "--icon", ""]).unwrap();
     assert_eq!(saved(&ctx).icon, None);
 }
 
 #[test]
 fn an_unknown_icon_is_refused() {
     let ctx = context(true, Scripted(never_asked));
-    assert!(run(&ctx, &["indexer", "edit", "app", "--icon", "rockt"]).is_err());
+    assert!(run(&ctx, &["dexily", "edit", "app", "--icon", "rockt"]).is_err());
     assert_eq!(saved(&ctx).icon, None);
 }
 
@@ -494,7 +494,7 @@ fn directory_moves_the_project_and_stores_the_path_absolute() {
     run(
         &ctx,
         &[
-            "indexer",
+            "dexily",
             "edit",
             "app",
             "--directory",
@@ -514,7 +514,7 @@ fn directory_refuses_a_missing_folder_and_saves_nothing() {
     let error = run(
         &ctx,
         &[
-            "indexer",
+            "dexily",
             "edit",
             "app",
             "--directory",
@@ -545,7 +545,7 @@ fn directory_refuses_another_projects_folder() {
     let error = run(
         &ctx,
         &[
-            "indexer",
+            "dexily",
             "edit",
             "app",
             "--directory",

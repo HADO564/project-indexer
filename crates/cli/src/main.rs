@@ -1,4 +1,4 @@
-//! The `indexer` binary.
+//! The `dexily` binary.
 //!
 //! No arguments opens the TUI. A known subcommand parses into a [`Command`]
 //! and runs once. Anything else is a command to run and observe.
@@ -32,7 +32,7 @@ use crate::output::{Format, Look};
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "indexer",
+    name = "dexily",
     version,
     about = "Track your projects from the terminal"
 )]
@@ -46,13 +46,13 @@ struct Cli {
     yes: bool,
 
     /// The colour used to highlight each project's folder name, for this run
-    /// only. Without it, the default set by `indexer config folder-color`
-    /// applies, else cyan. `indexer config folder-color --help` lists the colours.
+    /// only. Without it, the default set by `dexily config folder-color`
+    /// applies, else cyan. `dexily config folder-color --help` lists the colours.
     #[arg(long, value_enum, global = true, hide_possible_values = true)]
     folder_color: Option<Color>,
 
     /// The colour of table headers, for this run only. Without it, the default
-    /// set by `indexer config header-color` applies, else magenta.
+    /// set by `dexily config header-color` applies, else magenta.
     #[arg(long, value_enum, global = true, hide_possible_values = true)]
     header_color: Option<Color>,
 
@@ -69,7 +69,7 @@ enum Invocation {
     #[command(flatten)]
     Command(Command),
 
-    /// Not an indexer command: run it, then record what it created.
+    /// Not a dexily command: run it, then record what it created.
     #[command(external_subcommand)]
     Observe(Vec<OsString>),
 }
@@ -84,7 +84,7 @@ fn main() -> ExitCode {
             // even under `--json`, which the contract reserves for results
             // and for failures a script can act on.
             if let Some(Failure::Usage { message }) = e.downcast_ref::<Failure>() {
-                eprintln!("indexer: {message}");
+                eprintln!("dexily: {message}");
                 return ExitCode::from(2);
             }
             // The whole cause chain is printed, so core's own message — the
@@ -125,10 +125,10 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
 /// one; the icons as saved, else off.
 ///
 /// A broken settings file is reported and skipped: a look preference must
-/// never stop `indexer list` from listing.
+/// never stop `dexily list` from listing.
 fn resolve_look(folder: Option<Color>, header: Option<Color>) -> Look {
     let saved = settings::load().unwrap_or_else(|e| {
-        eprintln!("indexer: ignoring settings: {e:#}");
+        eprintln!("dexily: ignoring settings: {e:#}");
         settings::Settings::default()
     });
     Look {

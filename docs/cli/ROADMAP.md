@@ -6,8 +6,8 @@ stand, the headline plans for both products, and everything shared through
 [`2026-09-14-cli-design.md`](../superpowers/specs/2026-09-14-cli-design.md).
 
 **Status: the first commands work** — `list`, `show`, `config` and `--json`; see
-[`checklist.md`](checklist.md). The binary is called `indexer`
-throughout; that name is a placeholder and will change.
+[`checklist.md`](checklist.md). The command is called `dexily`
+(decided 2026-10-07; `indexer` until then).
 
 **Released on its own cycle.** The CLI is versioned and tagged (`cli-v*`)
 separately from the desktop app, with its own
@@ -15,14 +15,14 @@ separately from the desktop app, with its own
 database, not a version number — see
 [Distribution and releases](#distribution-and-releases).
 
-## The `indexer` command
+## The `dexily` command
 
 The single largest planned piece, and the one the last refactor was for: an
 observer, plain subcommands, and a keyboard-driven TUI over both.
 
 ### Observing
 
-`indexer git init` runs the real `git init`, untouched, propagates its exit code,
+`dexily git init` runs the real `git init`, untouched, propagates its exit code,
 and *notices* what happened — then records the project through the same
 `ProjectService` the GUI uses. It never reimplements the tools it wraps. Because
 both frontends open the same SQLite database, installing the CLI later connects
@@ -43,20 +43,20 @@ The full briefing, including the open questions, is in
 
 ### Plain subcommands
 
-The unglamorous half: `indexer list`, `show`, `add`, `open`, `untrack`. Each maps
+The unglamorous half: `dexily list`, `show`, `add`, `open`, `untrack`. Each maps
 almost one-to-one onto a `ProjectService` method that already exists, so these
 are cheap — the work is argument parsing and output formatting, not behaviour.
 
 **Settled 2026-09-14: both ship, subcommands first.** They are separable, and
 they are the layer the observer and the TUI both run through.
 
-`indexer list` printing real rows from the shared database is the suggested first
+`dexily list` printing real rows from the shared database is the suggested first
 vertical slice for the whole initiative. It proves the premise — same database,
 no backend changes — in about twenty lines.
 
 #### Scanning is part of the first release
 
-`indexer scan ~/code` is how somebody with a disk full of projects gets a
+`dexily scan ~/code` is how somebody with a disk full of projects gets a
 corpus at all; `add` one directory at a time is not a substitute. It was
 originally grouped with groups and the bin as "the rest of milestone 3", and
 moved up on 2026-09-19 for that reason.
@@ -91,7 +91,7 @@ rather than by accident at the keyboard.
   it is built from the tracker's serde shape rather than a `match`, so a new
   detector needs no change here.
 - **stdout is data, stderr is everything else.** Under `--json`, stdout carries
-  the document and nothing else, so `indexer list --json | jq` needs no
+  the document and nothing else, so `dexily list --json | jq` needs no
   filtering. A failure never reaches stdout: it goes to stderr and the exit code.
 - **Failures are documents too.** Under `--json`, stderr gets
   `{"schema": 1, "error": {"kind", "message", …}}` instead of prose, so a script
@@ -123,8 +123,8 @@ already sets.** The interface is drawn on stderr and the *selection alone* goes
 to stdout, so picking composes with everything else:
 
 ```
-indexer open "$(indexer list --pick)"
-cd "$(indexer list --pick --print path)"
+dexily open "$(dexily list --pick)"
+cd "$(dexily list --pick --print path)"
 ```
 
 Gated on a terminal: with stdin piped, each of these keeps today's behaviour —
@@ -155,7 +155,7 @@ colour support.
 
 - *The decision:* there is no way to ask a terminal whether its font carries
   Nerd Font glyphs, so it cannot be detected — it is told.
-  `indexer config icons nerd|emoji|off`, in `cli-settings.json` beside the
+  `dexily config icons nerd|emoji|off`, in `cli-settings.json` beside the
   colours, with a per-run `--icons`. `off` is a real choice, not a degraded one.
 - *The renderer:* a fallback chain — stored name → the style's glyph → the
   style's default (`folder`) → nothing. The 25 bundled names all have obvious
@@ -173,11 +173,11 @@ in the TUI sidebar and optionally in `list`.
 
 ### The TUI — every change is a command
 
-`indexer` with no arguments opens a terminal view of the same database. It is
+`dexily` with no arguments opens a terminal view of the same database. It is
 deliberately **not** a terminal copy of the GUI: no forms, no buttons, no
 dialogs. Keys and menus are shortcuts; every change goes through a command.
 
-**One exception, decided 2026-09-27: the edit form.** `indexer edit <project>`
+**One exception, decided 2026-09-27: the edit form.** `dexily edit <project>`
 with no field flags opens a full-screen form of the project's fields, the way
 the GUI's edit form shows them, and saving it makes the same single `update`
 that `edit --description … --add-tag …` makes — so it is a way of typing an
@@ -212,7 +212,7 @@ person can. Briefed in `../handoffs/2026-09-27-cli-edit-form.md`.
   SSH session passes the mouse through.
 - **A `:` command line for everything else.** `:add ~/code/foo`, `:open`,
   `:group work`. The line is parsed by the same definitions as the shell, so
-  `:open` and `indexer open` are one command rather than two that happen to
+  `:open` and `dexily open` are one command rather than two that happen to
   agree. Where the shell needs an explicit project, the TUI supplies the
   selected one.
 - **Destructive commands confirm on the command line** — a `y/n` prompt, not a
@@ -242,7 +242,7 @@ new backend.
 
 **Whether it needs to be MCP is the actual question, and it is open.** Once
 [plain subcommands](#plain-subcommands) and the `--json` contract above exist, an
-agent skill is a markdown file that documents `indexer list --json` — no crate,
+agent skill is a markdown file that documents `dexily list --json` — no crate,
 no protocol, no server lifetime, and no second output shape to keep in step with
 the first. MCP buys typed tool schemas and a discovery handshake, and charges a
 `crates/mcp` crate, a transport, and a parallel contract that will drift from
@@ -280,11 +280,11 @@ Three things have to be answered before either ships.
 **Packaging comes after the package.** Nothing here is started, and none of it
 blocks building the CLI.
 
-- **The desktop app provides `indexer` too, from its own binary.** Someone who
+- **The desktop app provides `dexily` too, from its own binary.** Someone who
   installs only the app still gets the command — and so does any AI assistant
-  on their machine. The app's binary runs the CLI when invoked as `indexer`,
+  on their machine. The app's binary runs the CLI when invoked as `dexily`,
   before Tauri starts, and an "Install command-line tool" action puts that name
-  on `PATH`. Not a bundled sidecar: `indexer` is ~1.7 MB compressed, almost all
+  on `PATH`. Not a bundled sidecar: `dexily` is ~1.7 MB compressed, almost all
   of it core and SQLite the app already has, while the TUI adds only ~0.15 MB,
   so it isn't split out either (measured 2026-09-15). The brief, with the
   Windows console and startup-time pitfalls, is
@@ -308,7 +308,7 @@ blocks building the CLI.
   understands it.**
 
 **Superseded by this.** The 2026-09-02 design had the CLI update itself
-(`indexer self-update` plus a throttled stderr hint) and the GUI download the
+(`dexily self-update` plus a throttled stderr hint) and the GUI download the
 CLI on demand and put it on `PATH`. A binary that replaces itself fights
 `brew upgrade` and `winget upgrade`, and a GUI placing executables on `PATH`
 duplicates the package manager's job. Both are dropped; the GUI can at most show

@@ -1,4 +1,4 @@
-//! The observer: `indexer <cmd> [args…]` runs `<cmd>` with inherited stdio,
+//! The observer: `dexily <cmd> [args…]` runs `<cmd>` with inherited stdio,
 //! then matches argv, working directory and exit code against recognizers and
 //! records what it inferred through core services.
 //!
@@ -19,7 +19,7 @@ pub fn run(argv: &[OsString]) -> anyhow::Result<ExitCode> {
         bail!("no command to run");
     };
     bail!(
-        "`{}` is not an indexer command, and observing commands is not implemented yet",
+        "`{}` is not a dexily command, and observing commands is not implemented yet",
         program.to_string_lossy()
     )
 }

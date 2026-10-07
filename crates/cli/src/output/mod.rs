@@ -52,11 +52,11 @@ pub fn print(outcome: &Outcome, format: Format, look: Look) -> anyhow::Result<()
 /// matched nothing from one that matched several without parsing prose.
 pub fn print_error(error: &anyhow::Error, format: Format) {
     match format {
-        Format::Human => eprintln!("indexer: {error:#}"),
+        Format::Human => eprintln!("dexily: {error:#}"),
         Format::Json => {
             let mut err = std::io::stderr().lock();
             if json::write_error(&mut err, error).is_err() {
-                eprintln!("indexer: {error:#}");
+                eprintln!("dexily: {error:#}");
             }
         }
     }

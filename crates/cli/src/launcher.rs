@@ -29,7 +29,7 @@ impl AppLauncher for SystemLauncher {
                 .map_err(LauncherError);
         }
 
-        // Detached on purpose: `indexer open` returns as soon as the editor is
+        // Detached on purpose: `dexily open` returns as soon as the editor is
         // launched. Without it the CLI would sit waiting for a GUI application
         // to exit, and closing the terminal would take the editor with it.
         let result = match app {

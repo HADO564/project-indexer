@@ -58,7 +58,7 @@ impl ProjectEditor for TerminalEditor {
         kind: FormKind,
     ) -> anyhow::Result<Option<UpdateProject>> {
         // stdin to read keys from and stderr to draw on — stdout is never
-        // needed, so `indexer edit app > out` still gets the form. Under
+        // needed, so `dexily edit app > out` still gets the form. Under
         // `--json` a script is driving, and a form nobody can see would hang
         // it, so that is refused as well.
         if self.json || !stdin().is_terminal() || !stderr().is_terminal() {
@@ -66,7 +66,7 @@ impl ProjectEditor for TerminalEditor {
             // advice — give one — would be wrong for it.
             let message = match kind {
                 FormKind::Compact => {
-                    "edit needs at least one field flag (see `indexer edit --help`) \
+                    "edit needs at least one field flag (see `dexily edit --help`) \
                      when it cannot open the form in a terminal"
                 }
                 FormKind::Full => {
@@ -84,7 +84,7 @@ impl ProjectEditor for TerminalEditor {
         let wrap = match settings::load() {
             Ok(saved) => saved.form_wrap.unwrap_or(true),
             Err(e) => {
-                eprintln!("indexer: ignoring settings: {e:#}");
+                eprintln!("dexily: ignoring settings: {e:#}");
                 true
             }
         };

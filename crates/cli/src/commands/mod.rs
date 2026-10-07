@@ -147,7 +147,7 @@ pub enum Outcome {
     GroupDeleted { group: Box<Group>, members: usize },
 }
 
-/// The colours a user can set with `indexer config`.
+/// The colours a user can set with `dexily config`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorSetting {
     /// Each project's folder name in a table.
