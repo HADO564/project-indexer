@@ -68,7 +68,7 @@ impl fmt::Display for Failure {
                     f,
                     "{}\n{}add a folder from the path, like parent/folder, to narrow it down",
                     self.summary(),
-                    human::project_table(&matches, &style)
+                    human::project_table(&matches, &[], &style)
                 )
             }
             Failure::Usage { .. } => write!(f, "{}", self.summary()),

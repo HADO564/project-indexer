@@ -7,6 +7,7 @@ pub mod json;
 
 use std::io::Write;
 
+use crate::appearance::IconStyle;
 use crate::commands::Outcome;
 use crate::output::color::Color;
 
@@ -26,19 +27,20 @@ impl Format {
     }
 }
 
-/// The colours human output uses, each already resolved from its flag, the
+/// How human output looks, each part already resolved from its flag, the
 /// settings file, or the built-in default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Colors {
+pub struct Look {
     pub folder: Color,
     pub header: Color,
+    pub icons: IconStyle,
 }
 
-/// `colors` only affects human output; `--json` is never coloured.
-pub fn print(outcome: &Outcome, format: Format, colors: Colors) -> anyhow::Result<()> {
+/// `look` only affects human output; `--json` is never coloured.
+pub fn print(outcome: &Outcome, format: Format, look: Look) -> anyhow::Result<()> {
     let mut out = std::io::stdout().lock();
     match format {
-        Format::Human => human::write(&mut out, outcome, colors)?,
+        Format::Human => human::write(&mut out, outcome, look)?,
         Format::Json => json::write(&mut out, outcome)?,
     }
     out.flush()?;

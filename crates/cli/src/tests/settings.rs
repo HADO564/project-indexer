@@ -1,3 +1,4 @@
+use crate::appearance::IconStyle;
 use crate::output::color::Color;
 use crate::settings::{load_from, save_to, Settings};
 
@@ -16,6 +17,7 @@ fn saved_settings_load_back() {
         folder_color: Some(Color::HotPink),
         header_color: Some(Color::Gold),
         form_wrap: Some(false),
+        icons: Some(IconStyle::Emoji),
     };
     save_to(&path, &saved).unwrap();
 

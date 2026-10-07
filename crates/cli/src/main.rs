@@ -28,7 +28,7 @@ use crate::confirm::StdinConfirmer;
 use crate::context::Context;
 use crate::editor::TerminalEditor;
 use crate::output::color::Color;
-use crate::output::{Colors, Format};
+use crate::output::{Format, Look};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -111,8 +111,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 Box::new(TerminalEditor::new(cli.json)),
             )?;
             let outcome = commands::run(command, &ctx)?;
-            let colors = resolve_colors(cli.folder_color, cli.header_color);
-            output::print(&outcome, Format::from_json_flag(cli.json), colors)?;
+            let look = resolve_look(cli.folder_color, cli.header_color);
+            output::print(&outcome, Format::from_json_flag(cli.json), look)?;
             Ok(ExitCode::SUCCESS)
         }
         // The observer opens the database itself, *after* the wrapped command
@@ -121,21 +121,18 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     }
 }
 
-/// Each colour's flag if given, else its saved default, else the built-in one.
+/// Each colour's flag if given, else its saved default, else the built-in
+/// one; the icons as saved, else off.
 ///
-/// A broken settings file is reported and skipped: a colour preference must
-/// never stop `indexer list` from listing. It is only read when a flag leaves
-/// something to look up.
-fn resolve_colors(folder: Option<Color>, header: Option<Color>) -> Colors {
-    let saved = if folder.is_some() && header.is_some() {
+/// A broken settings file is reported and skipped: a look preference must
+/// never stop `indexer list` from listing.
+fn resolve_look(folder: Option<Color>, header: Option<Color>) -> Look {
+    let saved = settings::load().unwrap_or_else(|e| {
+        eprintln!("indexer: ignoring settings: {e:#}");
         settings::Settings::default()
-    } else {
-        settings::load().unwrap_or_else(|e| {
-            eprintln!("indexer: ignoring settings: {e:#}");
-            settings::Settings::default()
-        })
-    };
-    Colors {
+    });
+    Look {
+        icons: saved.icons.unwrap_or_default(),
         folder: folder
             .or(saved.folder_color)
             .unwrap_or(Color::DEFAULT_FOLDER),

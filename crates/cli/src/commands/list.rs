@@ -140,5 +140,6 @@ pub fn run(args: ListArgs, ctx: &Context) -> anyhow::Result<Outcome> {
         query: args.query,
         tracker,
         view: args.view,
+        groups: ctx.groups.list()?,
     })
 }
