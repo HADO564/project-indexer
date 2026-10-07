@@ -10,8 +10,9 @@ step with no pairing — and it works without the app installed.
 `untrack`, `favorite`, `unfavorite`, `edit`, `restore`, `purge`, `scan` and
 `config` all run against the app's database, and a bare `edit` in a terminal
 opens a full-screen form (`edit --full` for every field); the observer and
-the TUI still return "not implemented". Groups have no commands of their own
-yet — a project joins one with `edit --group`. The binary name `indexer` is a placeholder.
+the TUI still return "not implemented". `group` lists, creates, changes and
+deletes groups; a project joins one with `edit --group`. The binary name
+`indexer` is a placeholder.
 
 ```
 indexer list                     every project, as a table (--view, -s name|last-opened, -r to flip)
@@ -28,7 +29,12 @@ indexer restore <query>          bring a project's record back from the bin
 indexer purge <query>            delete a binned project's record for good (asks first; --yes)
 indexer scan <dir>               find projects under a folder; --import registers them
 indexer config folder-color ...  the folder colour in that table; header-color likewise
+indexer group list               the groups, with their colour, icon and project count
+indexer group create <name>      a new group (--color, --icon; cyan and briefcase by default)
+indexer group edit <group>       rename it (--name) or change its --color or --icon
+indexer group delete <group>     delete a group, keeping its projects ungrouped (asks first; --yes)
 indexer config form-wrap on|off  whether Tab wraps around at the ends of edit's form
+indexer config icons nerd|emoji|off   icons before names in tables (off by default)
 indexer <anything> --json        {"schema": 1, "data": …} on stdout, or {"schema": 1, "error": …} on stderr
 ```
 
