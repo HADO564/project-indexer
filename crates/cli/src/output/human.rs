@@ -16,6 +16,10 @@ use crate::output::Look;
 pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Result<()> {
     let terminal = std::io::stdout().is_terminal();
     let color = terminal && std::env::var_os("NO_COLOR").is_none();
+    // Icons only on a terminal, as colours: a script reading a name from a
+    // pipe must get the name, not a glyph before it. `NO_COLOR` keeps them —
+    // it asks for no colour, not no icons.
+    let icons = if terminal { look.icons } else { IconStyle::Off };
     match outcome {
         Outcome::Projects {
             projects,
@@ -47,7 +51,7 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
                 width: if terminal { terminal_width() } else { None },
                 tracker: tracker.clone(),
                 marks: color,
-                icons: look.icons,
+                icons,
             };
             write!(out, "{}", project_table(&projects, groups, &style))?;
         }
@@ -62,12 +66,12 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
                 project.color.as_deref(),
                 group.as_ref().map(|g| g.color.as_str()),
             );
-            let title = marked(&project.name, project.icon.as_deref(), look.icons);
+            let title = marked(&project.name, project.icon.as_deref(), icons);
             writeln!(out, "{}", paint_rgb(color.then_some(rgb).flatten(), &title))?;
             writeln!(out, "  directory  {}", project.directory)?;
             writeln!(out, "  id         {}", project.id)?;
             if let Some(group) = group {
-                let name = marked(&group.name, Some(&group.icon), look.icons);
+                let name = marked(&group.name, Some(&group.icon), icons);
                 let rgb = color.then(|| appearance::rgb(&group.color)).flatten();
                 writeln!(out, "  group      {}", paint_rgb(rgb, &name))?;
             }
@@ -103,7 +107,7 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
                 header_color: color.then_some(look.header),
                 width: if terminal { terminal_width() } else { None },
                 marks: color,
-                icons: look.icons,
+                icons,
                 ..TableStyle::default()
             };
             write!(out, "{}", group_table(groups, &style))?;
@@ -710,10 +714,11 @@ fn stretch(widths: &mut [usize], target: usize) {
     }
 }
 
-/// `name` after its icon's glyph, as `icons` draws it: unchanged with icons
-/// off, and a project without an icon gets none, so it stays plain.
+/// `name` after its icon's glyph, as `icons` draws it, or unchanged with
+/// icons off. A project without an icon gets the folder, as the app draws it,
+/// so every row's name starts in the same column.
 fn marked(name: &str, icon: Option<&str>, icons: IconStyle) -> String {
-    match icon.and_then(|icon| appearance::glyph(icon, icons)) {
+    match appearance::glyph(icon.unwrap_or("folder"), icons) {
         Some(glyph) => format!("{glyph} {name}"),
         None => name.to_string(),
     }

@@ -1,4 +1,4 @@
-use crate::appearance::{color, icon, rgb, BUNDLED_ICONS};
+use crate::appearance::{color, glyph, icon, mark_rgb, rgb, IconStyle, BUNDLED_ICONS};
 
 // Colours: the eight palette names or `#rrggbb`, as core allows, lowercased.
 
@@ -96,4 +96,54 @@ fn rgb_reads_palette_names_and_hex() {
     assert_eq!(rgb("#ff8800"), Some((0xff, 0x88, 0x00)));
     assert_eq!(rgb("cya"), None);
     assert_eq!(rgb("#ff88"), None);
+}
+
+// Glyphs: how an icon is drawn in a terminal.
+
+#[test]
+fn icons_off_draws_nothing() {
+    assert_eq!(glyph("rocket", IconStyle::Off), None);
+}
+
+#[test]
+fn every_bundled_icon_has_a_glyph_of_its_own_in_each_style() {
+    for style in [IconStyle::Nerd, IconStyle::Emoji] {
+        let mut seen: Vec<&str> = BUNDLED_ICONS
+            .iter()
+            .map(|name| glyph(name, style).unwrap())
+            .collect();
+        seen.sort();
+        seen.dedup();
+        assert_eq!(
+            seen.len(),
+            BUNDLED_ICONS.len(),
+            "{style:?}: two icons share a glyph"
+        );
+    }
+}
+
+#[test]
+fn every_emoji_is_two_columns_wide() {
+    for name in BUNDLED_ICONS {
+        let emoji = glyph(name, IconStyle::Emoji).unwrap();
+        assert_eq!(
+            unicode_width::UnicodeWidthStr::width(emoji),
+            2,
+            "{name}: {emoji}"
+        );
+    }
+}
+
+#[test]
+fn a_custom_or_unknown_icon_is_drawn_as_the_folder() {
+    let folder = glyph("folder", IconStyle::Nerd);
+    assert_eq!(glyph("custom:logo", IconStyle::Nerd), folder);
+    assert_eq!(glyph("teapot", IconStyle::Nerd), folder);
+}
+
+#[test]
+fn a_mark_takes_its_own_colour_else_its_group_s() {
+    assert_eq!(mark_rgb(Some("cyan"), Some("gold")), rgb("cyan"));
+    assert_eq!(mark_rgb(None, Some("gold")), rgb("gold"));
+    assert_eq!(mark_rgb(None, None), None);
 }

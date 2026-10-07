@@ -137,11 +137,14 @@ fn list(ctx: &Context) -> anyhow::Result<Outcome> {
     Ok(Outcome::Groups { groups })
 }
 
+/// How many projects deleting `group` leaves ungrouped: binned ones too, as
+/// core ungroups every member.
 fn members(ctx: &Context, group: &Group) -> anyhow::Result<usize> {
-    Ok(ctx
-        .projects
-        .list(SortOptions::default())?
+    let live = ctx.projects.list(SortOptions::default())?;
+    let binned = ctx.projects.list_deleted(SortOptions::default())?;
+    Ok(live
         .iter()
+        .chain(&binned)
         .filter(|p| p.group_id.as_deref() == Some(group.id.as_str()))
         .count())
 }

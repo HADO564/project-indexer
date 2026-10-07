@@ -32,7 +32,8 @@ pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub form_wrap: Option<bool>,
 
-    /// How icons are drawn in tables and the form. Missing means off.
+    /// How icons are drawn before names in `list`, `show` and `group list`.
+    /// Missing means off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icons: Option<IconStyle>,
 }

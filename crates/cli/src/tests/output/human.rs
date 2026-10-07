@@ -6,7 +6,7 @@ use serde_json::json;
 use crate::appearance::IconStyle;
 use crate::commands::{GroupLabel, Outcome, TrackerKind};
 use crate::output::color::Color;
-use crate::output::human::{candidate_table, project_table, write, TableStyle};
+use crate::output::human::{candidate_table, group_table, project_table, write, TableStyle};
 use crate::output::Look;
 
 /// A uuid-shaped id derived from the name, so the ID column shows a realistic
@@ -386,4 +386,143 @@ fn an_ungrouped_project_shows_no_group_line() {
     );
 
     assert!(!rendered.contains("group"), "{rendered}");
+}
+
+// Icons and marks: a project's or a group's icon before its name, and the name
+// in its colour, or its group's.
+
+fn styled(icons: IconStyle, marks: bool) -> TableStyle {
+    TableStyle {
+        icons,
+        marks,
+        ..TableStyle::default()
+    }
+}
+
+fn with_look(color: Option<&str>, icon: Option<&str>, group: Option<&str>) -> Project {
+    let mut project = project("app", "/home/me/work/app", json!([]), None);
+    project.color = color.map(str::to_string);
+    project.icon = icon.map(str::to_string);
+    project.group_id = group.map(str::to_string);
+    project
+}
+
+fn work(color: &str) -> indexer_core::Group {
+    let mut group =
+        indexer_core::Group::new("Work".into(), color.into(), "briefcase".into(), 0).unwrap();
+    group.id = "g-work".into();
+    group
+}
+
+#[test]
+fn with_icons_off_a_name_has_no_glyph() {
+    let rendered = table(
+        &[with_look(None, Some("rocket"), None)],
+        styled(IconStyle::Off, false),
+    );
+    assert!(rendered.contains("│ app  "), "{rendered}");
+}
+
+#[test]
+fn an_icon_is_drawn_before_the_name_and_the_columns_still_line_up() {
+    let projects = [
+        with_look(None, Some("rocket"), None),
+        project("app-gateway", "/home/me/infra/app-gateway", json!([]), None),
+    ];
+    let rendered = table(&projects, styled(IconStyle::Emoji, false));
+    assert!(rendered.contains("🚀 app"), "{rendered}");
+    // Every line is as wide on screen, the emoji's two columns counted.
+    let widths: Vec<usize> = rendered
+        .lines()
+        .map(unicode_width::UnicodeWidthStr::width)
+        .collect();
+    assert!(widths.windows(2).all(|w| w[0] == w[1]), "{rendered}");
+}
+
+#[test]
+fn a_project_without_an_icon_gets_the_folder_as_in_the_app() {
+    let rendered = table(
+        &[with_look(None, None, None)],
+        styled(IconStyle::Emoji, false),
+    );
+    assert!(rendered.contains("📁 app"), "{rendered}");
+}
+
+#[test]
+fn a_custom_or_unknown_icon_falls_back_to_the_folder() {
+    let rendered = table(
+        &[with_look(None, Some("custom:logo"), None)],
+        styled(IconStyle::Emoji, false),
+    );
+    assert!(rendered.contains("📁 app"), "{rendered}");
+}
+
+#[test]
+fn a_name_takes_its_own_colour_else_its_group_s() {
+    let groups = [work("gold")];
+    let own = with_look(Some("violet"), None, Some("g-work"));
+    let inherited = with_look(None, None, Some("g-work"));
+    let refs = [&own];
+    let rendered = project_table(&refs, &groups, &styled(IconStyle::Off, true));
+    assert!(
+        rendered.contains("\x1b[1;38;2;169;140;240mapp\x1b[0m"),
+        "{rendered}"
+    );
+    let refs = [&inherited];
+    let rendered = project_table(&refs, &groups, &styled(IconStyle::Off, true));
+    assert!(
+        rendered.contains("\x1b[1;38;2;231;182;78mapp\x1b[0m"),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn without_marks_a_coloured_project_is_plain() {
+    let rendered = table(
+        &[with_look(Some("violet"), None, None)],
+        styled(IconStyle::Off, false),
+    );
+    assert!(!rendered.contains("\x1b["), "{rendered}");
+}
+
+#[test]
+fn the_group_table_shows_each_group_with_its_count() {
+    let rendered = group_table(&[(work("gold"), 3)], &styled(IconStyle::Emoji, false));
+    assert!(
+        rendered.contains("│ NAME    │ COLOR │ ICON      │ PROJECTS │"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("│ 💼 Work │ gold  │ briefcase │ 3        │"),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn show_through_a_pipe_has_no_glyphs_but_names_the_colour_and_icon() {
+    let mut project = with_look(Some("violet"), Some("rocket"), Some("g-work"));
+    project.id = uuid_for("app");
+    let outcome = Outcome::Project {
+        project: Box::new(project),
+        tracker: Vec::new(),
+        group: Some(GroupLabel {
+            name: "Work".into(),
+            color: "gold".into(),
+            icon: "briefcase".into(),
+        }),
+    };
+    let mut out = Vec::new();
+    let look = Look {
+        folder: Color::DEFAULT_FOLDER,
+        header: Color::DEFAULT_HEADER,
+        icons: IconStyle::Emoji,
+    };
+    write(&mut out, &outcome, look).unwrap();
+    // Tests never write to a terminal, which is a pipe's case: no colour,
+    // and no glyph, so a script reading the first line gets the name.
+    let rendered = String::from_utf8(out).unwrap();
+    assert!(rendered.starts_with("app\n"), "{rendered}");
+    assert!(rendered.contains("  group      Work\n"), "{rendered}");
+    assert!(rendered.contains("  color      violet\n"), "{rendered}");
+    assert!(rendered.contains("  icon       rocket\n"), "{rendered}");
 }

@@ -53,11 +53,11 @@ code is `crates/cli/src/output/json.rs`, and its tests are in
 | `indexer config folder-color --json` | `{"folder_color": "cyan"}` — the colour in effect after the command |
 | `indexer config header-color --json` | `{"header_color": "magenta"}` |
 | `indexer config form-wrap [on\|off] [--reset] --json` | `{"form_wrap": true}` — whether Tab wraps at the ends of `edit`'s form. Only affects the form, which scripts never see |
-| `indexer config icons [nerd\|emoji\|off] [--reset] --json` | `{"icons": "off"}` — how icons are drawn in human output: Nerd Font glyphs (needs a Nerd Font in the terminal), emoji (which keep their own colours), or not at all, the default. A custom or unknown icon is drawn as the folder. Never affects `--json` |
+| `indexer config icons [nerd\|emoji\|off] [--reset] --json` | `{"icons": "off"}` — how icons are drawn in human output: Nerd Font glyphs (needs a Nerd Font in the terminal), emoji (which keep their own colours), or not at all, the default. A project without an icon, and a custom or unknown one, is drawn as the folder, as the app draws it. Icons are drawn only when stdout is a terminal — piped, a name is just the name — and never affect `--json` |
 | `indexer group list --json` | an array of [groups](#a-group) in the sidebar's order, each with `projects`, how many live projects it holds. No groups is an empty array, exit 0 |
 | `indexer group create <name> [--color <colour>] [--icon <icon>] --json` | the [group](#a-group) as saved, last in the sidebar. `--color` defaults to `cyan` and `--icon` to `briefcase`; colours follow `edit --color`'s rule, and a group's icon is a **bundled** one only, as in the app (`custom:` is refused). A name another group has, ignoring case, is an [error](#errors) |
 | `indexer group edit <group> [--name <text>] [--color <colour>] [--icon <icon>] --json` | the [group](#a-group) as saved. `<group>` is matched trimmed and ignoring case, exactly; a miss lists the groups. At least one flag, or it is a usage error (exit 2). A group always has a colour and an icon, so neither can be cleared |
-| `indexer group delete <group> --json` | `{"group": {…}, "ungrouped": 2}` — the group as it was, and how many projects it left ungrouped. The projects are kept. **Needs `--yes` when stdin is not a terminal**, as `untrack` does |
+| `indexer group delete <group> --json` | `{"group": {…}, "ungrouped": 2}` — the group as it was, and how many projects it left ungrouped, binned ones included. The projects are kept. **Needs `--yes` when stdin is not a terminal**, as `untrack` does |
 
 `scan` takes `--depth <n>` (1, the default, visits only the folder's
 children), `--include-ignored` and `-t/--tracker` to narrow what it looks for.
