@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use indexer_core::{
-    DetectorRunner, GroupService, Project, ProjectRepository, ProjectService, ScanService,
+    DetectorRunner, Group, GroupService, Project, ProjectRepository, ProjectService, ScanService,
     SqliteRepository, UpdateProject,
 };
 use serde_json::json;
@@ -33,7 +33,12 @@ impl Confirmer for Answer {
 pub struct Scripted(pub fn(&Project) -> Option<UpdateProject>);
 
 impl ProjectEditor for Scripted {
-    fn edit(&self, project: &Project, _kind: FormKind) -> anyhow::Result<Option<UpdateProject>> {
+    fn edit(
+        &self,
+        project: &Project,
+        _groups: Vec<Group>,
+        _kind: FormKind,
+    ) -> anyhow::Result<Option<UpdateProject>> {
         Ok((self.0)(project))
     }
 }
@@ -43,7 +48,12 @@ impl ProjectEditor for Scripted {
 pub struct Expecting(pub FormKind);
 
 impl ProjectEditor for Expecting {
-    fn edit(&self, _project: &Project, kind: FormKind) -> anyhow::Result<Option<UpdateProject>> {
+    fn edit(
+        &self,
+        _project: &Project,
+        _groups: Vec<Group>,
+        kind: FormKind,
+    ) -> anyhow::Result<Option<UpdateProject>> {
         assert_eq!(kind, self.0, "edit asked for the wrong form");
         Ok(None)
     }

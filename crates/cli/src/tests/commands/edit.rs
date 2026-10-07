@@ -228,7 +228,7 @@ fn the_terminal_editor_refuses_under_json_with_a_usage_error() {
     // tests run. `main` turns a `Failure::Usage` into prose and exit code 2.
     let project = super::support::project("app", false);
     let err = TerminalEditor::new(true)
-        .edit(&project, FormKind::Compact)
+        .edit(&project, Vec::new(), FormKind::Compact)
         .expect_err("no form under --json");
     assert!(matches!(
         err.downcast_ref::<Failure>(),

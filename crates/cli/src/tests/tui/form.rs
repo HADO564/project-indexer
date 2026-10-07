@@ -834,8 +834,8 @@ fn esc_during_the_delete_question_only_answers_no() {
 }
 
 // The full form. Its order: name, directory, description, tags, the
-// favourite checkbox, notes, open with, then the rows — so from the name,
-// the checkbox is four Tabs away and the first row seven.
+// favourite checkbox, notes, open with, the group, then the rows — so from
+// the name, the checkbox is four Tabs away and the first row eight.
 
 fn full_form(favorite: bool, rows: bool, wrap: bool) -> FormState {
     let mut project = project("A tool", &["Rust"]);
@@ -854,7 +854,8 @@ const TO_DIRECTORY: usize = 1;
 const TO_CHECKBOX: usize = 4;
 const TO_NOTES: usize = 5;
 const TO_OPEN_WITH: usize = 6;
-const TO_FIRST_ROW: usize = 7;
+const TO_GROUP: usize = 7;
+const TO_FIRST_ROW: usize = 8;
 
 #[test]
 fn the_full_form_starts_on_the_name() {
@@ -964,12 +965,11 @@ fn tab_from_the_checkbox_reaches_the_notes_then_open_with_then_the_first_row() {
 }
 
 #[test]
-fn shift_tab_from_the_first_row_reaches_open_with() {
+fn shift_tab_from_the_first_row_reaches_the_group() {
     let mut form = full_form(false, true, true);
     tab(&mut form, TO_FIRST_ROW);
     shift_tab(&mut form, 1);
-    type_text(&mut form, "code");
-    assert_eq!(form.changes().open_with, Some(Some("code".into())));
+    assert_eq!(form.focus(), Focus::Group);
 }
 
 #[test]
@@ -982,22 +982,20 @@ fn shift_tab_from_the_checkbox_reaches_the_tags() {
 }
 
 #[test]
-fn with_no_rows_open_with_is_last_wrapping_both_ways() {
+fn with_no_rows_the_group_is_last_wrapping_both_ways() {
     let mut form = full_form(false, false, true);
-    shift_tab(&mut form, 1); // the name wraps back to open with
-    type_text(&mut form, "code");
-    assert_eq!(form.changes().open_with, Some(Some("code".into())));
+    shift_tab(&mut form, 1); // the name wraps back to the group
+    assert_eq!(form.focus(), Focus::Group);
     tab(&mut form, 1); // and forward to the name
     type_text(&mut form, "2");
     assert_eq!(form.changes().name.as_deref(), Some("app2"));
 }
 
 #[test]
-fn without_wrap_tab_stays_on_open_with_when_it_is_last() {
+fn without_wrap_tab_stays_on_the_group_when_it_is_last() {
     let mut form = full_form(false, false, false);
-    tab(&mut form, 9);
-    type_text(&mut form, "code");
-    assert_eq!(form.changes().open_with, Some(Some("code".into())));
+    tab(&mut form, 12);
+    assert_eq!(form.focus(), Focus::Group);
 }
 
 #[test]
@@ -1186,4 +1184,117 @@ fn an_error_stays_until_the_next_key_and_nothing_typed_is_lost() {
     type_text(&mut form, "3");
     assert_eq!(form.error(), None);
     assert_eq!(form.changes().name.as_deref(), Some("app23"));
+}
+
+// The group line: a choice cycled with ←/→ through "Ungrouped", then each
+// group in the sidebar's order.
+
+fn group(id: &str, name: &str) -> indexer_core::Group {
+    let mut group =
+        indexer_core::Group::new(name.into(), "cyan".into(), "folder".into(), 0).unwrap();
+    group.id = id.into();
+    group
+}
+
+fn with_group(group_id: Option<&str>, wrap: bool) -> FormState {
+    let mut project = project("A tool", &["Rust"]);
+    project.group_id = group_id.map(str::to_string);
+    let mut form = FormState::new(&project, wrap, FormKind::Full)
+        .with_groups(vec![group("w", "Work"), group("c", "Clients")]);
+    tab(&mut form, TO_GROUP);
+    form
+}
+
+fn arrow(form: &mut FormState, code: KeyCode, times: usize) {
+    for _ in 0..times {
+        form.handle(press(code));
+    }
+}
+
+#[test]
+fn the_group_line_shows_the_project_group_and_untouched_is_no_change() {
+    let form = with_group(Some("c"), true);
+    assert_eq!(form.group_label(), "Clients");
+    assert_eq!(form.changes().group_id, None);
+    assert_eq!(with_group(None, true).group_label(), "Ungrouped");
+}
+
+#[test]
+fn right_picks_the_next_group_and_left_the_one_before() {
+    let mut form = with_group(None, true);
+    arrow(&mut form, KeyCode::Right, 1);
+    assert_eq!(form.group_label(), "Work");
+    assert_eq!(form.changes().group_id, Some(Some("w".into())));
+    arrow(&mut form, KeyCode::Right, 1);
+    assert_eq!(form.group_label(), "Clients");
+    arrow(&mut form, KeyCode::Left, 1);
+    assert_eq!(form.changes().group_id, Some(Some("w".into())));
+}
+
+#[test]
+fn choosing_ungrouped_takes_the_project_out() {
+    let mut form = with_group(Some("w"), true);
+    arrow(&mut form, KeyCode::Left, 1);
+    assert_eq!(form.group_label(), "Ungrouped");
+    assert_eq!(form.changes().group_id, Some(None), "a box in a box: clear");
+}
+
+#[test]
+fn with_wrap_the_choice_goes_round_and_back_to_the_start_is_no_change() {
+    let mut form = with_group(Some("w"), true);
+    arrow(&mut form, KeyCode::Right, 3); // Clients, Ungrouped, Work
+    assert_eq!(form.group_label(), "Work");
+    assert_eq!(form.changes().group_id, None);
+    arrow(&mut form, KeyCode::Left, 2); // Ungrouped, then round to Clients
+    assert_eq!(form.group_label(), "Clients");
+}
+
+#[test]
+fn without_wrap_the_choice_stays_at_either_end() {
+    let mut form = with_group(Some("c"), false);
+    arrow(&mut form, KeyCode::Right, 2);
+    assert_eq!(form.group_label(), "Clients");
+    arrow(&mut form, KeyCode::Left, 5);
+    assert_eq!(form.group_label(), "Ungrouped");
+}
+
+#[test]
+fn a_group_deleted_while_the_form_was_open_is_no_change_until_another_is_picked() {
+    let mut form = with_group(Some("gone"), true);
+    assert_eq!(form.group_label(), "(deleted group)");
+    assert_eq!(form.changes().group_id, None);
+    arrow(&mut form, KeyCode::Right, 1);
+    assert_eq!(form.group_label(), "Ungrouped");
+    assert_eq!(form.changes().group_id, Some(None));
+}
+
+#[test]
+fn typing_on_the_group_line_does_nothing() {
+    let mut form = with_group(Some("w"), true);
+    type_text(&mut form, "Clients");
+    form.handle(press(KeyCode::Backspace));
+    assert_eq!(form.group_label(), "Work");
+    assert!(
+        form.changes().is_empty(),
+        "no other box took the keys either"
+    );
+}
+
+#[test]
+fn with_no_groups_the_arrows_stay_on_ungrouped() {
+    let mut form = FormState::new(&project("A tool", &["Rust"]), true, FormKind::Full);
+    tab(&mut form, TO_GROUP);
+    arrow(&mut form, KeyCode::Right, 2);
+    assert_eq!(form.group_label(), "Ungrouped");
+    assert_eq!(form.changes().group_id, None);
+}
+
+#[test]
+fn left_and_right_still_move_the_cursor_in_a_text_box() {
+    let mut form = with_group(None, true);
+    shift_tab(&mut form, 1); // open with
+    type_text(&mut form, "cde");
+    arrow(&mut form, KeyCode::Left, 2);
+    type_text(&mut form, "o");
+    assert_eq!(form.changes().open_with, Some(Some("code".into())));
 }

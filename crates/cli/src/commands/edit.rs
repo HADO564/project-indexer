@@ -108,7 +108,12 @@ pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
     let project = find_one(ctx, args.project, super::unique_kinds(&args.tracker))?;
 
     let update = if from_form {
-        match ctx.editor.edit(&project, kind)? {
+        // Only the full form has a group line to fill.
+        let groups = match kind {
+            FormKind::Full => ctx.groups.list()?,
+            FormKind::Compact => Vec::new(),
+        };
+        match ctx.editor.edit(&project, groups, kind)? {
             Some(update) => update,
             None => return Ok(Outcome::Cancelled),
         }

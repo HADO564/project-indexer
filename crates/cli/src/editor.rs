@@ -10,7 +10,7 @@ use std::io::{stderr, stdin, IsTerminal};
 use std::path::PathBuf;
 
 use anyhow::bail;
-use indexer_core::{Project, UpdateProject};
+use indexer_core::{Group, Project, UpdateProject};
 
 use crate::commands::{add, Failure};
 use crate::settings;
@@ -28,7 +28,13 @@ pub trait ProjectEditor {
     /// Lets the user edit `project`: `Some` with the changes to save, or
     /// `None` if they cancelled. An editor that cannot run here — no terminal,
     /// or `--json` — returns [`Failure::Usage`] rather than guessing.
-    fn edit(&self, project: &Project, kind: FormKind) -> anyhow::Result<Option<UpdateProject>>;
+    /// `groups` are what the full form's group line offers.
+    fn edit(
+        &self,
+        project: &Project,
+        groups: Vec<Group>,
+        kind: FormKind,
+    ) -> anyhow::Result<Option<UpdateProject>>;
 }
 
 /// The shell's editor: a full-screen form drawn on stderr, when there is a
@@ -44,7 +50,12 @@ impl TerminalEditor {
 }
 
 impl ProjectEditor for TerminalEditor {
-    fn edit(&self, project: &Project, kind: FormKind) -> anyhow::Result<Option<UpdateProject>> {
+    fn edit(
+        &self,
+        project: &Project,
+        groups: Vec<Group>,
+        kind: FormKind,
+    ) -> anyhow::Result<Option<UpdateProject>> {
         // stdin to read keys from and stderr to draw on — stdout is never
         // needed, so `indexer edit app > out` still gets the form. Under
         // `--json` a script is driving, and a form nobody can see would hang
@@ -77,7 +88,7 @@ impl ProjectEditor for TerminalEditor {
                 true
             }
         };
-        let mut state = FormState::new(project, wrap, kind);
+        let mut state = FormState::new(project, wrap, kind).with_groups(groups);
         // The session is dropped at the end of this block, which puts the
         // terminal back before anything is printed about the edit.
         let changes = {

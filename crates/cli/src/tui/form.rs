@@ -2,7 +2,7 @@ use crate::editor::FormKind;
 use std::collections::BTreeMap;
 
 use indexer_core::domain::normalize::normalize_tags;
-use indexer_core::{Project, UpdateProject};
+use indexer_core::{Group, Project, UpdateProject};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 /// One line of editable text and where the cursor is in it.
@@ -134,6 +134,8 @@ pub enum Focus {
     Notes,
     /// The open-with box, in the full form only.
     OpenWith,
+    /// The group choice, in the full form only: picked with ←/→, not typed.
+    Group,
     Name(usize),
     Value(usize),
 }
@@ -168,6 +170,10 @@ pub struct FormState {
     notes: TextInput,
     /// The app to open the project with; empty means the system's default.
     open_with: TextInput,
+    /// The chosen group's id, or `None` for ungrouped. Kept as the id rather
+    /// than a place in `groups`, so a group deleted elsewhere while the form
+    /// is open is still "no change" until the user picks another.
+    group: Option<String>,
     rows: Vec<PropertyRow>,
 
     // The form's own state.
@@ -175,6 +181,9 @@ pub struct FormState {
     wrap: bool,
     /// Compact, or every field with `edit --full`.
     kind: FormKind,
+    /// What ←/→ cycle through on the group line, after "Ungrouped", in the
+    /// sidebar's order. Empty in the compact form, which has no group line.
+    groups: Vec<Group>,
     /// `Some(row)` while Ctrl+D waits for `y`; the next key answers it.
     pending_delete: Option<usize>,
     /// Why the last save could not go ahead, shown until the next key.
@@ -207,9 +216,18 @@ impl FormState {
             kind,
             notes: TextInput::new(project.notes.as_deref().unwrap_or_default()),
             open_with: TextInput::new(project.open_with.as_deref().unwrap_or_default()),
+            group: project.group_id.clone(),
+            groups: Vec::new(),
             pending_delete: None,
             error: None,
         }
+    }
+
+    /// The groups the group line offers. The form cannot read the database,
+    /// so `TerminalEditor` hands them in.
+    pub fn with_groups(mut self, groups: Vec<Group>) -> Self {
+        self.groups = groups;
+        self
     }
 
     // Read-only views for `ui::form::draw`, which paints and decides nothing.
@@ -260,6 +278,24 @@ impl FormState {
         &self.open_with
     }
 
+    /// The group line's text: the chosen group's name, "Ungrouped", or, for
+    /// a group deleted while the form was open, a note saying so.
+    pub fn group_label(&self) -> &str {
+        match &self.group {
+            None => "Ungrouped",
+            Some(id) => self
+                .groups
+                .iter()
+                .find(|g| &g.id == id)
+                .map_or("(deleted group)", |g| g.name.as_str()),
+        }
+    }
+
+    /// Whether there is any group to pick; with none, ←/→ have nothing to do.
+    pub fn has_groups(&self) -> bool {
+        !self.groups.is_empty()
+    }
+
     pub fn description_input(&self) -> &TextInput {
         &self.description
     }
@@ -288,7 +324,7 @@ impl FormState {
         }
         order.extend([Focus::Description, Focus::Tags]);
         if full {
-            order.extend([Focus::Favorite, Focus::Notes, Focus::OpenWith]);
+            order.extend([Focus::Favorite, Focus::Notes, Focus::OpenWith, Focus::Group]);
         }
         for row in 0..self.rows.len() {
             order.push(Focus::Name(row));
@@ -337,8 +373,33 @@ impl FormState {
         self.leave_row(from);
     }
 
-    /// The text box keys type into, or `None` on the favourite checkbox,
-    /// which is not one.
+    /// ←/→ on the group line: the next or previous choice in "Ungrouped",
+    /// then each group. At the ends it wraps or stays, per `wrap`, as Tab
+    /// does. A deleted group is in neither place, so either key starts over
+    /// from "Ungrouped".
+    fn cycle_group(&mut self, forward: bool) {
+        let choices: Vec<Option<&String>> = std::iter::once(None)
+            .chain(self.groups.iter().map(|g| Some(&g.id)))
+            .collect();
+        let last = choices.len() - 1;
+        let next = match choices.iter().position(|c| *c == self.group.as_ref()) {
+            None => 0,
+            Some(at) if forward && at < last => at + 1,
+            Some(at) if !forward && at > 0 => at - 1,
+            Some(_) if self.wrap => {
+                if forward {
+                    0
+                } else {
+                    last
+                }
+            }
+            Some(at) => at,
+        };
+        self.group = choices[next].cloned();
+    }
+
+    /// The text box keys type into, or `None` on the favourite checkbox and
+    /// the group line, which are not ones.
     fn focused_input(&mut self) -> Option<&mut TextInput> {
         match self.focus {
             Focus::ProjectName => Some(&mut self.name),
@@ -346,7 +407,7 @@ impl FormState {
             Focus::Notes => Some(&mut self.notes),
             Focus::Description => Some(&mut self.description),
             Focus::Tags => Some(&mut self.tags),
-            Focus::Favorite => None,
+            Focus::Favorite | Focus::Group => None,
             Focus::Name(i) => Some(&mut self.rows[i].name),
             Focus::Value(i) => Some(&mut self.rows[i].value),
             Focus::OpenWith => Some(&mut self.open_with),
@@ -407,6 +468,16 @@ impl FormState {
             // Shift+Tab: terminals report it as its own key, not Tab + Shift.
             KeyCode::BackTab | KeyCode::Up => {
                 self.previous_focus();
+                Action::Continue
+            }
+            // On the group line ←/→ choose; everywhere else they move the
+            // cursor.
+            KeyCode::Left if self.focus == Focus::Group => {
+                self.cycle_group(false);
+                Action::Continue
+            }
+            KeyCode::Right if self.focus == Focus::Group => {
+                self.cycle_group(true);
                 Action::Continue
             }
             KeyCode::Left => {
@@ -562,6 +633,14 @@ impl FormState {
             None
         };
 
+        // The id as chosen against the id as loaded: cycling all the way
+        // round back to the start is no change.
+        let group_id = if self.group != self.original.group_id {
+            Some(self.group.clone())
+        } else {
+            None
+        };
+
         UpdateProject {
             name,
             directory,
@@ -570,6 +649,7 @@ impl FormState {
             favorite,
             notes,
             open_with,
+            group_id,
             properties,
             ..Default::default()
         }

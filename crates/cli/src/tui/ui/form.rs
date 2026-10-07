@@ -44,6 +44,9 @@ fn hints(focus: Focus) -> Vec<&'static str> {
     if focus == Focus::Favorite {
         hints.push("Space toggle");
     }
+    if focus == Focus::Group {
+        hints.push("←→ choose");
+    }
     hints.extend([
         if on_row {
             "Esc leave properties"
@@ -75,12 +78,13 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
     // The full form's extra lines take no height in the compact one.
     let full = state.kind() == FormKind::Full;
     let extra = Constraint::Length(u16::from(full));
-    let [name, directory, description, tags, favorite, notes, open_with, _, header, rows, _, hint] =
+    let [name, directory, description, tags, favorite, notes, open_with, group, _, header, rows, _, hint] =
         Layout::vertical([
             extra,
             extra,
             Constraint::Length(1),
             Constraint::Length(1),
+            extra,
             extra,
             extra,
             extra,
@@ -145,6 +149,7 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
             state.open_with_input(),
             focus == Focus::OpenWith,
         );
+        choice(frame, group, "Group", state, focus == Focus::Group);
     }
     properties(frame, header, rows, state);
     hint_line(frame, hint, state);
@@ -183,6 +188,30 @@ fn checkbox(frame: &mut Frame, area: Rect, label: &str, checked: bool, focused: 
     };
     let mark = if checked { "[x]" } else { "[ ]" };
     frame.render_widget(Paragraph::new(mark).style(style), box_area);
+}
+
+/// The group line: the choice between ‹ › while focused, so ←/→ read as the
+/// way to change it, and a dim note when there is nothing to choose from.
+fn choice(frame: &mut Frame, area: Rect, label: &str, state: &FormState, focused: bool) {
+    let [label_area, value_area] =
+        Layout::horizontal([Constraint::Length(LABEL_WIDTH), Constraint::Fill(1)]).areas(area);
+    frame.render_widget(Paragraph::new(label_line(label, focused)), label_area);
+    let value = state.group_label();
+    let mut line = vec![if focused {
+        Span::styled(
+            format!("‹ {value} ›"),
+            Style::new().add_modifier(Modifier::REVERSED),
+        )
+    } else {
+        Span::raw(format!("  {value}"))
+    }];
+    if !state.has_groups() {
+        line.push(Span::styled(
+            "  no groups yet · make one in the app",
+            Style::new().add_modifier(Modifier::DIM),
+        ));
+    }
+    frame.render_widget(Paragraph::new(Line::from(line)), value_area);
 }
 
 fn properties(frame: &mut Frame, header: Rect, area: Rect, state: &FormState) {

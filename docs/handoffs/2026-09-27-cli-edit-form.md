@@ -152,7 +152,13 @@ between them is a natural point for a pull request.
     `edit` only stores the app; opening once with another is `open --with`,
     for later.)* — `--open-with` and a text field (`""` clears it); a picker
     over `platform::list_installed_apps` can come later.
-12. **Group** — `--group <name>`, resolved to an id through `ctx.groups`
+12. ~~**Group**~~ *(done 2026-10-07. `--group <name>` moves the project,
+    `--ungroup` or `--group ""` takes it out; the name is trimmed and matched
+    ignoring case, as core compares group names, and a miss lists the groups.
+    The form's line follows the GUI's order and wording — after Open with,
+    "Ungrouped" first — and ←/→ wrap per `form-wrap`. The choice is kept as an
+    id, so a group deleted while the form is open is no change until another
+    is picked.)* — `--group <name>`, resolved to an id through `ctx.groups`
     (a name no group has, or one several groups share, is an error), and
     `--group ""` to ungroup; in the form, a choice cycled with ←/→ rather than
     typed.
