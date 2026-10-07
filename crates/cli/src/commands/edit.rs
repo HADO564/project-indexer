@@ -84,6 +84,16 @@ pub struct EditArgs {
     /// app opens it again.
     #[arg(long, group = "change")]
     pub open_with: Option<String>,
+
+    /// Put the project in this group, matched ignoring case. A project is in
+    /// one group at a time, so this moves it out of any other. An empty string
+    /// takes it out, as `--ungroup` does.
+    #[arg(long, group = "change")]
+    pub group: Option<String>,
+
+    /// Take the project out of its group.
+    #[arg(long, group = "change", conflicts_with = "group")]
+    pub ungroup: bool,
 }
 
 pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
@@ -109,15 +119,19 @@ pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
             .directory
             .map(|d| super::add::absolute(Some(d), "move to"))
             .transpose()?;
-        from_flags(
-            args.name,
+        // Every field without a flag stays `None`, which `update` reads as
+        // "leave alone".
+        UpdateProject {
+            name: args.name,
             directory,
-            args.description,
-            args.notes,
-            tags(&project.tags, args.add_tag, &args.remove_tag),
-            properties(&project.properties, args.set, &args.unset),
-            args.open_with,
-        )
+            description: args.description,
+            notes: cleared_if_empty(args.notes),
+            tags: tags(&project.tags, args.add_tag, &args.remove_tag),
+            properties: properties(&project.properties, args.set, &args.unset),
+            open_with: cleared_if_blank(args.open_with),
+            group_id: group_id(ctx, args.group, args.ungroup)?,
+            ..Default::default()
+        }
     };
 
     // A form saved untouched sends every field `None`. Writing that would
@@ -149,43 +163,52 @@ fn has_field_flag(args: &EditArgs) -> bool {
         || args.notes.is_some()
         || args.directory.is_some()
         || args.open_with.is_some()
+        || args.group.is_some()
+        || args.ungroup
 }
 
-/// The update the flags describe. Every field without a flag is `None`, which
-/// `update` reads as "leave alone".
-fn from_flags(
-    name: Option<String>,
-    directory: Option<String>,
-    description: Option<String>,
-    notes: Option<String>,
-    tags: Option<Vec<String>>,
-    properties: Option<BTreeMap<String, String>>,
-    open_with: Option<String>,
-) -> UpdateProject {
-    // `UpdateProject.notes` is a box in a box: the outer one says whether to
-    // touch the notes at all, the inner one what to store. `--notes ""`
-    // clears them — `Some(None)` — as an emptied notes box does in the app.
-    let notes = notes.map(|text| if text.is_empty() { None } else { Some(text) });
-    // The same box in a box, trimmed: spaces around an app's name are never
-    // part of it, and the launcher would read a blank one as no app anyway.
-    let open_with = open_with.map(|text| {
+/// A box in a box, as `UpdateProject.notes` takes it: the outer one says
+/// whether to touch the field at all, the inner one what to store. `--notes ""`
+/// clears them — `Some(None)` — as an emptied notes box does in the app.
+fn cleared_if_empty(text: Option<String>) -> Option<Option<String>> {
+    text.map(|text| if text.is_empty() { None } else { Some(text) })
+}
+
+/// The same, trimmed, for `--open-with`: spaces around an app's name are never
+/// part of it, and the launcher would read a blank one as no app anyway.
+fn cleared_if_blank(text: Option<String>) -> Option<Option<String>> {
+    text.map(|text| {
         let trimmed = text.trim();
         if trimmed.is_empty() {
             None
         } else {
             Some(trimmed.to_string())
         }
-    });
-    UpdateProject {
-        name,
-        directory,
-        notes,
-        description,
-        tags,
-        properties,
-        open_with,
-        ..Default::default()
+    })
+}
+
+/// The group `--group` or `--ungroup` asks for, as `UpdateProject.group_id`
+/// takes it: `None` to leave it alone, `Some(None)` to take the project out,
+/// `Some(Some(id))` to put it in. The groups are read only when a name has to
+/// be looked up, so no other edit touches them.
+fn group_id(
+    ctx: &Context,
+    group: Option<String>,
+    ungroup: bool,
+) -> anyhow::Result<Option<Option<String>>> {
+    if ungroup {
+        return Ok(Some(None));
     }
+    let Some(name) = group else {
+        return Ok(None);
+    };
+    if name.trim().is_empty() {
+        return Ok(Some(None));
+    }
+    let groups = ctx.groups.list()?;
+    // `find` lends a group out of `groups`; the update keeps its own copy of
+    // the id, since `groups` is gone when this returns.
+    Ok(Some(Some(super::group::find(&groups, &name)?.id.clone())))
 }
 
 /// `None` unless a tag flag was given, so an edit of other fields never writes

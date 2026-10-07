@@ -10,6 +10,7 @@ pub mod config;
 pub mod edit;
 mod failure;
 mod favorite;
+pub mod group;
 pub mod list;
 mod open;
 mod purge;

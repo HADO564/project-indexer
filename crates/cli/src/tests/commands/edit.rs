@@ -281,6 +281,7 @@ fn full_beside_a_field_flag_is_a_usage_error() {
         ["--notes", "x"],
         ["--directory", "x"],
         ["--open-with", "x"],
+        ["--group", "x"],
     ] {
         let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", flag[0], flag[1]])
             .expect_err("--full only chooses the form");
@@ -355,6 +356,83 @@ fn another_flag_leaves_open_with_alone() {
     run(&ctx, &["indexer", "edit", "app", "--open-with", "code"]).unwrap();
     run(&ctx, &["indexer", "edit", "app", "--notes", "x"]).unwrap();
     assert_eq!(saved(&ctx).open_with.as_deref(), Some("code"));
+}
+
+// `--group` and `--ungroup`.
+
+fn with_groups(ctx: &crate::context::Context) -> (String, String) {
+    let work = ctx
+        .groups
+        .create("Work".into(), "cyan".into(), "folder".into())
+        .unwrap();
+    let clients = ctx
+        .groups
+        .create("Clients".into(), "gold".into(), "star".into())
+        .unwrap();
+    (work.id, clients.id)
+}
+
+#[test]
+fn group_puts_the_project_in_a_group_matched_ignoring_case() {
+    let ctx = context(true, Scripted(never_asked));
+    let (work, _) = with_groups(&ctx);
+    run(&ctx, &["indexer", "edit", "app", "--group", " work "]).unwrap();
+    assert_eq!(saved(&ctx).group_id, Some(work));
+}
+
+#[test]
+fn group_moves_the_project_out_of_its_old_group() {
+    let ctx = context(true, Scripted(never_asked));
+    let (_, clients) = with_groups(&ctx);
+    run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
+    run(&ctx, &["indexer", "edit", "app", "--group", "Clients"]).unwrap();
+    assert_eq!(saved(&ctx).group_id, Some(clients));
+}
+
+#[test]
+fn ungroup_and_an_empty_group_both_take_it_out() {
+    let ctx = context(true, Scripted(never_asked));
+    with_groups(&ctx);
+    for clear in [&["--ungroup"][..], &["--group", ""], &["--group", "  "]] {
+        run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
+        let mut argv = vec!["indexer", "edit", "app"];
+        argv.extend_from_slice(clear);
+        run(&ctx, &argv).unwrap();
+        assert_eq!(saved(&ctx).group_id, None, "{clear:?}");
+    }
+}
+
+#[test]
+fn an_unknown_group_is_an_error_naming_the_groups_and_changes_nothing() {
+    let ctx = context(true, Scripted(never_asked));
+    with_groups(&ctx);
+    run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
+    let err = run(
+        &ctx,
+        &["indexer", "edit", "app", "--group", "Wrok", "--notes", "x"],
+    )
+    .unwrap_err()
+    .to_string();
+    assert_eq!(err, "no group named \"Wrok\". Groups: Work, Clients");
+    let project = saved(&ctx);
+    assert!(project.group_id.is_some(), "still in Work");
+    assert_eq!(project.notes, None, "nothing else was saved either");
+}
+
+#[test]
+fn another_flag_leaves_the_group_alone() {
+    let ctx = context(true, Scripted(never_asked));
+    let (work, _) = with_groups(&ctx);
+    run(&ctx, &["indexer", "edit", "app", "--group", "Work"]).unwrap();
+    run(&ctx, &["indexer", "edit", "app", "--notes", "x"]).unwrap();
+    assert_eq!(saved(&ctx).group_id, Some(work));
+}
+
+#[test]
+fn group_and_ungroup_together_are_a_usage_error() {
+    let err = Cli::try_parse_from(["indexer", "edit", "app", "--group", "Work", "--ungroup"])
+        .expect_err("one or the other");
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
 }
 
 // `--directory`.
