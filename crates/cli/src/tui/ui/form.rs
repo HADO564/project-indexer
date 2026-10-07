@@ -3,8 +3,10 @@
 //!
 //! Styled with modifiers alone (bold, dim, reversed, crossed out), never
 //! colours, so it reads the same under `NO_COLOR` and on any theme. The one
-//! colour is the project's own, as a swatch beside its colour box — data, not
-//! decoration — and `NO_COLOR` drops that too.
+//! colour is the project's own: the frame and title take it, and a swatch
+//! sits beside its colour box, both following what is typed there. Never the
+//! text or a background, whose contrast depends on the terminal's theme; and
+//! `NO_COLOR` drops it too.
 //!
 //! ```text
 //! ┌ Edit app ────────────────────────────────────┐
@@ -74,7 +76,12 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
         FormKind::Compact => format!(" Edit {} ", state.title()),
         FormKind::Full => format!(" Edit {} · all fields ", state.title()),
     };
-    let block = Block::bordered().title(title);
+    // The frame in the project's colour, as its tile is in the app — and, as
+    // it follows the colour box, a preview of a colour before it is saved.
+    let mut block = Block::bordered().title(title);
+    if let Some(color) = project_color(state) {
+        block = block.border_style(Style::new().fg(color));
+    }
     let inner = block.inner(frame.area()).inner(Margin::new(1, 0));
     frame.render_widget(block, frame.area());
 
@@ -215,13 +222,20 @@ fn color_field(frame: &mut Frame, area: Rect, state: &FormState, focused: bool) 
     let [input_area, swatch_area] =
         Layout::horizontal([Constraint::Fill(1), Constraint::Length(3)]).areas(area);
     field(frame, input_area, "Colour", state.color_input(), focused);
-    let typed = state.color_input().value().trim().to_lowercase();
-    if let Some((r, g, b)) = appearance::rgb(&typed) {
-        if std::env::var_os("NO_COLOR").is_none() {
-            let swatch = Span::styled(" ██", Style::new().fg(Color::Rgb(r, g, b)));
-            frame.render_widget(Paragraph::new(swatch), swatch_area);
-        }
+    if let Some(color) = project_color(state) {
+        let swatch = Span::styled(" ██", Style::new().fg(color));
+        frame.render_widget(Paragraph::new(swatch), swatch_area);
     }
+}
+
+/// The colour the colour box holds now — the project's own until it is
+/// edited — once it is one; `None` while it is not, and under `NO_COLOR`.
+fn project_color(state: &FormState) -> Option<Color> {
+    if std::env::var_os("NO_COLOR").is_some() {
+        return None;
+    }
+    let typed = state.color_input().value().trim().to_lowercase();
+    appearance::rgb(&typed).map(|(r, g, b)| Color::Rgb(r, g, b))
 }
 
 /// The group line: the choice between ‹ › while focused, so ←/→ read as the

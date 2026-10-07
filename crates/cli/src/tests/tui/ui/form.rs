@@ -360,3 +360,40 @@ fn a_short_terminal_drops_the_blank_lines_before_a_property_or_the_hints() {
     assert!(text.contains("Client"), "{text}");
     assert!(text.contains("Enter save"), "{text}");
 }
+
+#[test]
+fn the_frame_takes_the_project_colour_and_follows_the_colour_box() {
+    if std::env::var_os("NO_COLOR").is_some() {
+        return;
+    }
+    let mut project = project(json!({}));
+    project.color = Some("violet".into());
+    let mut form = FormState::new(&project, true, FormKind::Full);
+    let terminal = render(&form, 60, 17);
+    let corner = &terminal.backend().buffer()[(0, 0)];
+    assert_eq!(corner.fg, ratatui::style::Color::Rgb(0xa9, 0x8c, 0xf0));
+    let title = &terminal.backend().buffer()[(2, 0)];
+    assert_eq!(title.symbol(), "E");
+    assert_eq!(title.fg, ratatui::style::Color::Rgb(0xa9, 0x8c, 0xf0));
+
+    // Retyped as another colour: the frame follows before anything is saved.
+    for _ in 0..8 {
+        press(&mut form, KeyCode::Tab);
+    }
+    for _ in 0.."violet".len() {
+        press(&mut form, KeyCode::Backspace);
+    }
+    for c in "#ff8800".chars() {
+        press(&mut form, KeyCode::Char(c));
+    }
+    let terminal = render(&form, 60, 17);
+    let corner = &terminal.backend().buffer()[(0, 0)];
+    assert_eq!(corner.fg, ratatui::style::Color::Rgb(0xff, 0x88, 0x00));
+}
+
+#[test]
+fn a_project_without_a_colour_keeps_the_plain_frame() {
+    let terminal = render(&form(), 60, 11);
+    let corner = &terminal.backend().buffer()[(0, 0)];
+    assert_eq!(corner.fg, ratatui::style::Color::Reset);
+}
