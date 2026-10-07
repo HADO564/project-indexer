@@ -12,9 +12,9 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 - [x] Stays in this workspace as `crates/cli`, not a separate repository (spec → *Decisions locked*, 1)
 - [x] Versioned and released independently: `0.1.0`, [`crates/cli/CHANGELOG.md`](../../crates/cli/CHANGELOG.md), `cli-v*` tags (`CONTRIBUTING.md` → *Versioning and releases*)
 - [x] Every crate is `publish = false`
-- [x] Binary named `indexer` — a placeholder, set in one place (`[[bin]]` in `crates/cli/Cargo.toml`)
+- [x] Binary named in one place (`[[bin]]` in `crates/cli/Cargo.toml`) — `indexer` as a placeholder until the name was chosen
 - [x] Docs split per product: this checklist and the CLI roadmap, plus the crate's README and changelog
-- [ ] Choose the final binary name
+- [x] Choose the final binary name — **Dexily**, decided 2026-10-07: the command is `dexily`. The crates keep their names (`indexer-core`, `indexer-cli`), as do the app, its bundle id and the database path
 
 ## 1. Foundations
 
@@ -27,7 +27,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 
 ## 2. First slice
 
-- [x] `indexer list` prints real rows from the real database — a project added in the GUI appears in `indexer list` and `list --json` with no restart (2026-09-14)
+- [x] `dexily list` prints real rows from the real database — a project added in the GUI appears in `dexily list` and `list --json` with no restart (2026-09-14)
 
 ## 3. Plain subcommands
 
@@ -57,8 +57,8 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
   - [x] Print a short id in the table, so the several-matches list can be copied from by id as well as by `parent/folder`. An ID column third, after NAME and DIRECTORY — the identity columns grouped, with TRACKERS and LAST OPENED as the facts after them. It prints `SHORT_ID_LEN` characters read from core, not a literal 8, so the table can never show an id `show` would refuse
   - [x] `list --view <set>` — `all`, `favorites`, `binned`, onto core's `list`/`list_favorites`/`list_deleted`. One flag with a value, not two booleans: the sets are alternatives, and `views.ts` already models them as one `View` with groups as a further case carrying an id. Favourite and binned are independent flags on a project, not groups, so binning a favourite keeps the flag and only the views disagree about showing it. `Outcome::Projects` carries the view so an empty one says which emptiness it is. `ungrouped` deliberately left out: the only view with no core method behind it, and inventing its rule CLI-side is what the `views.ts` migration exists to prevent
   - [ ] **`find <query>` — the GUI's search** (decided 2026-10-02). Its own command, beside `list` rather than a flag on it: `list [query]` keeps finding projects by name or path with the ranking `show`, `open` and `edit` share, and `find` searches everything the GUI's search bar does — free text over the name, any part of the directory, tags and property values, or `name: value` for one property (`client: acme`). Core already has it, `domain::views::matches_query`, the function the app calls, so the CLI and the GUI cannot drift apart. Same table and `--json` shape as `list`, and the same `--view`, `--sort` / `-r` and `--tracker` flags
-  - [ ] *Later:* `list --pick` — choose a project from the table, filtering as you type, and print only the choice to stdout so it composes: `indexer open "$(indexer list --pick)"`. The third caller of the shared picker (`ROADMAP.md` → *Interactive picking*)
-  - [ ] *Next branch:* `...` in a path query stands for any number of folders — `show work/.../app` finds `~/work/client/acme/app` and `~/work/client/ea/app`. Several matches produce the same list as any other query. Matched by splitting the query and the path on `/` and comparing from the end, no regex. `...` rather than `*` because the shell expands `*` before `indexer` ever runs (zsh stops with `no matches found`); `*` could be accepted too for users who quote it or alias `noglob indexer`
+  - [ ] *Later:* `list --pick` — choose a project from the table, filtering as you type, and print only the choice to stdout so it composes: `dexily open "$(dexily list --pick)"`. The third caller of the shared picker (`ROADMAP.md` → *Interactive picking*)
+  - [ ] *Next branch:* `...` in a path query stands for any number of folders — `show work/.../app` finds `~/work/client/acme/app` and `~/work/client/ea/app`. Several matches produce the same list as any other query. Matched by splitting the query and the path on `/` and comparing from the end, no regex. `...` rather than `*` because the shell expands `*` before `dexily` ever runs (zsh stops with `no matches found`); `*` could be accepted too for users who quote it or alias `noglob dexily`
   - [x] `--tracker <kind>` (short `-t`) on `list` and `show`, e.g. `show app --tracker git`. A clap `ValueEnum` (`git`, `unreal`), so `--help` lists the kinds and typos are rejected — one flag with a value rather than `--git`, `--unreal`, … so a new detector adds a value, not a flag. `commands::with_tracker` keeps only projects with that tracker (`Tracker::is`) *before* `resolve`/`filter`, which don't change, so `show app -t git` finds the git `app` instead of reporting an ambiguity
   - [x] Per-tracker columns and details. The table's TRACKERS column becomes each named tracker's own columns (git: BRANCH, CHANGES; Unreal: ENGINE), in the order given, `-` where a project lacks one; `show`'s detail view gains a section per kind (git: branch, changes, remote; Unreal: project, engine, vcs). `project_table` is no longer fixed at four columns — `headers`/`middle_cells` derive them from the kinds. `kind_cells` and `kind_details` name every `Tracker` variant with no `_` arm, so a new detector fails the build until it has columns
   - [x] Several kinds at once: `-t git -t unreal` or `-t git,unreal`, keeping a project that carries any of them, de-duplicated and in the order given
@@ -73,7 +73,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
   - [x] `stopped_early` (the `MAX_DIRECTORIES` bound) is surfaced, not swallowed, so an incomplete scan never reads as "nothing more to find"
   - [x] The `ImportReport`'s `skipped` and `failures` are reported per row; a failed row never fails the whole command
   - [ ] *Later:* pick which candidates to import when stdin is a terminal, instead of all-or-nothing. Same interaction as picking from `show`'s several matches
-- [x] `add [dir]` registers a directory through `ensure_project`, defaulting to the current one — `indexer add` in a project folder is the common case, and `add .` still works. The path is canonicalised before it is stored, because the database outlives the shell that wrote to it and the GUI reads it from a different working directory; a missing path or a file is refused. Already tracked is reported, not an error: `already_tracked` in `--json`, a different sentence in human output
+- [x] `add [dir]` registers a directory through `ensure_project`, defaulting to the current one — `dexily add` in a project folder is the common case, and `add .` still works. The path is canonicalised before it is stored, because the database outlives the shell that wrote to it and the GUI reads it from a different working directory; a missing path or a file is refused. Already tracked is reported, not an error: `already_tracked` in `--json`, a different sentence in human output
 - [x] `open <query>` hands the directory to the system opener, or to the project's `open_with` app, and stamps `last_opened_at`
   - [ ] *Later:* `open <query> --with <app>` — open once with a different app, without saving it (decided 2026-10-05). Kept apart from `edit --open-with`, which only stores the app: `edit` never launches anything, so a script or an agent running it over SSH gets no window and one clear exit code. To store an app and open with it now: `edit app --open-with code && open app`
 - [x] `untrack <query>` forgets a project's metadata, leaving its directory alone
@@ -101,8 +101,8 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 - [x] `text_width` counts display columns, not `chars()` (`unicode-width`, 2026-10-07) — an emoji or a CJK project name is one char and two columns, so it under-pads its column and shifts every column to its right. Latent today, and the blocker for icons in any table (`ROADMAP.md` → *Group colour and icons in a terminal*)
 - [x] Group colour in the CLI (2026-10-07) — done differently from the plan here: not through the `Color` enum (`Color::from_swatch`, a `Rust` variant), but by painting the stored value straight as true colour. `appearance::rgb` turns a palette name into the app's swatch shade and a `#rrggbb` into its channels, and `list`, `show` and `group list` draw names in it — a project's own colour, else its group's, as its mark does in the app
 - [ ] **Theming** (asked for 2026-10-06), its own branch after the edit form. Modelled on LazyVim: named colour schemes to switch between, each one a set of named roles (focused box, label, hint, error, header, folder…), any role overridable on its own on top of the scheme — `config theme <scheme>`, `config theme set <role> <colour> [--bold/--italic/--underline]`, saved in `cli-settings.json`. Today's look stays the default, and `NO_COLOR` still drops every colour. `folder-color` / `header-color` become two of its roles. Fonts are the terminal's, not ours: a program can only choose bold, italic, underline, dim and reversed
-- [ ] `indexer icon import|list|delete` — your own SVG icons from the command line, through core's `IconStore`, the same store the GUI uses. A terminal cannot draw an SVG, so a custom icon shows by name there
-- [x] `indexer config icons nerd|emoji|off` and an icon renderer with a fallback chain (2026-10-07) — `appearance::glyph`, off by default; Font Awesome glyphs for `nerd`, emoji without variation selectors for `emoji`; `custom:*` and unknown names fall back to the folder. Used by `list`, `show` and `group list` today; the TUI sidebar will use it when the TUI exists
+- [ ] `dexily icon import|list|delete` — your own SVG icons from the command line, through core's `IconStore`, the same store the GUI uses. A terminal cannot draw an SVG, so a custom icon shows by name there
+- [x] `dexily config icons nerd|emoji|off` and an icon renderer with a fallback chain (2026-10-07) — `appearance::glyph`, off by default; Font Awesome glyphs for `nerd`, emoji without variation selectors for `emoji`; `custom:*` and unknown names fall back to the folder. Used by `list`, `show` and `group list` today; the TUI sidebar will use it when the TUI exists
 - [x] `views.ts` view, count and search logic moved into core, with the GUI switched over in the same change — briefed in [`../handoffs/2026-09-23-views-to-core.md`](../handoffs/2026-09-23-views-to-core.md). Now `core::domain::views` (`View`, `resolve_view`, `matches_query`, `is_property_query`, `property_keys`, `view_counts`), behind the `resolve_view`, `view_counts` and `property_keys` Tauri commands. The GUI's three `$derived` became effects: the search returns ids, which the page filters its sorted list by, debounced while typing and guarded against out-of-order replies. `views.ts` keeps only `viewKey`, `parseViewKey` and `viewLabel`. `View::Group` is `Group { id }`, not `Group(String)` — an internally tagged enum cannot carry an unnamed string beside `kind`
 - [ ] `scanSettings.ts` validation moved into core, likewise
 
@@ -115,7 +115,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 
 ## 5. The TUI
 
-- [ ] `indexer` with no arguments opens it
+- [ ] `dexily` with no arguments opens it
 - [ ] Panes: sidebar views with counts, the project list, project detail
 - [ ] Keybinds for movement and search
 - [ ] A `:` command line parsed into the same `Command` as the shell, defaulting to the selected project
@@ -131,11 +131,11 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 ## Later — packaging
 
 - [ ] A CLI release workflow: `-p indexer-cli` per target, none of the app's system dependencies, on `cli-v*` tags
-- [ ] **The desktop app provides `indexer` from its own binary** — brief: [`../handoffs/2026-09-15-gui-provides-indexer.md`](../handoffs/2026-09-15-gui-provides-indexer.md)
+- [ ] **The desktop app provides `dexily` from its own binary** — brief: [`../handoffs/2026-09-15-gui-provides-indexer.md`](../handoffs/2026-09-15-gui-provides-indexer.md)
   - [ ] `indexer-cli` gains a library entry point; the TUI goes behind a default-on `tui` feature
-  - [ ] The app's `main` runs the CLI when invoked as `indexer`, before Tauri starts — never opens a window
-  - [ ] "Install command-line tool" in the app: puts `indexer` on `PATH` (macOS symlink, Windows, deb/rpm), detects an existing `indexer` rather than overwriting it, and can remove it
+  - [ ] The app's `main` runs the CLI when invoked as `dexily`, before Tauri starts — never opens a window
+  - [ ] "Install command-line tool" in the app: puts `dexily` on `PATH` (macOS symlink, Windows, deb/rpm), detects an existing `dexily` rather than overwriting it, and can remove it
   - [ ] Windows console output decided and working (release builds use the `windows` subsystem)
-  - [ ] `indexer list` through the app's binary starts within a measured budget (~100 ms)
+  - [ ] `dexily list` through the app's binary starts within a measured budget (~100 ms)
 - [ ] Homebrew tap, winget manifest, Scoop bucket; Linux channels decided
 - [ ] Anything asking GitHub for "the latest release" filters by tag prefix

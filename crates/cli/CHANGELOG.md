@@ -10,11 +10,11 @@ The CLI is released independently of the desktop app, under tags of the form
 
 ## [Unreleased]
 
+Nothing released yet.
+
 ### Changed
 
 - The command is now `dexily`, its chosen name; `indexer` was a placeholder. Messages start `dexily:` too. The crate is still `indexer-cli`, so `cargo run -p indexer-cli` and `cargo install --path crates/cli` work as before, and the settings and the shared database are where they were.
-
-Nothing released yet.
 
 ### Added
 

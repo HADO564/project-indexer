@@ -59,7 +59,7 @@ cycle, separately from the app.
 
 **Command-line tool** — [full roadmap](docs/cli/ROADMAP.md)
 
-- **The observer** — `indexer git init` runs the real command and records the
+- **The observer** — `dexily git init` runs the real command and records the
   project it created. This is what makes the CLI more than a second GUI.
 - **Plain subcommands and `--json`** — most of what the GUI does, scriptable,
   with an output contract settled before the code.
