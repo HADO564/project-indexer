@@ -162,7 +162,14 @@ between them is a natural point for a pull request.
     (a name no group has, or one several groups share, is an error), and
     `--group ""` to ungroup; in the form, a choice cycled with ←/→ rather than
     typed.
-13. **Colour and icon** — `--color` (a palette name or `#rrggbb`, core's rule)
+13. ~~**Colour and icon**~~ *(done 2026-10-07. `crates/cli/src/appearance.rs`
+    checks both before core, so a typo is refused with the choices: a colour
+    against core's palette, an icon against a copy of the app's bundled list —
+    a test fails if `src/lib/icons.ts` drifts — or the app's custom icons for
+    `custom:<name>`. Both are saved lowercase, as the app does. The form's
+    colour box shows a swatch once it holds a colour; a bad value keeps the
+    form open with the reason. On a short terminal the blank lines go first,
+    so a property row and the hints stay.)* — `--color` (a palette name or `#rrggbb`, core's rule)
     and `--icon` (a bundled name or an existing `custom:<name>`; uploading a
     custom icon stays in the GUI). Text fields first; a swatch row and an icon
     list can come later.

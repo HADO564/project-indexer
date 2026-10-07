@@ -3,6 +3,7 @@
 //! No arguments opens the TUI. A known subcommand parses into a [`Command`]
 //! and runs once. Anything else is a command to run and observe.
 
+mod appearance;
 mod commands;
 mod confirm;
 mod context;

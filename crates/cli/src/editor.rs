@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use anyhow::bail;
 use indexer_core::{Group, Project, UpdateProject};
 
+use crate::appearance;
 use crate::commands::{add, Failure};
 use crate::settings;
 use crate::tui;
@@ -65,9 +66,8 @@ impl ProjectEditor for TerminalEditor {
             // advice — give one — would be wrong for it.
             let message = match kind {
                 FormKind::Compact => {
-                    "edit needs at least one field flag (--description, --add-tag, \
-                     --remove-tag, --set, --unset) when it cannot open the form in a \
-                     terminal"
+                    "edit needs at least one field flag (see `indexer edit --help`) \
+                     when it cannot open the form in a terminal"
                 }
                 FormKind::Full => {
                     "edit --full opens a form, so it needs a terminal and cannot be used \
@@ -100,7 +100,9 @@ impl ProjectEditor for TerminalEditor {
                         // A directory that does not resolve keeps the form
                         // open with the reason, rather than closing it and
                         // losing every other edit over a typo.
-                        match resolve_directory(&mut changes) {
+                        match resolve_directory(&mut changes)
+                            .and_then(|()| resolve_appearance(&mut changes))
+                        {
                             Ok(()) => break Some(changes),
                             Err(e) => state.show_error(format!("{e:#}")),
                         }
@@ -129,6 +131,19 @@ pub(crate) fn resolve_directory(changes: &mut UpdateProject) -> anyhow::Result<(
         Some(expand_home(typed, dirs::home_dir())),
         "move to",
     )?);
+    Ok(())
+}
+
+/// The colour and icon as typed, checked and spelled as they are stored —
+/// `Cyan` as `cyan` — or the reason they cannot be, which keeps the form open
+/// as a directory that does not resolve does.
+pub(crate) fn resolve_appearance(changes: &mut UpdateProject) -> anyhow::Result<()> {
+    if let Some(Some(typed)) = &changes.color {
+        changes.color = Some(appearance::color(typed)?);
+    }
+    if let Some(Some(typed)) = &changes.icon {
+        changes.icon = Some(appearance::checked_icon(typed)?);
+    }
     Ok(())
 }
 

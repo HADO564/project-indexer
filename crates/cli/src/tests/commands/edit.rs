@@ -282,6 +282,8 @@ fn full_beside_a_field_flag_is_a_usage_error() {
         ["--directory", "x"],
         ["--open-with", "x"],
         ["--group", "x"],
+        ["--color", "x"],
+        ["--icon", "x"],
     ] {
         let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", flag[0], flag[1]])
             .expect_err("--full only chooses the form");
@@ -429,10 +431,56 @@ fn another_flag_leaves_the_group_alone() {
 }
 
 #[test]
+fn full_beside_ungroup_is_a_usage_error() {
+    let err = Cli::try_parse_from(["indexer", "edit", "app", "--full", "--ungroup"])
+        .expect_err("--full only chooses the form");
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+#[test]
 fn group_and_ungroup_together_are_a_usage_error() {
     let err = Cli::try_parse_from(["indexer", "edit", "app", "--group", "Work", "--ungroup"])
         .expect_err("one or the other");
     assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+// `--color` and `--icon`.
+
+#[test]
+fn color_is_stored_lowercased_then_cleared_by_an_empty_string() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--color", "#FF8800"]).unwrap();
+    assert_eq!(saved(&ctx).color.as_deref(), Some("#ff8800"));
+    run(&ctx, &["indexer", "edit", "app", "--color", ""]).unwrap();
+    assert_eq!(saved(&ctx).color, None);
+}
+
+#[test]
+fn a_bad_color_is_refused_and_changes_nothing() {
+    let ctx = context(true, Scripted(never_asked));
+    assert!(run(
+        &ctx,
+        &["indexer", "edit", "app", "--color", "red", "--notes", "x"]
+    )
+    .is_err());
+    let project = saved(&ctx);
+    assert_eq!((project.color, project.notes), (None, None));
+}
+
+#[test]
+fn icon_is_set_then_cleared_by_an_empty_string() {
+    let ctx = context(true, Scripted(never_asked));
+    run(&ctx, &["indexer", "edit", "app", "--icon", "Rocket"]).unwrap();
+    assert_eq!(saved(&ctx).icon.as_deref(), Some("rocket"));
+    run(&ctx, &["indexer", "edit", "app", "--icon", ""]).unwrap();
+    assert_eq!(saved(&ctx).icon, None);
+}
+
+#[test]
+fn an_unknown_icon_is_refused() {
+    let ctx = context(true, Scripted(never_asked));
+    assert!(run(&ctx, &["indexer", "edit", "app", "--icon", "rockt"]).is_err());
+    assert_eq!(saved(&ctx).icon, None);
 }
 
 // `--directory`.

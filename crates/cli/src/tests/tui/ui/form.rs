@@ -229,7 +229,7 @@ fn the_full_form_says_so_in_its_title() {
 #[test]
 fn the_full_form_draws_every_field() {
     let mut form = FormState::new(&project(json!({"Client": "Acme"})), true, FormKind::Full);
-    let terminal = render(&form, 60, 15);
+    let terminal = render(&form, 60, 17);
     let lines = screen(&terminal);
     assert_eq!(
         lines[1],
@@ -260,7 +260,15 @@ fn the_full_form_draws_every_field() {
         "│   Group           Ungrouped  no groups yet · make one in │"
     );
     assert_eq!(
+        lines[9],
+        "│   Colour                                                 │"
+    );
+    assert_eq!(
         lines[10],
+        "│   Icon                                                   │"
+    );
+    assert_eq!(
+        lines[12],
         "│   Properties                                             │"
     );
 
@@ -268,13 +276,13 @@ fn the_full_form_draws_every_field() {
         press(&mut form, KeyCode::Tab);
     }
     press(&mut form, KeyCode::Char(' '));
-    let terminal = render(&form, 60, 15);
+    let terminal = render(&form, 60, 17);
     assert_eq!(
         screen(&terminal)[5],
         "│ › Favourite     [x]                                      │"
     );
     assert!(modifier_at(&terminal, 18, 5).contains(Modifier::REVERSED));
-    assert!(screen(&terminal)[13].contains("Space toggle"));
+    assert!(screen(&terminal)[15].contains("Space toggle"));
 }
 
 #[test]
@@ -310,11 +318,45 @@ fn the_focused_group_line_shows_its_choice_between_arrows() {
     for _ in 0..7 {
         press(&mut form, KeyCode::Tab);
     }
-    let terminal = render(&form, 60, 15);
+    let terminal = render(&form, 60, 17);
     assert_eq!(
         screen(&terminal)[8],
         "│ › Group         ‹ Work ›                                 │"
     );
     assert!(modifier_at(&terminal, 18, 8).contains(Modifier::REVERSED));
-    assert!(screen(&terminal)[13].contains("←→ choose"));
+    assert!(screen(&terminal)[15].contains("←→ choose"));
+}
+
+#[test]
+fn a_colour_the_palette_knows_gets_a_swatch_in_that_colour() {
+    let mut project = project(json!({}));
+    project.color = Some("cyan".into());
+    let form = FormState::new(&project, true, FormKind::Full);
+    let terminal = render(&form, 60, 17);
+    let line = &screen(&terminal)[9];
+    assert!(
+        line.contains("Colour        cyan") && line.ends_with(" ██ │"),
+        "{line}"
+    );
+    if std::env::var_os("NO_COLOR").is_none() {
+        let cell = &terminal.backend().buffer()[(57, 9)];
+        assert_eq!(cell.fg, ratatui::style::Color::Rgb(0x56, 0xc8, 0xc4));
+    }
+}
+
+#[test]
+fn a_box_that_is_not_a_colour_yet_has_no_swatch() {
+    let mut project = project(json!({}));
+    project.color = Some("cya".into());
+    let form = FormState::new(&project, true, FormKind::Full);
+    let terminal = render(&form, 60, 17);
+    assert!(!screen(&terminal)[9].contains('█'));
+}
+
+#[test]
+fn a_short_terminal_drops_the_blank_lines_before_a_property_or_the_hints() {
+    let form = FormState::new(&project(json!({"Client": "Acme"})), true, FormKind::Full);
+    let text = screen(&render(&form, 60, 16)).join("\n");
+    assert!(text.contains("Client"), "{text}");
+    assert!(text.contains("Enter save"), "{text}");
 }

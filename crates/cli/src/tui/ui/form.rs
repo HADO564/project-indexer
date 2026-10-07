@@ -2,7 +2,9 @@
 //! has focus, is all `FormState`'s; this reads it and puts it on screen.
 //!
 //! Styled with modifiers alone (bold, dim, reversed, crossed out), never
-//! colours, so it reads the same under `NO_COLOR` and on any theme.
+//! colours, so it reads the same under `NO_COLOR` and on any theme. The one
+//! colour is the project's own, as a swatch beside its colour box — data, not
+//! decoration — and `NO_COLOR` drops that too.
 //!
 //! ```text
 //! ┌ Edit app ────────────────────────────────────┐
@@ -18,11 +20,12 @@
 //! ```
 
 use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph};
 use ratatui::Frame;
 
+use crate::appearance;
 use crate::editor::FormKind;
 use crate::tui::form::{Focus, FormState, TextInput};
 
@@ -78,7 +81,12 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
     // The full form's extra lines take no height in the compact one.
     let full = state.kind() == FormKind::Full;
     let extra = Constraint::Length(u16::from(full));
-    let [name, directory, description, tags, favorite, notes, open_with, group, _, header, rows, _, hint] =
+    // The two blank lines are the first thing a short terminal gives up, so
+    // at least one property row and the hints keep their line: the full
+    // form's fields alone are twelve lines with the header and the hints.
+    let fixed = if full { 12 } else { 4 };
+    let spacer = Constraint::Length(u16::from(inner.height > fixed + 2));
+    let [name, directory, description, tags, favorite, notes, open_with, group, color, icon, _, header, rows, _, hint] =
         Layout::vertical([
             extra,
             extra,
@@ -88,10 +96,12 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
             extra,
             extra,
             extra,
-            Constraint::Length(1),
+            extra,
+            extra,
+            spacer,
             Constraint::Length(1),
             Constraint::Fill(1),
-            Constraint::Length(1),
+            spacer,
             Constraint::Length(1),
         ])
         .areas(inner);
@@ -150,6 +160,14 @@ pub fn draw(frame: &mut Frame, state: &FormState) {
             focus == Focus::OpenWith,
         );
         choice(frame, group, "Group", state, focus == Focus::Group);
+        color_field(frame, color, state, focus == Focus::Color);
+        field(
+            frame,
+            icon,
+            "Icon",
+            state.icon_input(),
+            focus == Focus::Icon,
+        );
     }
     properties(frame, header, rows, state);
     hint_line(frame, hint, state);
@@ -188,6 +206,22 @@ fn checkbox(frame: &mut Frame, area: Rect, label: &str, checked: bool, focused: 
     };
     let mark = if checked { "[x]" } else { "[ ]" };
     frame.render_widget(Paragraph::new(mark).style(style), box_area);
+}
+
+/// The colour box, with a swatch of the colour typed once it is one — so a
+/// `#rrggbb` can be seen before it is saved. Nothing beside a name that is not
+/// a colour yet, or under `NO_COLOR`.
+fn color_field(frame: &mut Frame, area: Rect, state: &FormState, focused: bool) {
+    let [input_area, swatch_area] =
+        Layout::horizontal([Constraint::Fill(1), Constraint::Length(3)]).areas(area);
+    field(frame, input_area, "Colour", state.color_input(), focused);
+    let typed = state.color_input().value().trim().to_lowercase();
+    if let Some((r, g, b)) = appearance::rgb(&typed) {
+        if std::env::var_os("NO_COLOR").is_none() {
+            let swatch = Span::styled(" ██", Style::new().fg(Color::Rgb(r, g, b)));
+            frame.render_widget(Paragraph::new(swatch), swatch_area);
+        }
+    }
 }
 
 /// The group line: the choice between ‹ › while focused, so ←/→ read as the

@@ -136,6 +136,10 @@ pub enum Focus {
     OpenWith,
     /// The group choice, in the full form only: picked with ←/→, not typed.
     Group,
+    /// The project's own colour, in the full form only.
+    Color,
+    /// The project's own icon, in the full form only.
+    Icon,
     Name(usize),
     Value(usize),
 }
@@ -174,6 +178,11 @@ pub struct FormState {
     /// than a place in `groups`, so a group deleted elsewhere while the form
     /// is open is still "no change" until the user picks another.
     group: Option<String>,
+    /// A palette name or `#rrggbb`, as typed; empty means none. Sent as typed,
+    /// for `TerminalEditor` to check, as the directory is.
+    color: TextInput,
+    /// A bundled icon's name or `custom:<name>`, as typed; empty means none.
+    icon: TextInput,
     rows: Vec<PropertyRow>,
 
     // The form's own state.
@@ -217,6 +226,8 @@ impl FormState {
             notes: TextInput::new(project.notes.as_deref().unwrap_or_default()),
             open_with: TextInput::new(project.open_with.as_deref().unwrap_or_default()),
             group: project.group_id.clone(),
+            color: TextInput::new(project.color.as_deref().unwrap_or_default()),
+            icon: TextInput::new(project.icon.as_deref().unwrap_or_default()),
             groups: Vec::new(),
             pending_delete: None,
             error: None,
@@ -291,6 +302,14 @@ impl FormState {
         }
     }
 
+    pub fn color_input(&self) -> &TextInput {
+        &self.color
+    }
+
+    pub fn icon_input(&self) -> &TextInput {
+        &self.icon
+    }
+
     /// Whether there is any group to pick; with none, ←/→ have nothing to do.
     pub fn has_groups(&self) -> bool {
         !self.groups.is_empty()
@@ -324,7 +343,14 @@ impl FormState {
         }
         order.extend([Focus::Description, Focus::Tags]);
         if full {
-            order.extend([Focus::Favorite, Focus::Notes, Focus::OpenWith, Focus::Group]);
+            order.extend([
+                Focus::Favorite,
+                Focus::Notes,
+                Focus::OpenWith,
+                Focus::Group,
+                Focus::Color,
+                Focus::Icon,
+            ]);
         }
         for row in 0..self.rows.len() {
             order.push(Focus::Name(row));
@@ -411,6 +437,8 @@ impl FormState {
             Focus::Name(i) => Some(&mut self.rows[i].name),
             Focus::Value(i) => Some(&mut self.rows[i].value),
             Focus::OpenWith => Some(&mut self.open_with),
+            Focus::Color => Some(&mut self.color),
+            Focus::Icon => Some(&mut self.icon),
         }
     }
 
@@ -641,6 +669,24 @@ impl FormState {
             None
         };
 
+        // Trimmed, and compared ignoring case, as both are saved lowercased: `Cyan` over a stored `cyan` is no change. Anything else
+        // goes as typed, for `TerminalEditor` to check against the palette
+        // and the icons before saving.
+        let color = cleared_or_typed(
+            self.color.value(),
+            self.original.color.as_deref(),
+            |typed, stored| typed.eq_ignore_ascii_case(stored),
+        );
+        // Icons too: bundled and custom names alike are stored lowercase.
+        let icon = cleared_or_typed(
+            self.icon.value(),
+            self.original.icon.as_deref(),
+            |typed, stored| typed.eq_ignore_ascii_case(stored),
+        );
+
+        // Every field by name, with no `..Default::default()`: a field core
+        // adds to `UpdateProject` will not compile here until the form
+        // decides what to do with it.
         UpdateProject {
             name,
             directory,
@@ -650,8 +696,9 @@ impl FormState {
             notes,
             open_with,
             group_id,
+            color,
+            icon,
             properties,
-            ..Default::default()
         }
     }
 
@@ -730,6 +777,23 @@ impl FormState {
             Focus::Value(i) if i > r => Focus::Value(i - 1),
             other => other,
         };
+    }
+}
+
+/// A trimmed box as a box in a box: `None` when it still says what was
+/// stored (`same` decides), `Some(None)` when emptied, else the text.
+fn cleared_or_typed(
+    typed: &str,
+    stored: Option<&str>,
+    same: fn(&str, &str) -> bool,
+) -> Option<Option<String>> {
+    let typed = typed.trim();
+    if same(typed, stored.unwrap_or_default()) {
+        None
+    } else if typed.is_empty() {
+        Some(None)
+    } else {
+        Some(Some(typed.to_string()))
     }
 }
 

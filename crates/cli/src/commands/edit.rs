@@ -17,6 +17,7 @@ use indexer_core::domain::UpdateProject;
 use std::collections::BTreeMap;
 
 use super::{find_one, Outcome, TrackerKind};
+use crate::appearance;
 use crate::context::Context;
 use crate::editor::FormKind;
 use std::path::PathBuf;
@@ -94,6 +95,16 @@ pub struct EditArgs {
     /// Take the project out of its group.
     #[arg(long, group = "change", conflicts_with = "group")]
     pub ungroup: bool,
+
+    /// The project's own colour: cyan, gold, amber, rust, violet, green, blue
+    /// or pink, or #rrggbb. An empty string clears it.
+    #[arg(long, group = "change")]
+    pub color: Option<String>,
+
+    /// The project's own icon: a bundled one (folder, rocket, code, …) or
+    /// custom:<name> for one added in the app. An empty string clears it.
+    #[arg(long, group = "change")]
+    pub icon: Option<String>,
 }
 
 pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
@@ -135,6 +146,12 @@ pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
             properties: properties(&project.properties, args.set, &args.unset),
             open_with: cleared_if_blank(args.open_with),
             group_id: group_id(ctx, args.group, args.ungroup)?,
+            color: args.color.as_deref().map(appearance::color).transpose()?,
+            icon: args
+                .icon
+                .as_deref()
+                .map(appearance::checked_icon)
+                .transpose()?,
             ..Default::default()
         }
     };
@@ -170,6 +187,8 @@ fn has_field_flag(args: &EditArgs) -> bool {
         || args.open_with.is_some()
         || args.group.is_some()
         || args.ungroup
+        || args.color.is_some()
+        || args.icon.is_some()
 }
 
 /// A box in a box, as `UpdateProject.notes` takes it: the outer one says

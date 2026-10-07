@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use indexer_core::UpdateProject;
 
-use crate::editor::{expand_home, resolve_directory};
+use crate::editor::{expand_home, resolve_appearance, resolve_directory};
 
 fn typed(directory: &str) -> UpdateProject {
     UpdateProject {
@@ -70,4 +70,34 @@ fn a_missing_folder_is_refused_as_a_move() {
     let mut changes = typed(&dir.path().join("nope").to_string_lossy());
     let error = format!("{:#}", resolve_directory(&mut changes).unwrap_err());
     assert!(error.starts_with("cannot move to "), "{error}");
+}
+
+// Colour and icon, checked on save so a bad one keeps the form open.
+
+#[test]
+fn appearance_is_spelled_as_stored_and_clears_pass_through() {
+    let mut changes = UpdateProject {
+        color: Some(Some("Cyan".into())),
+        icon: Some(None),
+        ..Default::default()
+    };
+    resolve_appearance(&mut changes).unwrap();
+    assert_eq!(changes.color, Some(Some("cyan".into())));
+    assert_eq!(changes.icon, Some(None));
+}
+
+#[test]
+fn a_bad_colour_or_icon_is_the_reason_not_saved() {
+    let mut changes = UpdateProject {
+        color: Some(Some("red".into())),
+        ..Default::default()
+    };
+    let err = resolve_appearance(&mut changes).unwrap_err().to_string();
+    assert!(err.starts_with("not a colour: \"red\""), "{err}");
+
+    let mut changes = UpdateProject {
+        icon: Some(Some("rockt".into())),
+        ..Default::default()
+    };
+    assert!(resolve_appearance(&mut changes).is_err());
 }

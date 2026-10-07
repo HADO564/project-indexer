@@ -834,8 +834,9 @@ fn esc_during_the_delete_question_only_answers_no() {
 }
 
 // The full form. Its order: name, directory, description, tags, the
-// favourite checkbox, notes, open with, the group, then the rows — so from
-// the name, the checkbox is four Tabs away and the first row eight.
+// favourite checkbox, notes, open with, the group, colour, icon, then the
+// rows — so from the name, the checkbox is four Tabs away and the first row
+// ten.
 
 fn full_form(favorite: bool, rows: bool, wrap: bool) -> FormState {
     let mut project = project("A tool", &["Rust"]);
@@ -855,7 +856,9 @@ const TO_CHECKBOX: usize = 4;
 const TO_NOTES: usize = 5;
 const TO_OPEN_WITH: usize = 6;
 const TO_GROUP: usize = 7;
-const TO_FIRST_ROW: usize = 8;
+const TO_COLOR: usize = 8;
+const TO_ICON: usize = 9;
+const TO_FIRST_ROW: usize = 10;
 
 #[test]
 fn the_full_form_starts_on_the_name() {
@@ -965,11 +968,11 @@ fn tab_from_the_checkbox_reaches_the_notes_then_open_with_then_the_first_row() {
 }
 
 #[test]
-fn shift_tab_from_the_first_row_reaches_the_group() {
+fn shift_tab_from_the_first_row_reaches_the_icon() {
     let mut form = full_form(false, true, true);
     tab(&mut form, TO_FIRST_ROW);
     shift_tab(&mut form, 1);
-    assert_eq!(form.focus(), Focus::Group);
+    assert_eq!(form.focus(), Focus::Icon);
 }
 
 #[test]
@@ -982,20 +985,20 @@ fn shift_tab_from_the_checkbox_reaches_the_tags() {
 }
 
 #[test]
-fn with_no_rows_the_group_is_last_wrapping_both_ways() {
+fn with_no_rows_the_icon_is_last_wrapping_both_ways() {
     let mut form = full_form(false, false, true);
-    shift_tab(&mut form, 1); // the name wraps back to the group
-    assert_eq!(form.focus(), Focus::Group);
+    shift_tab(&mut form, 1); // the name wraps back to the icon
+    assert_eq!(form.focus(), Focus::Icon);
     tab(&mut form, 1); // and forward to the name
     type_text(&mut form, "2");
     assert_eq!(form.changes().name.as_deref(), Some("app2"));
 }
 
 #[test]
-fn without_wrap_tab_stays_on_the_group_when_it_is_last() {
+fn without_wrap_tab_stays_on_the_icon_when_it_is_last() {
     let mut form = full_form(false, false, false);
-    tab(&mut form, 12);
-    assert_eq!(form.focus(), Focus::Group);
+    tab(&mut form, 15);
+    assert_eq!(form.focus(), Focus::Icon);
 }
 
 #[test]
@@ -1297,4 +1300,70 @@ fn left_and_right_still_move_the_cursor_in_a_text_box() {
     arrow(&mut form, KeyCode::Left, 2);
     type_text(&mut form, "o");
     assert_eq!(form.changes().open_with, Some(Some("code".into())));
+}
+
+// Colour and icon: text boxes, trimmed, sent as typed for `TerminalEditor` to
+// check.
+
+fn with_look(color: Option<&str>, icon: Option<&str>) -> FormState {
+    let mut project = project("A tool", &["Rust"]);
+    project.color = color.map(str::to_string);
+    project.icon = icon.map(str::to_string);
+    FormState::new(&project, true, FormKind::Full)
+}
+
+#[test]
+fn colour_and_icon_load_into_their_boxes_and_untouched_are_no_change() {
+    let form = with_look(Some("cyan"), Some("rocket"));
+    assert_eq!(form.color_input().value(), "cyan");
+    assert_eq!(form.icon_input().value(), "rocket");
+    let changes = form.changes();
+    assert_eq!((changes.color, changes.icon), (None, None));
+}
+
+#[test]
+fn a_colour_is_sent_trimmed_as_typed() {
+    let mut form = with_look(None, None);
+    tab(&mut form, TO_COLOR);
+    type_text(&mut form, " #FF8800 ");
+    assert_eq!(form.changes().color, Some(Some("#FF8800".into())));
+}
+
+#[test]
+fn the_stored_colour_retyped_in_another_case_is_no_change() {
+    let mut form = with_look(Some("cyan"), None);
+    tab(&mut form, TO_COLOR);
+    clear(&mut form);
+    type_text(&mut form, "Cyan");
+    assert_eq!(form.changes().color, None);
+}
+
+#[test]
+fn emptying_the_colour_and_icon_clears_them() {
+    let mut form = with_look(Some("cyan"), Some("rocket"));
+    tab(&mut form, TO_COLOR);
+    clear(&mut form);
+    tab(&mut form, TO_ICON - TO_COLOR);
+    clear(&mut form);
+    let changes = form.changes();
+    assert_eq!(changes.color, Some(None));
+    assert_eq!(changes.icon, Some(None));
+}
+
+#[test]
+fn an_icon_is_sent_trimmed_as_typed() {
+    let mut form = with_look(None, Some("rocket"));
+    tab(&mut form, TO_ICON);
+    clear(&mut form);
+    type_text(&mut form, " custom:logo ");
+    assert_eq!(form.changes().icon, Some(Some("custom:logo".into())));
+}
+
+#[test]
+fn the_stored_icon_retyped_in_another_case_is_no_change() {
+    let mut form = with_look(None, Some("rocket"));
+    tab(&mut form, TO_ICON);
+    clear(&mut form);
+    type_text(&mut form, "Rocket");
+    assert_eq!(form.changes().icon, None);
 }
