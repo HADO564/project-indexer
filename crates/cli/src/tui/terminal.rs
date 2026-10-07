@@ -1,7 +1,7 @@
 //! The terminal the `edit` form draws on: raw mode, so every key reaches
 //! the form as it is pressed, and the alternate screen, so the user's
 //! scrollback is untouched when it closes. On stderr, never stdout, which is
-//! for data: `indexer edit app > out` still shows the form.
+//! for data: `dexily edit app > out` still shows the form.
 //!
 //! Putting the terminal back is not optional — a program that exits in raw
 //! mode leaves a shell with no echo and a dead Enter key — so it happens in

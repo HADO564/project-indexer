@@ -8,9 +8,9 @@ description = "Command-line tool and TUI for Project Indexer"
 license-file = "../../LICENSE"
 publish = false
 
-# `indexer` is a placeholder name.
+# The command is `dexily` (decided 2026-10-07); the crate keeps its name.
 [[bin]]
-name = "indexer"
+name = "dexily"
 path = "src/main.rs"
 
 [dependencies]

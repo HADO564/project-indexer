@@ -106,14 +106,14 @@ fn parsed_list_tracker(argv: &[&str]) -> Vec<TrackerKind> {
 #[test]
 fn the_flag_parses_long_and_short_on_list() {
     assert_eq!(
-        parsed_list_tracker(&["indexer", "list", "--tracker", "git"]),
+        parsed_list_tracker(&["dexily", "list", "--tracker", "git"]),
         [TrackerKind::Git]
     );
     assert_eq!(
-        parsed_list_tracker(&["indexer", "list", "-t", "unreal"]),
+        parsed_list_tracker(&["dexily", "list", "-t", "unreal"]),
         [TrackerKind::Unreal]
     );
-    assert!(parsed_list_tracker(&["indexer", "list"]).is_empty());
+    assert!(parsed_list_tracker(&["dexily", "list"]).is_empty());
 }
 
 #[test]
@@ -121,18 +121,18 @@ fn several_kinds_come_from_a_comma_list_or_a_repeated_flag() {
     let expected = [TrackerKind::Git, TrackerKind::Unreal];
 
     assert_eq!(
-        parsed_list_tracker(&["indexer", "list", "-t", "git,unreal"]),
+        parsed_list_tracker(&["dexily", "list", "-t", "git,unreal"]),
         expected
     );
     assert_eq!(
-        parsed_list_tracker(&["indexer", "list", "-t", "git", "-t", "unreal"]),
+        parsed_list_tracker(&["dexily", "list", "-t", "git", "-t", "unreal"]),
         expected
     );
 }
 
 #[test]
 fn a_kind_no_detector_reports_is_rejected() {
-    let parsed = Cli::try_parse_from(["indexer", "list", "--tracker", "godot"]);
+    let parsed = Cli::try_parse_from(["dexily", "list", "--tracker", "godot"]);
 
     assert!(parsed.is_err(), "an unknown kind should not parse");
 }

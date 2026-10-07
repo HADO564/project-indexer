@@ -1,4 +1,4 @@
-//! The terminal UI. So far only the `edit` form (`form`): a bare `indexer edit`
+//! The terminal UI. So far only the `edit` form (`form`): a bare `dexily edit`
 //! opens it, and saving it sends the changes the way the flags would. The TUI
 //! proper — panes, vim-style keybinds, and a `:` command line that parses into
 //! the same `Command` the shell uses — is still to come.
@@ -20,7 +20,7 @@ use self::terminal::FormTerminal;
 use crate::context::Context;
 
 pub fn run(_ctx: &Context) -> anyhow::Result<()> {
-    bail!("the TUI is not implemented yet; see `indexer --help` for commands")
+    bail!("the TUI is not implemented yet; see `dexily --help` for commands")
 }
 
 /// Runs the edit form until the user saves or cancels: draw, wait for an

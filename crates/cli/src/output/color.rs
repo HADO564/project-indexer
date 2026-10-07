@@ -1,5 +1,5 @@
 //! Colours the user can pick for highlighted text, such as the project folder
-//! in `indexer list`.
+//! in `dexily list`.
 //!
 //! Two families:
 //!

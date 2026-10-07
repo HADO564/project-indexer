@@ -1,7 +1,7 @@
 # indexer-cli
 
 The command-line tool for Project Indexer. It records projects as you create them
-(`indexer git init` runs the real `git init`, then registers the repository),
+(`dexily git init` runs the real `git init`, then registers the repository),
 exposes most of what the desktop app does as commands, and offers a
 keyboard-driven TUI. It opens the same database as the app, so the two stay in
 step with no pairing — and it works without the app installed.
@@ -11,31 +11,31 @@ step with no pairing — and it works without the app installed.
 `config` all run against the app's database, and a bare `edit` in a terminal
 opens a full-screen form (`edit --full` for every field); the observer and
 the TUI still return "not implemented". `group` lists, creates, changes and
-deletes groups; a project joins one with `edit --group`. The binary name
-`indexer` is a placeholder.
+deletes groups; a project joins one with `edit --group`. The command is
+`dexily`.
 
 ```
-indexer list                     every project, as a table (--view, -s name|last-opened, -r to flip)
-indexer show <query>             one project — exact name, id, parent/folder, or part of a name
-indexer add [dir]                track a directory, or the current one
-indexer open <query>             open a project in its application
-indexer untrack <query>          forget a project, leaving its files alone (asks first; --yes)
-indexer favorite <query>         mark a project as a favourite; unfavorite clears it
-indexer edit <query> --name, --directory, --description, --notes, --add-tag/--remove-tag,
+dexily list                     every project, as a table (--view, -s name|last-opened, -r to flip)
+dexily show <query>             one project — exact name, id, parent/folder, or part of a name
+dexily add [dir]                track a directory, or the current one
+dexily open <query>             open a project in its application
+dexily untrack <query>          forget a project, leaving its files alone (asks first; --yes)
+dexily favorite <query>         mark a project as a favourite; unfavorite clears it
+dexily edit <query> --name, --directory, --description, --notes, --add-tag/--remove-tag,
                      --set k=v/--unset k, --open-with, --group/--ungroup, --color, --icon   change a project's fields
-indexer edit <query>             with no flags, in a terminal: a form for the description, tags and properties
-indexer edit <query> --full      the same form with every field, as the app's edit view has them
-indexer restore <query>          bring a project's record back from the bin
-indexer purge <query>            delete a binned project's record for good (asks first; --yes)
-indexer scan <dir>               find projects under a folder; --import registers them
-indexer config folder-color ...  the folder colour in that table; header-color likewise
-indexer group list               the groups, with their colour, icon and project count
-indexer group create <name>      a new group (--color, --icon; cyan and briefcase by default)
-indexer group edit <group>       rename it (--name) or change its --color or --icon
-indexer group delete <group>     delete a group, keeping its projects ungrouped (asks first; --yes)
-indexer config form-wrap on|off  whether Tab wraps around at the ends of edit's form
-indexer config icons nerd|emoji|off   icons before names in tables (off by default)
-indexer <anything> --json        {"schema": 1, "data": …} on stdout, or {"schema": 1, "error": …} on stderr
+dexily edit <query>             with no flags, in a terminal: a form for the description, tags and properties
+dexily edit <query> --full      the same form with every field, as the app's edit view has them
+dexily restore <query>          bring a project's record back from the bin
+dexily purge <query>            delete a binned project's record for good (asks first; --yes)
+dexily scan <dir>               find projects under a folder; --import registers them
+dexily config folder-color ...  the folder colour in that table; header-color likewise
+dexily group list               the groups, with their colour, icon and project count
+dexily group create <name>      a new group (--color, --icon; cyan and briefcase by default)
+dexily group edit <group>       rename it (--name) or change its --color or --icon
+dexily group delete <group>     delete a group, keeping its projects ungrouped (asks first; --yes)
+dexily config form-wrap on|off  whether Tab wraps around at the ends of edit's form
+dexily config icons nerd|emoji|off   icons before names in tables (off by default)
+dexily <anything> --json        {"schema": 1, "data": …} on stdout, or {"schema": 1, "error": …} on stderr
 ```
 
 ```

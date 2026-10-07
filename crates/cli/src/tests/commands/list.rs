@@ -18,7 +18,7 @@ fn parsed(argv: &[&str]) -> ListArgs {
 
 #[test]
 fn the_query_is_positional_and_the_rest_are_flags() {
-    let args = parsed(&["indexer", "list"]);
+    let args = parsed(&["dexily", "list"]);
     assert_eq!(args.query, None);
     assert_eq!(
         args.sort,
@@ -28,7 +28,7 @@ fn the_query_is_positional_and_the_rest_are_flags() {
     assert!(!args.reverse);
     assert!(args.tracker.is_empty());
 
-    let args = parsed(&["indexer", "list", "app", "-s", "last-opened", "-r"]);
+    let args = parsed(&["dexily", "list", "app", "-s", "last-opened", "-r"]);
     assert_eq!(args.query.as_deref(), Some("app"));
     assert_eq!(args.sort, SortByKind::LastOpened);
     assert!(args.reverse);
@@ -38,7 +38,7 @@ fn the_query_is_positional_and_the_rest_are_flags() {
 fn an_unknown_sort_field_is_rejected() {
     // `value_enum` is what makes this a usage error listing the valid values,
     // rather than a silent fallback to the default.
-    assert!(Cli::try_parse_from(["indexer", "list", "--sort", "size"]).is_err());
+    assert!(Cli::try_parse_from(["dexily", "list", "--sort", "size"]).is_err());
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn the_spelling_display_prints_is_the_one_clap_parses() {
     // a value the command refuses.
     for kind in [SortByKind::Name, SortByKind::LastOpened] {
         let spelled = kind.to_string();
-        let args = parsed(&["indexer", "list", "--sort", &spelled]);
+        let args = parsed(&["dexily", "list", "--sort", &spelled]);
         assert_eq!(args.sort, kind, "`{spelled}` should parse back to {kind:?}");
     }
 }
@@ -85,7 +85,7 @@ fn reverse_flips_each_field_from_its_own_natural_order() {
 
 #[test]
 fn tracker_still_parses_alongside_the_sort_flags() {
-    let args = parsed(&["indexer", "list", "-t", "git,unreal", "-s", "last-opened"]);
+    let args = parsed(&["dexily", "list", "-t", "git,unreal", "-s", "last-opened"]);
 
     assert_eq!(args.tracker, vec![TrackerKind::Git, TrackerKind::Unreal]);
     assert_eq!(args.sort, SortByKind::LastOpened);
@@ -93,20 +93,20 @@ fn tracker_still_parses_alongside_the_sort_flags() {
 
 #[test]
 fn the_view_defaults_to_all_and_names_the_other_sets() {
-    assert_eq!(parsed(&["indexer", "list"]).view, View::All);
+    assert_eq!(parsed(&["dexily", "list"]).view, View::All);
     assert_eq!(
-        parsed(&["indexer", "list", "--view", "favorites"]).view,
+        parsed(&["dexily", "list", "--view", "favorites"]).view,
         View::Favorites
     );
     assert_eq!(
-        parsed(&["indexer", "list", "--view", "binned"]).view,
+        parsed(&["dexily", "list", "--view", "binned"]).view,
         View::Binned
     );
 }
 
 #[test]
 fn an_unknown_view_is_rejected() {
-    assert!(Cli::try_parse_from(["indexer", "list", "--view", "archived"]).is_err());
+    assert!(Cli::try_parse_from(["dexily", "list", "--view", "archived"]).is_err());
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn the_view_spelling_display_prints_is_the_one_clap_parses() {
     // a disagreement would advertise a value the command refuses.
     for view in [View::All, View::Favorites, View::Binned] {
         let spelled = view.to_string();
-        let args = parsed(&["indexer", "list", "--view", &spelled]);
+        let args = parsed(&["dexily", "list", "--view", &spelled]);
         assert_eq!(args.view, view, "`{spelled}` should parse back to {view:?}");
     }
 }
@@ -125,7 +125,7 @@ fn a_view_composes_with_the_other_flags() {
     // The view picks the source; tracker and query narrow whatever came back,
     // so they are not alternatives to each other.
     let args = parsed(&[
-        "indexer",
+        "dexily",
         "list",
         "app",
         "--view",
