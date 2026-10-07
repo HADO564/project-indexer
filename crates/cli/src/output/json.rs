@@ -10,7 +10,7 @@ use std::io::Write;
 
 use chrono::{DateTime, Utc};
 use indexer_core::domain::Tracker;
-use indexer_core::Project;
+use indexer_core::{Group, Project};
 use serde::ser::{Error as _, SerializeMap};
 use serde::{Serialize, Serializer};
 
@@ -42,6 +42,37 @@ struct ErrorJson<'a> {
     /// The candidates, best first — only for `ambiguous`.
     #[serde(skip_serializing_if = "Option::is_none")]
     matches: Option<Vec<ProjectJson<'a>>>,
+}
+
+/// A group as `--json` shows it, spelled out for the same reason as
+/// [`ProjectJson`]. `projects` — how many live projects it holds — only in
+/// `group list`.
+#[derive(Serialize)]
+pub struct GroupJson<'a> {
+    id: &'a str,
+    name: &'a str,
+    color: &'a str,
+    icon: &'a str,
+    position: i64,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    projects: Option<usize>,
+}
+
+impl<'a> GroupJson<'a> {
+    fn of(group: &'a Group, projects: Option<usize>) -> Self {
+        Self {
+            id: &group.id,
+            name: &group.name,
+            color: &group.color,
+            icon: &group.icon,
+            position: group.position,
+            created_at: group.created_at,
+            updated_at: group.updated_at,
+            projects,
+        }
+    }
 }
 
 /// A project as `--json` shows it.
@@ -148,6 +179,23 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
         // every tracker in full.
         Outcome::Project { project, .. } => emit(out, &ProjectJson::from(project.as_ref())),
         Outcome::FormWrap { wrap } => emit(out, &serde_json::json!({ "form_wrap": wrap })),
+        Outcome::Icons { style } => emit(out, &serde_json::json!({ "icons": style })),
+        Outcome::Groups { groups } => {
+            let groups: Vec<GroupJson> = groups
+                .iter()
+                .map(|(group, count)| GroupJson::of(group, Some(*count)))
+                .collect();
+            emit(out, &groups)
+        }
+        Outcome::GroupSaved { group, .. } => emit(out, &GroupJson::of(group, None)),
+        // The group as it was, and how many projects it left ungrouped.
+        Outcome::GroupDeleted { group, members } => emit(
+            out,
+            &serde_json::json!({
+                "group": GroupJson::of(group, None),
+                "ungrouped": members,
+            }),
+        ),
         Outcome::Color { setting, color } => {
             let mut data = serde_json::Map::new();
             data.insert(setting.key().to_string(), serde_json::to_value(color)?);

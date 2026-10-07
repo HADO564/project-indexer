@@ -6,13 +6,14 @@ use std::path::Path;
 use indexer_core::domain::matching::SHORT_ID_LEN;
 use indexer_core::domain::scan::Candidate;
 use indexer_core::domain::Project;
-use indexer_core::Tracker;
+use indexer_core::{Group, Tracker};
 
+use crate::appearance::{self, IconStyle};
 use crate::commands::{Outcome, TrackerKind, View};
 use crate::output::color::Color;
-use crate::output::Colors;
+use crate::output::Look;
 
-pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow::Result<()> {
+pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Result<()> {
     let terminal = std::io::stdout().is_terminal();
     let color = terminal && std::env::var_os("NO_COLOR").is_none();
     match outcome {
@@ -21,6 +22,7 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
             query,
             tracker,
             view,
+            groups,
         } => {
             if projects.is_empty() {
                 // stderr, so a script reading stdout sees no rows either way.
@@ -40,23 +42,40 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
             }
             let projects: Vec<&Project> = projects.iter().collect();
             let style = TableStyle {
-                folder_color: color.then_some(colors.folder),
-                header_color: color.then_some(colors.header),
+                folder_color: color.then_some(look.folder),
+                header_color: color.then_some(look.header),
                 width: if terminal { terminal_width() } else { None },
                 tracker: tracker.clone(),
+                marks: color,
+                icons: look.icons,
             };
-            write!(out, "{}", project_table(&projects, &style))?;
+            write!(out, "{}", project_table(&projects, groups, &style))?;
         }
         Outcome::Project {
             project,
             tracker,
             group,
         } => {
-            writeln!(out, "{}", project.name)?;
+            // The name as its row in `list` shows it: its icon, in its colour
+            // or else its group's.
+            let rgb = appearance::mark_rgb(
+                project.color.as_deref(),
+                group.as_ref().map(|g| g.color.as_str()),
+            );
+            let title = marked(&project.name, project.icon.as_deref(), look.icons);
+            writeln!(out, "{}", paint_rgb(color.then_some(rgb).flatten(), &title))?;
             writeln!(out, "  directory  {}", project.directory)?;
             writeln!(out, "  id         {}", project.id)?;
             if let Some(group) = group {
-                writeln!(out, "  group      {}", group.name)?;
+                let name = marked(&group.name, Some(&group.icon), look.icons);
+                let rgb = color.then(|| appearance::rgb(&group.color)).flatten();
+                writeln!(out, "  group      {}", paint_rgb(rgb, &name))?;
+            }
+            if let Some(project_color) = &project.color {
+                writeln!(out, "  color      {project_color}")?;
+            }
+            if let Some(icon) = &project.icon {
+                writeln!(out, "  icon       {icon}")?;
             }
             for kind in tracker {
                 let details = kind_details(project, *kind);
@@ -72,6 +91,38 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
         Outcome::FormWrap { wrap } => {
             writeln!(out, "{}", if *wrap { "on" } else { "off" })?;
         }
+        Outcome::Icons { style } => {
+            writeln!(out, "{}", style.name())?;
+        }
+        Outcome::Groups { groups } => {
+            if groups.is_empty() {
+                eprintln!("indexer: no groups yet — make one with `indexer group create <name>`");
+                return Ok(());
+            }
+            let style = TableStyle {
+                header_color: color.then_some(look.header),
+                width: if terminal { terminal_width() } else { None },
+                marks: color,
+                icons: look.icons,
+                ..TableStyle::default()
+            };
+            write!(out, "{}", group_table(groups, &style))?;
+        }
+        Outcome::GroupSaved { group, created } => {
+            let verb = if *created { "created" } else { "updated" };
+            eprintln!("indexer: {verb} the group \"{}\"", group.name);
+        }
+        Outcome::GroupDeleted { group, members } => match members {
+            0 => eprintln!("indexer: deleted the group \"{}\"", group.name),
+            1 => eprintln!(
+                "indexer: deleted the group \"{}\" — its 1 project is now ungrouped",
+                group.name
+            ),
+            n => eprintln!(
+                "indexer: deleted the group \"{}\" — its {n} projects are now ungrouped",
+                group.name
+            ),
+        },
         Outcome::Color { color: chosen, .. } => {
             let name = chosen.name();
             if color {
@@ -157,10 +208,11 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, colors: Colors) -> anyhow:
                 eprintln!("indexer: no projects found under {root}");
             } else {
                 let style = TableStyle {
-                    folder_color: color.then_some(colors.folder),
-                    header_color: color.then_some(colors.header),
+                    folder_color: color.then_some(look.folder),
+                    header_color: color.then_some(look.header),
                     width: if terminal { terminal_width() } else { None },
                     tracker: Vec::new(),
+                    ..TableStyle::default()
                 };
                 write!(out, "{}", candidate_table(&report.candidates, root, &style))?;
             }
@@ -207,6 +259,10 @@ pub struct TableStyle {
     /// The tracker kinds whose columns the table shows, in order; empty for
     /// the default TRACKERS column.
     pub tracker: Vec<TrackerKind>,
+    /// Whether a project's name is drawn in its colour, or its group's.
+    pub marks: bool,
+    /// How a project's icon is drawn before its name, if at all.
+    pub icons: IconStyle,
 }
 
 /// With a known terminal width, a narrower table grows to this share of it.
@@ -351,6 +407,8 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
     }
 }
 
+/// The column drawn in a project's own colour, or its group's.
+const NAME_COLUMN: usize = 0;
 /// The one column whose text is part-coloured: `parent/` plain, the folder in
 /// the folder colour.
 const DIRECTORY_COLUMN: usize = 1;
@@ -365,21 +423,37 @@ const DIRECTORY_COLUMN: usize = 1;
 /// [`MIN_WIDTH_PERCENT`] of it, sharing the extra space between the columns,
 /// and is centred. Padding is always worked out on the plain text, so colour
 /// codes never push a column out of line.
-pub fn project_table(projects: &[&Project], style: &TableStyle) -> String {
+pub fn project_table(projects: &[&Project], groups: &[Group], style: &TableStyle) -> String {
     let rows: Vec<Row> = projects
         .iter()
-        .map(|p| Row::of(p, &style.tracker))
+        .map(|p| Row::of(p, &style.tracker, style.icons))
         .collect();
     let cells: Vec<Vec<Cell>> = rows
         .iter()
-        .map(|row| {
-            // Only the folder is coloured, and only the plain text is measured,
-            // so the colour codes never push a column out of line.
+        .zip(projects)
+        .map(|(row, project)| {
+            // The name in the project's colour, else its group's, and the
+            // folder in the folder colour. Only the plain text is measured, so
+            // the colour codes never push a column out of line.
+            let group_color = project
+                .group_id
+                .as_deref()
+                .and_then(|id| groups.iter().find(|g| g.id == id))
+                .map(|g| g.color.as_str());
+            let mark = style
+                .marks
+                .then(|| appearance::mark_rgb(project.color.as_deref(), group_color))
+                .flatten();
             row.cells()
                 .into_iter()
                 .enumerate()
                 .map(|(column, text)| {
-                    if column == DIRECTORY_COLUMN {
+                    if column == NAME_COLUMN {
+                        Cell {
+                            shown: paint_rgb(mark, &text),
+                            plain: text,
+                        }
+                    } else if column == DIRECTORY_COLUMN {
                         Cell {
                             shown: format!(
                                 "{}{}",
@@ -397,6 +471,29 @@ pub fn project_table(projects: &[&Project], style: &TableStyle) -> String {
         .collect();
 
     table(&headers(&style.tracker), cells, style)
+}
+
+/// A bordered table of groups, in the sidebar's order: each name with its
+/// icon, in its colour, then the colour and icon by name, and how many live
+/// projects it holds.
+pub fn group_table(groups: &[(Group, usize)], style: &TableStyle) -> String {
+    let rows = groups
+        .iter()
+        .map(|(group, count)| {
+            let name = marked(&group.name, Some(&group.icon), style.icons);
+            let rgb = style.marks.then(|| appearance::rgb(&group.color)).flatten();
+            vec![
+                Cell {
+                    shown: paint_rgb(rgb, &name),
+                    plain: name,
+                },
+                Cell::plain(group.color.clone()),
+                Cell::plain(group.icon.clone()),
+                Cell::plain(count.to_string()),
+            ]
+        })
+        .collect();
+    table(&["NAME", "COLOR", "ICON", "PROJECTS"], rows, style)
 }
 
 /// A bordered table of scan candidates — directory, the name it would get,
@@ -515,7 +612,7 @@ struct Row {
 }
 
 impl Row {
-    fn of(project: &Project, tracker: &[TrackerKind]) -> Self {
+    fn of(project: &Project, tracker: &[TrackerKind], icons: IconStyle) -> Self {
         let path = Path::new(&project.directory);
         let parent = path
             .parent()
@@ -537,7 +634,7 @@ impl Row {
         };
 
         Row {
-            name: project.name.clone(),
+            name: marked(&project.name, project.icon.as_deref(), icons),
             parent,
             folder,
             id,
@@ -613,6 +710,23 @@ fn stretch(widths: &mut [usize], target: usize) {
     }
 }
 
+/// `name` after its icon's glyph, as `icons` draws it: unchanged with icons
+/// off, and a project without an icon gets none, so it stays plain.
+fn marked(name: &str, icon: Option<&str>, icons: IconStyle) -> String {
+    match icon.and_then(|icon| appearance::glyph(icon, icons)) {
+        Some(glyph) => format!("{glyph} {name}"),
+        None => name.to_string(),
+    }
+}
+
+/// `text` bold in a project's or a group's own colour, then back to normal.
+fn paint_rgb(rgb: Option<(u8, u8, u8)>, text: &str) -> String {
+    match rgb {
+        Some((r, g, b)) => format!("\x1b[1;38;2;{r};{g};{b}m{text}\x1b[0m"),
+        None => text.to_string(),
+    }
+}
+
 fn paint(color: Option<Color>, text: &str) -> String {
     match color {
         Some(color) => color.paint(text),
@@ -620,7 +734,9 @@ fn paint(color: Option<Color>, text: &str) -> String {
     }
 }
 
-/// Counted in characters rather than bytes, so a non-ASCII name lines up.
+/// Counted in screen columns, not characters or bytes: an emoji or a CJK
+/// character is one character and two columns, and padding by characters
+/// would push every column after it out of line.
 fn text_width(text: &str) -> usize {
-    text.chars().count()
+    unicode_width::UnicodeWidthStr::width(text)
 }

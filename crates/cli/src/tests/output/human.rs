@@ -3,10 +3,11 @@ use indexer_core::domain::scan::Candidate;
 use indexer_core::domain::Project;
 use serde_json::json;
 
+use crate::appearance::IconStyle;
 use crate::commands::{GroupLabel, Outcome, TrackerKind};
 use crate::output::color::Color;
 use crate::output::human::{candidate_table, project_table, write, TableStyle};
-use crate::output::Colors;
+use crate::output::Look;
 
 /// A uuid-shaped id derived from the name, so the ID column shows a realistic
 /// 8-character hex prefix rather than the name over again — which would let a
@@ -71,7 +72,7 @@ fn two_projects() -> Vec<Project> {
 
 fn table(projects: &[Project], style: TableStyle) -> String {
     let refs: Vec<&Project> = projects.iter().collect();
-    project_table(&refs, &style)
+    project_table(&refs, &[], &style)
 }
 
 /// Drops ANSI colour codes, leaving the text a terminal would show.
@@ -243,9 +244,10 @@ fn detail_in_group(
     write(
         &mut out,
         &outcome,
-        Colors {
+        Look {
             folder: Color::DEFAULT_FOLDER,
             header: Color::DEFAULT_HEADER,
+            icons: IconStyle::Off,
         },
     )
     .unwrap();

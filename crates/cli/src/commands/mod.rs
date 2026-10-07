@@ -24,8 +24,9 @@ use indexer_core::application::ImportReport;
 use indexer_core::domain::matching::{resolve, Resolution};
 use indexer_core::domain::scan::ScanReport;
 use indexer_core::domain::sorting::SortOptions;
-use indexer_core::Project;
+use indexer_core::{Group, Project};
 
+use crate::appearance::IconStyle;
 use crate::context::Context;
 use crate::output::color::Color;
 
@@ -60,6 +61,9 @@ pub enum Command {
     Purge(purge::PurgeArgs),
     /// Find projects under a directory, and optionally register them.
     Scan(scan::ScanArgs),
+    /// List, create, change or delete groups. To put a project in one, use
+    /// `edit --group`.
+    Group(group::GroupArgs),
     /// Show or change the CLI's settings.
     Config(config::ConfigArgs),
 }
@@ -76,6 +80,9 @@ pub enum Outcome {
         query: Option<String>,
         tracker: Vec<TrackerKind>,
         view: View,
+        /// Every group, for the colour a project without its own takes from
+        /// its group, as its mark does in the app.
+        groups: Vec<Group>,
     },
     /// One project's details. `tracker` is the kinds `--tracker` asked to
     /// expand, so the view can show a section per kind.
@@ -129,6 +136,15 @@ pub enum Outcome {
     /// Whether the edit form's focus wraps at its ends, after `config
     /// form-wrap` showed or changed it.
     FormWrap { wrap: bool },
+    /// How icons are drawn, after `config icons` showed or changed it.
+    Icons { style: IconStyle },
+    /// Every group in the sidebar's order, each with its count of live
+    /// projects.
+    Groups { groups: Vec<(Group, usize)> },
+    /// A group as saved by `group create` (`created`) or `group edit`.
+    GroupSaved { group: Box<Group>, created: bool },
+    /// A group deleted, as it was, and how many projects it left ungrouped.
+    GroupDeleted { group: Box<Group>, members: usize },
 }
 
 /// The colours a user can set with `indexer config`.
@@ -247,14 +263,9 @@ pub struct GroupLabel {
     /// Carried before anything renders it: painting the group name needs
     /// `Color::from_swatch` and a hex parser, which are their own checklist
     /// item. Reaching that item should not mean reopening the command layer.
-    #[allow(dead_code)]
     pub color: String,
     /// A bundled icon name (`"gamepad"`), or `custom:…` for an uploaded image
     /// that no terminal can draw and every renderer has to fall back on.
-    ///
-    /// Carried for the same reason as `color`, and further off: icons need a
-    /// `config icons` setting and `text_width` counting display columns first.
-    #[allow(dead_code)]
     pub icon: String,
 }
 
@@ -367,6 +378,7 @@ pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {
         Command::Restore(args) => restore::run(args, ctx),
         Command::Purge(args) => purge::run(args, ctx),
         Command::Scan(args) => scan::run(args, ctx),
+        Command::Group(args) => group::run(args, ctx),
         Command::Config(args) => config::run(args, ctx),
     }
 }

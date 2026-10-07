@@ -7,8 +7,10 @@
 //! mistyped `--icon rockt` would save and quietly show the wrong glyph.
 
 use anyhow::bail;
+use clap::ValueEnum;
 use indexer_core::domain::palette::{is_valid_color, SWATCHES};
 use indexer_core::IconStore;
+use serde::{Deserialize, Serialize};
 
 use crate::paths;
 
@@ -98,10 +100,15 @@ pub fn icon(typed: &str, custom: &[String]) -> anyhow::Result<Option<String>> {
     );
 }
 
+/// Whether `typed` names a custom icon rather than a bundled one.
+pub fn is_custom(typed: &str) -> bool {
+    typed.trim().starts_with(CUSTOM_PREFIX)
+}
+
 /// [`icon`] against the app's own custom icons, read only for a `custom:`
 /// one, so a bundled icon never touches the store.
 pub fn checked_icon(typed: &str) -> anyhow::Result<Option<String>> {
-    let custom = if typed.trim().starts_with(CUSTOM_PREFIX) {
+    let custom = if is_custom(typed) {
         custom_icons()?
     } else {
         Vec::new()
@@ -138,4 +145,90 @@ pub fn rgb(color: &str) -> Option<(u8, u8, u8)> {
     }
     let channel = |at: usize| u8::from_str_radix(&digits[at..at + 2], 16).ok();
     Some((channel(0)?, channel(2)?, channel(4)?))
+}
+
+/// How icons are drawn in a terminal, which can only draw characters — never
+/// the app's SVGs. Set with `config icons`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IconStyle {
+    /// No icons: the default, since no program can tell which font a
+    /// terminal uses, and a missing glyph would show as `□`.
+    #[default]
+    Off,
+    /// Nerd Font glyphs: line icons like the app's, drawn in the project's
+    /// colour. Needs a Nerd Font in the terminal.
+    Nerd,
+    /// Emoji: shown almost everywhere, but in their own colours.
+    Emoji,
+}
+
+impl IconStyle {
+    /// The name a user types for this style, as `config icons` prints it.
+    pub fn name(self) -> String {
+        self.to_possible_value()
+            .map(|value| value.get_name().to_string())
+            .unwrap_or_default()
+    }
+}
+
+/// The character `icon` is drawn as in `style`, or `None` with icons off.
+/// A custom icon is an SVG, which no terminal can draw, and an unknown name
+/// is one this build has never heard of: both fall back to the folder, as the
+/// app falls back to it for an unknown name.
+pub fn glyph(icon: &str, style: IconStyle) -> Option<&'static str> {
+    let table = match style {
+        IconStyle::Off => return None,
+        IconStyle::Nerd => &NERD_GLYPHS,
+        IconStyle::Emoji => &EMOJI_GLYPHS,
+    };
+    let at = BUNDLED_ICONS
+        .iter()
+        .position(|&name| name == icon)
+        .unwrap_or(0);
+    Some(table[at])
+}
+
+/// One per [`BUNDLED_ICONS`], in its order: Font Awesome's glyphs, which every
+/// Nerd Font carries at these code points.
+const NERD_GLYPHS: [&str; 25] = [
+    "\u{f07b}", // folder
+    "\u{f0b1}", // briefcase
+    "\u{f121}", // code
+    "\u{f120}", // terminal
+    "\u{f11b}", // gamepad
+    "\u{f1fc}", // palette (a paint brush)
+    "\u{f02d}", // book
+    "\u{f001}", // music
+    "\u{f030}", // camera
+    "\u{f008}", // film
+    "\u{f0c3}", // flask
+    "\u{f135}", // rocket
+    "\u{f0ac}", // globe
+    "\u{f1c0}", // database
+    "\u{f233}", // server
+    "\u{f2db}", // cpu (a microchip)
+    "\u{f1b2}", // box (a cube)
+    "\u{f24d}", // layers (two sheets)
+    "\u{f040}", // pen
+    "\u{f0ad}", // wrench
+    "\u{f004}", // heart
+    "\u{f005}", // star
+    "\u{f024}", // flag
+    "\u{f015}", // home
+    "\u{f1f8}", // trash
+];
+
+/// One per [`BUNDLED_ICONS`], in its order. Only emoji drawn as emoji without
+/// a variation selector, which terminals disagree on the width of: a table
+/// measuring one width and a terminal drawing another would fall out of line.
+const EMOJI_GLYPHS: [&str; 25] = [
+    "📁", "💼", "📜", "💻", "🎮", "🎨", "📖", "🎵", "📷", "🎬", "🧪", "🚀", "🌐", "💾", "🔌", "🧠",
+    "📦", "📚", "📝", "🔧", "💖", "⭐", "🚩", "🏠", "🚮",
+];
+
+/// The colour a project's mark is drawn in, as the app does: its own, else its
+/// group's. `None` when neither has one this can draw.
+pub fn mark_rgb(own: Option<&str>, group: Option<&str>) -> Option<(u8, u8, u8)> {
+    own.and_then(rgb).or_else(|| group.and_then(rgb))
 }

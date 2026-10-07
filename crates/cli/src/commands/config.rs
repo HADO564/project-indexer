@@ -1,6 +1,7 @@
 use clap::{Args, Subcommand};
 
 use super::{ColorSetting, Outcome};
+use crate::appearance::IconStyle;
 use crate::context::Context;
 use crate::output::color::Color;
 use crate::settings;
@@ -50,6 +51,17 @@ pub enum Setting {
         #[arg(long, conflicts_with = "value")]
         reset: bool,
     },
+    /// Show or set how icons are drawn: as Nerd Font glyphs (needs a Nerd
+    /// Font in the terminal), as emoji, or not at all.
+    Icons {
+        /// `nerd`, `emoji` or `off`. Omit it to show the current one.
+        #[arg(value_enum)]
+        style: Option<IconStyle>,
+
+        /// Go back to the built-in default (off).
+        #[arg(long, conflicts_with = "style")]
+        reset: bool,
+    },
 }
 
 pub fn run(args: ConfigArgs, _ctx: &Context) -> anyhow::Result<Outcome> {
@@ -57,6 +69,7 @@ pub fn run(args: ConfigArgs, _ctx: &Context) -> anyhow::Result<Outcome> {
         Setting::FolderColor { color, reset } => color_setting(ColorSetting::Folder, color, reset),
         Setting::HeaderColor { color, reset } => color_setting(ColorSetting::Header, color, reset),
         Setting::FormWrap { value, reset } => form_wrap(value, reset),
+        Setting::Icons { style, reset } => icons(style, reset),
     }
 }
 
@@ -117,5 +130,24 @@ fn form_wrap(value: Option<Switch>, reset: bool) -> anyhow::Result<Outcome> {
     }
     Ok(Outcome::FormWrap {
         wrap: settings.form_wrap.unwrap_or(true),
+    })
+}
+
+fn icons(style: Option<IconStyle>, reset: bool) -> anyhow::Result<Outcome> {
+    let mut settings = load_settings(reset)?;
+    let changed = if reset {
+        settings.icons = None;
+        true
+    } else if let Some(style) = style {
+        settings.icons = Some(style);
+        true
+    } else {
+        false
+    };
+    if changed {
+        settings::save(&settings)?;
+    }
+    Ok(Outcome::Icons {
+        style: settings.icons.unwrap_or_default(),
     })
 }

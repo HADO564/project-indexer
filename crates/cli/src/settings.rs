@@ -13,6 +13,7 @@ use std::path::Path;
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
+use crate::appearance::IconStyle;
 use crate::output::color::Color;
 use crate::paths;
 
@@ -30,6 +31,10 @@ pub struct Settings {
     /// on, as the GUI's Tab order does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub form_wrap: Option<bool>,
+
+    /// How icons are drawn in tables and the form. Missing means off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icons: Option<IconStyle>,
 }
 
 pub fn load() -> anyhow::Result<Settings> {

@@ -47,6 +47,7 @@ fn results_are_wrapped_in_the_versioned_envelope() {
         query: None,
         tracker: Vec::new(),
         view: View::All,
+        groups: Vec::new(),
     });
     assert_eq!(doc["schema"], 1);
     assert_eq!(doc["data"][0]["name"], "app");
@@ -60,6 +61,7 @@ fn a_query_matching_nothing_is_an_empty_array_not_an_error() {
         query: Some("nothing".into()),
         tracker: Vec::new(),
         view: View::All,
+        groups: Vec::new(),
     });
     assert_eq!(doc["data"], json!([]));
     assert!(doc.get("error").is_none());
