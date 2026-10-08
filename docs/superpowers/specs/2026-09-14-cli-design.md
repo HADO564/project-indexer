@@ -284,6 +284,29 @@ records inferred facts through core.
     already tracked (leaning yes — they were asked for; only the create is
     skipped), and what dexily says when the command failed and they were
     dropped.
+- **The first recognizers are system commands, starting with `mkdir`;**
+  tracker-based ones (`git init`, `git clone`, Unreal) come after. The `dexily`
+  prefix is the signal: a folder made with `dexily mkdir` is a project, with no
+  "is this really a project?" guessing. The rule: every folder named in the
+  command that mkdir actually created — not `-p`'s parents, not an option's
+  value (`-m 755`) — and only folders absent before and present after.
+  `mkdir` is a shell built-in on Windows, not a program; how to run it there is
+  still to choose (`cmd /C`, dexily making the folder itself, or Unix-only for
+  now). Later system commands: `mv` (update a tracked project's directory),
+  `rm -rf` (a tracked folder gone), `cp -r` (a copy as a new project).
+- **One prompt confirms and opens the form** (decided 2026-10-08), in phase 3
+  once the command has succeeded: `dexily: track "friction" at
+  ~/code/friction? [Y/n/e]`. Enter or `y` tracks; `n` leaves an ordinary folder,
+  nothing to clean up; `e` tracks, then opens the edit form (`TerminalEditor`,
+  as `edit --full`) on the new project — Esc there keeps the project and skips
+  the details. The default is yes, so the common case is one keystroke and the
+  prefix's intent is not second-guessed. dexily's own flags apply before the
+  form, so it opens showing them. No prompt and no form when piped, in a
+  script or under `--json` — it tracks, as the prefix says — or with `--yes`.
+  The confirmer needs a third answer for `e`. **Still to decide:** one prompt
+  per folder for `mkdir a b c`, or one for all (and what `e` means then);
+  whether to ask at all when flags were given; and a `config` setting to turn
+  the prompt off.
 
 ### Output
 

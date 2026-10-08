@@ -116,6 +116,8 @@ Design decided 2026-10-08 — three phases, no threads; outcome not output; dexi
 - [ ] First recognizers chosen, each with its project-directory rule written down; a before/after snapshot where the folder is hard to predict
 - [ ] Records through core services (`ensure_project`, `refresh_trackers`); a recording failure never changes the exit code
 - [ ] dexily's own flags before the command — `edit`'s field flags, applied as one `UpdateProject` after `ensure_project` — checked before the command runs (exit 2, command not run); flags on a command no recognizer knows are refused the same way
+- [ ] `mkdir` first (every folder it actually created; not `-p`'s parents or an option's value); how to run it on Windows, where it is a shell built-in
+- [ ] The `[Y/n/e]` prompt after a successful command — Enter tracks, `n` skips, `e` tracks and opens the edit form; none when piped, under `--json` or with `--yes`; the confirmer gains a third answer
 - [ ] Human-path output decided (silent, or one line on stderr), and whether `--quiet` exists; what is said when the command failed and the flags were dropped
 
 ## 5. The TUI
