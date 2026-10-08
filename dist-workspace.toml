@@ -29,9 +29,9 @@ precise-builds = true
 # releases page keeps pointing app users at the app.
 post-announce-jobs = ["./restore-latest"]
 
-# TEMPORARY, for the PR that adds this: build every artifact on the PR, so a
-# target that fails to build shows before the first tag. Back to "plan" after.
-pr-run-mode = "upload"
+# Pull requests only plan the release; set "upload" to build every artifact on
+# a PR, as the one that added this did before the first tag.
+pr-run-mode = "plan"
 
 [dist.github-custom-runners]
 # Native arm64 Linux runners, rather than cross-compiling.
