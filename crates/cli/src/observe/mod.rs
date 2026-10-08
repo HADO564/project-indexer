@@ -12,14 +12,7 @@ mod spawn;
 use std::ffi::OsString;
 use std::process::ExitCode;
 
-use anyhow::bail;
-
 pub fn run(argv: &[OsString]) -> anyhow::Result<ExitCode> {
-    let Some(program) = argv.first() else {
-        bail!("no command to run");
-    };
-    bail!(
-        "`{}` is not a dexily command, and observing commands is not implemented yet",
-        program.to_string_lossy()
-    )
+    let code = spawn::run(argv)?;
+    Ok(ExitCode::from(code as u8))
 }

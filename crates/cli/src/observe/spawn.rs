@@ -1,17 +1,23 @@
 //! Runs the wrapped command with inherited stdio and hands back its exit
 //! status untouched.
 
-use std::process::{Command, ExitStatus};
+use std::{ffi::OsString, process::Command};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context};
 
-pub fn run(command: &Command, args: &[String]) -> Result<ExitStatus> {
-    let mut child = command.spawn()?;
-    let all_args = args.join(" ");
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(all_args.as_bytes())?;
-    child.wait()
+/// Runs `argv` — a program and its arguments — with this terminal's stdin,
+/// stdout and stderr, waits for it, and returns its exit code.
+///
+/// Each argument is handed over on its own, with no shell between: a folder
+/// named `x; rm -rf ~` is one odd name, never a second command.
+pub fn run(argv: &[OsString]) -> anyhow::Result<i32> {
+    let Some((program, rest)) = argv.split_first() else {
+        bail!("no command to run");
+    };
+    let status = Command::new(program)
+        .args(rest)
+        .status()
+        .with_context(|| format!("could not run `{}`", program.to_string_lossy()))?;
+    // `None` when a signal ended it (Unix only), which has no exit code.
+    Ok(status.code().unwrap_or(1))
 }
