@@ -22,6 +22,9 @@ install-updater = false
 # Only tags starting `dexily` (`dexily-v0.1.0`) release the CLI: the app's own
 # `v*` tags belong to `release.yml`, which this must never answer.
 tag-namespace = "dexily"
+# Build only what is released, not the whole workspace: the workspace includes
+# the desktop app, whose GTK dependencies a static Linux build cannot have.
+precise-builds = true
 # After a release, hand "Latest" back to the newest app release, so the
 # releases page keeps pointing app users at the app.
 post-announce-jobs = ["./restore-latest"]

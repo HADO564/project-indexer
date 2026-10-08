@@ -11,6 +11,12 @@ license-file = "../../LICENSE"
 keywords = ["projects", "cli", "tui", "git", "workspace"]
 categories = ["command-line-utilities", "development-tools"]
 
+# What goes in each release archive beside the binary. Listed rather than
+# detected: dist resolves `license-file` from the wrong folder and fails.
+[package.metadata.dist]
+auto-includes = false
+include = ["README.md", "CHANGELOG.md", "../../LICENSE"]
+
 [[bin]]
 name = "dexily"
 path = "src/main.rs"
