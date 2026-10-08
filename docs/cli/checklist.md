@@ -110,6 +110,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 
 Design decided 2026-10-08 — three phases, no threads; outcome not output; dexily's own flags before the command, checked before it runs — recorded in the CLI design spec, *The observer*. The user is building this one (`feat/observer`).
 
+- [ ] **Security gatekeeper, first in phase 1:** only commands with a recognizer run (an allowlist that *is* the recognizer list; unknown commands and unrecognised subcommands refused, exit 2, not run); arguments as a list, never a joined string or a shell; on Windows' `cmd /C` path, arguments with cmd's special characters refused; programs found on `PATH` only and `cmd.exe` by its full path; the recorded folder resolved before tracking (decided 2026-10-08)
 - [ ] Spawn the wrapped command with inherited stdio; its exit code always wins, and Ctrl+C is left to it
 - [ ] Phase 1 — an expectation from argv and the disk, in memory only; nothing written before the command finishes
 - [ ] Phase 3 — the evidence (exit code, the folder now exists, what is in it) confirms or drops the expectation; a failed command leaves no project

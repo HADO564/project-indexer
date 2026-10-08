@@ -341,6 +341,37 @@ records inferred facts through core.
      nothing, a recording failure keeps exit 0.
 - **Comes back with `git init`:** whether dexily's flags apply to a folder that
   was already tracked. `mkdir` cannot meet it — its folders are always new.
+- **Security (decided 2026-10-08).** dexily runs a command as the user, with
+  the user's rights and no more, so passing a command through adds no power on
+  its own; these rules keep it from adding risk.
+  1. **An allowlist: dexily runs only commands it has a recognizer for.**
+     Anything else is refused before it runs, exit 2:
+     ``dexily: `ls` isn't a command dexily observes (it knows: mkdir). Run it
+     directly.`` An unrecognised command gains nothing from dexily; refusing it
+     means an AI agent or script given dexily cannot use it to run arbitrary
+     programs, and no command "works" while recording nothing. The allowlist
+     *is* the list of recognizers, so the two cannot drift; for a command with
+     subcommands only the recognised ones pass (`git init`, `git clone` — not
+     `git push`).
+  2. **Never a text line, never a shell.** `Command::new(program).args(list)`
+     hands each argument over separately with no shell, so
+     `dexily mkdir 'x; rm -rf ~'` makes one oddly named folder. Arguments are
+     never joined into a string.
+  3. **Windows `cmd /C` is a shell, so it is guarded:** an argument containing
+     any of cmd's special characters (`&`, `|`, `<`, `>`, `^`, `%`, `"`) is
+     refused before anything runs — `dexily mkdir "a & calc"` would otherwise
+     make `a` and then start Calculator. Tests of its own.
+  4. **The right program:** looked up on `PATH` only, never in the current
+     folder, where a planted `mkdir.exe` could be picked first; `cmd.exe` is run
+     by its full system path (`%SystemRoot%\System32\cmd.exe`), never looked up.
+  5. **The recorded folder is resolved** to its real absolute path before it
+     is tracked, as `add` does, so a symlink or `..` cannot point dexily at an
+     unexpected place.
+
+  Phase 1 therefore opens with a gatekeeper, before anything runs: is the
+  command on the allowlist; do dexily's flags check out; on the `cmd /C` path,
+  are the arguments free of special characters — any "no" is exit 2 with the
+  command not run. Only then is the expectation formed.
 
 ### Output
 
