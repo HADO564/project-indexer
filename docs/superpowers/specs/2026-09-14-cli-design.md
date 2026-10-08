@@ -303,10 +303,44 @@ records inferred facts through core.
   prefix's intent is not second-guessed. dexily's own flags apply before the
   form, so it opens showing them. No prompt and no form when piped, in a
   script or under `--json` — it tracks, as the prefix says — or with `--yes`.
-  The confirmer needs a third answer for `e`. **Still to decide:** one prompt
-  per folder for `mkdir a b c`, or one for all (and what `e` means then);
-  whether to ask at all when flags were given; and a `config` setting to turn
-  the prompt off.
+  The confirmer needs a third answer for `e`. **Still to decide:** a `config`
+  setting to turn the prompt off.
+- **Settled 2026-10-08, one question at a time:**
+  1. **Windows:** built-ins run through `cmd /C` (`cmd /C mkdir thing`), so
+     dexily still runs the real command everywhere. The program is looked up
+     first (the `which` crate); a known `cmd` built-in (`mkdir`/`md`, `move`,
+     `copy`, `del`, …) goes through `cmd /C`, which also covers `npm.cmd`-style
+     scripts. cmd's `mkdir` makes parents itself and has no `-p` or `-m`, so the
+     folder rule has a Windows variant. Folder names with spaces need
+     `CommandExt::raw_arg` and a test of their own.
+  2. **Several folders** (`mkdir a b c`): one `[Y/n/e]` prompt per folder, so
+     each answer, `e` included, is about one project. dexily's flags apply to
+     every folder said yes to.
+  3. **Flags given:** no prompt. Flags mean the user has already decided and
+     described the project; dexily tracks and applies them. The prompt is for
+     the bare `dexily mkdir thing`.
+  4. **Output:** one line on stderr when no prompt was shown —
+     `dexily: tracking "thing" at ~/code/thing` — and nothing more after a
+     prompt the user just answered. A failed command:
+     `dexily: mkdir failed (exit 1), nothing tracked`. `--quiet` hides dexily's
+     own lines, never the command's output and never a warning. `--json`: the
+     command keeps stdout, so dexily's document goes to **stderr**, as one line,
+     printed last, after the command has finished — the command's own errors
+     share stderr, and a script reads the final line. A `--json-file <path>` is
+     the upgrade if that proves awkward.
+  5. **Recording fails** after the command succeeded: the command's exit code
+     stands, and a warning says why and how to retry —
+     `dexily: could not track "thing": database is locked` then
+     ``run `dexily add ~/code/thing` to try again`` — shown even with `--quiet`.
+  6. **Tests, four layers:** recognizer rules on argv alone (no processes);
+     evidence checks with temp folders and made-up exit codes; `spawn` running
+     tiny real commands (`true`, `false`, `cmd /C exit 3`) for exit-code
+     passthrough, a missing program, and a signal as 128 + n on Unix; and end
+     to end with an in-memory database and a stand-in prompt — a flag that does
+     not check out stops the command before it runs, a failed command records
+     nothing, a recording failure keeps exit 0.
+- **Comes back with `git init`:** whether dexily's flags apply to a folder that
+  was already tracked. `mkdir` cannot meet it — its folders are always new.
 
 ### Output
 
