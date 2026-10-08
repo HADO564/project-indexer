@@ -1,0 +1,31 @@
+# Run by dist after it publishes a `dexily-v*` release (`post-announce-jobs` in
+# dist-workspace.toml). GitHub marks the newest published release "Latest", and
+# the releases page and its /latest link would then send app users to the CLI;
+# this marks the newest app release (`v*`) Latest again.
+name: Restore the app as Latest
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Mark the newest app release Latest
+        run: |
+          tag=$(gh release list --exclude-drafts --exclude-pre-releases --limit 100 \
+            --json tagName --jq '[.[] | select(.tagName | test("^v[0-9]"))][0].tagName')
+          if [ -n "$tag" ] && [ "$tag" != "null" ]; then
+            gh release edit "$tag" --latest
+            echo "Latest is $tag again"
+          fi

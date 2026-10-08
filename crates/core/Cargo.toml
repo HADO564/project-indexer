@@ -1,12 +1,16 @@
 [package]
-name = "indexer-core"
-# Internal to this repository: shared by the app and the CLI, and versioned with
-# the app. Neither consumer pulls it from a registry.
+# Published as `dexily-core` only because `dexily` on crates.io depends on it;
+# it is shared by the app and the CLI and versioned with the app, and both use
+# it from this repository, never from the registry.
+name = "dexily-core"
 version = "0.3.5"
 edition = "2021"
+description = "The shared core of Project Indexer and dexily: projects, groups, trackers and their SQLite store"
+repository = "https://github.com/HADO564/project-indexer"
 license-file = "../../LICENSE"
-publish = false
 
+# The package was `indexer-core`; the library keeps its name so the app's and
+# the CLI's `use indexer_core::…` stay as they are.
 [lib]
 name = "indexer_core"
 
