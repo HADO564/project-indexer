@@ -230,6 +230,61 @@ records inferred facts through core.
   for which directory is the project, and what the human path prints — nothing,
   or one line on stderr.
 
+**Decided 2026-10-08, at the start of the observer milestone** (`feat/observer`):
+
+- **Sequential, in three phases; no threads.** The wrapped command is already a
+  separate process, so dexily only waits while it runs. Running the recording
+  alongside it was considered and rejected: what to record — whether a project
+  exists, and where — is only known once the command has finished (a failed
+  `git clone`, a Ctrl+C halfway), recording is milliseconds against the
+  command's seconds, and reading the command's output would mean piping it,
+  which costs it its colours, progress bars, prompts and clean Ctrl+C.
+  1. **Before** — read argv and the disk and form an *expectation*, held in
+     memory only: which kind of command this is, which folder should hold the
+     project, and whether that folder exists yet. Nothing is written.
+  2. **Run** — the command, with inherited stdio, untouched; its exit status.
+  3. **After** — check the evidence: the exit code, that the expected folder
+     now exists (and was not there before, where that matters), what is inside
+     it. Only if the signs agree does dexily call `ensure_project`, the one
+     write. A failed command leaves nothing behind: no phantom projects.
+- **dexily sees the outcome, not the output.** The command's text goes straight
+  to the terminal and is never read; the exit code and the filesystem are the
+  evidence, and are steadier than text that changes between tool versions.
+- **Details come from the folder, not the command line.** Core's detectors fill
+  in the kind, branch, remote and name when `ensure_project` runs, exactly as
+  for the GUI's Add, so the two can never describe one repo differently. The
+  command line's job is narrower: which folder, and whether this command makes
+  projects at all — plus anything only it knows (`git clone --branch dev`).
+- **A before/after snapshot** of the folder is a recognizer technique worth
+  having: what is new after the command is what it created, which covers a
+  custom target folder or a tool whose output is hard to guess from its
+  arguments. A live filesystem watcher is not needed.
+- **Ctrl+C:** dexily ignores it while the command runs and lets the command
+  decide, so it still reports the command's real exit code; on Unix a command
+  killed by a signal has no exit code, which dexily has to map to one.
+- **dexily's own flags set the new project up in the same breath:**
+  `dexily --add-tag rust --group Work --notes "demo" git clone <url>`.
+  - **They go before the command, never after.** Everything from the command's
+    name on belongs to it untouched — many commands share flag names with
+    dexily (`--name`, `--color`, `--set`, `-t`), so dexily never guesses whose
+    a flag is. clap already hands the rest over as-is.
+  - **They are `edit`'s flags,** with the same names, rules and checks
+    (`--name`, `--description`, `--add-tag`, `--set`, `--notes`, `--group`,
+    `--color`, `--icon`, `--open-with`), applied after `ensure_project` as one
+    `UpdateProject` built the way `edit` builds one. Not `--directory` or
+    `--ungroup`, which mean nothing for a new project. Trackers are detected,
+    never set, so there is no flag for them.
+  - **They are checked in phase 1, before the command runs.** A group that
+    does not exist or a bad colour stops everything with exit 2 and the
+    command never runs — all or nothing, rather than a clone left behind with
+    a half-recorded project. Likewise flags on a command no recognizer knows
+    (`dexily --add-tag rust ls`): nothing to apply them to, so it says so and
+    does not run.
+  - **Still to decide in the plan:** whether they apply when the folder was
+    already tracked (leaning yes — they were asked for; only the create is
+    skipped), and what dexily says when the command failed and they were
+    dropped.
+
 ### Output
 
 - **The `--json` contract is settled** in

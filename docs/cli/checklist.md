@@ -108,10 +108,15 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 
 ## 4. The observer
 
-- [ ] Spawn the wrapped command with inherited stdio; its exit code always wins
-- [ ] First recognizers chosen, each with its project-directory rule written down
+Design decided 2026-10-08 — three phases, no threads; outcome not output; dexily's own flags before the command, checked before it runs — recorded in the CLI design spec, *The observer*. The user is building this one (`feat/observer`).
+
+- [ ] Spawn the wrapped command with inherited stdio; its exit code always wins, and Ctrl+C is left to it
+- [ ] Phase 1 — an expectation from argv and the disk, in memory only; nothing written before the command finishes
+- [ ] Phase 3 — the evidence (exit code, the folder now exists, what is in it) confirms or drops the expectation; a failed command leaves no project
+- [ ] First recognizers chosen, each with its project-directory rule written down; a before/after snapshot where the folder is hard to predict
 - [ ] Records through core services (`ensure_project`, `refresh_trackers`); a recording failure never changes the exit code
-- [ ] Human-path output decided (silent, or one line on stderr), and whether `--quiet` exists
+- [ ] dexily's own flags before the command — `edit`'s field flags, applied as one `UpdateProject` after `ensure_project` — checked before the command runs (exit 2, command not run); flags on a command no recognizer knows are refused the same way
+- [ ] Human-path output decided (silent, or one line on stderr), and whether `--quiet` exists; what is said when the command failed and the flags were dropped
 
 ## 5. The TUI
 
