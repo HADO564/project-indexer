@@ -11,7 +11,7 @@ about direction, not mechanics.
 
 ## The system today
 
-A Cargo workspace with three crates. `indexer-core` (`crates/core`) holds all
+A Cargo workspace with three crates. `dexily-core` (`crates/core`) holds all
 domain logic, orchestration, and persistence and has **no `tauri` dependency**;
 `src-tauri` is a thin GUI adapter over it; `crates/cli` is a one-line stub for a
 future observer CLI (Spec 2).
@@ -29,7 +29,7 @@ future observer CLI (Spec 2).
              │        ┌──────────────────────┘
              ▼        ▼
   ┌───────────────────────────────────────────────────────┐
-  │            crates/core  «indexer-core»                 │
+  │            crates/core  «dexily-core»                 │
   │                    NO tauri, NO clap                   │
   │                                                       │
   │  application/  ProjectService — one method per command │
@@ -55,9 +55,9 @@ future observer CLI (Spec 2).
      app_config_dir()/projects.db   (SQLite, WAL, foreign_keys=ON)
 ```
 
-Dependency direction is compiler-enforced: `src-tauri → indexer-core` and
-(later) `crates/cli → indexer-core`, never the reverse, and a `use tauri::` in
-`core` fails to compile. `indexer-core` depends only on std, serde, serde_json,
+Dependency direction is compiler-enforced: `src-tauri → dexily-core` and
+(later) `crates/cli → dexily-core`, never the reverse, and a `use tauri::` in
+`core` fails to compile. `dexily-core` depends only on std, serde, serde_json,
 chrono, uuid, thiserror, git2, rusqlite, quick-xml (+ `winreg`/`parselnk` on
 Windows).
 
@@ -129,8 +129,8 @@ if it regresses.
    gone: the old `serde_json::Value` `migrate()` layer and its `schema_version`
    stamp (see Recorded decisions).
 9. **`core` never depends on `tauri`.** Compiler-enforced by the crate graph —
-   a `use tauri::` anywhere in `indexer-core` fails to build, and
-   `cargo tree -p indexer-core` shows no `tauri`. This is what guarantees "add
+   a `use tauri::` anywhere in `dexily-core` fails to build, and
+   `cargo tree -p dexily-core` shows no `tauri`. This is what guarantees "add
    a frontend (CLI, …) without reworking the backend".
 10. **All persistence goes through a repository port.** No frontend touches
     SQLite directly; `ProjectService` is the only caller of `ProjectRepository`
@@ -399,7 +399,7 @@ the group round-trip / position-ordering / cascade-ungroup tests, and
 ### Tauri-free `core` crate
 
 The GUI is one frontend. All domain logic, orchestration and persistence live in
-`indexer-core`, which cannot `use tauri` (invariant 9). A future CLI (Spec 2)
+`dexily-core`, which cannot `use tauri` (invariant 9). A future CLI (Spec 2)
 and a separate activity tracker (devmon) attach via the same crate and the same
 `projects.db` — no IPC, no pairing. `src-tauri` keeps only the Tauri Builder
 wiring, the ~3-line command wrappers, and the one `OpenerLauncher` adapter.
@@ -426,7 +426,7 @@ carrying `app` and `schema_version` rows an external reader checks before
 joining, RFC3339 UTC timestamps
 throughout, WAL + `busy_timeout` for concurrent read-while-write, and a
 read-only `ProjectReader` trait devmon can depend on (ideally via the
-`indexer-core` crate, reusing `normalize` + `find_by_directory` rather than
+`dexily-core` crate, reusing `normalize` + `find_by_directory` rather than
 reimplementing them). devmon's own activity/metric tables live in `devmon.db` —
 never here. Full contract: the spec's §"Cross-app compatibility — devmon".
 
@@ -458,7 +458,7 @@ workspace — `src-tauri` and `crates/cli` over `crates/core` — and are versio
 tagged (`v*` / `cli-v*`) and changelogged independently. Every crate is
 `publish = false`.
 
-*Why one repository:* the CLI is almost entirely calls into `indexer-core`, and
+*Why one repository:* the CLI is almost entirely calls into `dexily-core`, and
 both products open the one `projects.db` whose schema core owns. A schema
 change, its migration and both consumers land in one pull request under one CI
 run. Split across repositories, every core change becomes a tag, a dependency
@@ -470,7 +470,7 @@ cadences, and the CLI is installed through package managers. What ties them is
 the database: `SqliteRepository::open` refuses a newer schema, so **a schema
 bump ships with a CLI release that understands it.**
 
-*Revisit when:* `indexer-core` becomes a published library with its own semver
+*Revisit when:* `dexily-core` becomes a published library with its own semver
 promise, or the CLI gains maintainers separate from the app's. Full reasoning in
 `docs/superpowers/specs/2026-09-14-cli-design.md`.
 

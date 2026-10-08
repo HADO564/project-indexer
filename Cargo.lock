@@ -1002,6 +1002,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "dexily"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "dexily-core",
+ "dirs",
+ "open",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "terminal_size",
+ "unicode-width",
+]
+
+[[package]]
+name = "dexily-core"
+version = "0.3.5"
+dependencies = [
+ "chrono",
+ "git2",
+ "parselnk",
+ "quick-xml 0.37.5",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "uuid",
+ "winreg 0.56.0",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2125,41 +2160,6 @@ checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
-]
-
-[[package]]
-name = "indexer-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "dirs",
- "indexer-core",
- "open",
- "ratatui",
- "serde",
- "serde_json",
- "tempfile",
- "terminal_size",
- "unicode-width",
-]
-
-[[package]]
-name = "indexer-core"
-version = "0.3.5"
-dependencies = [
- "chrono",
- "git2",
- "parselnk",
- "quick-xml 0.37.5",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.20",
- "uuid",
- "winreg 0.56.0",
 ]
 
 [[package]]
@@ -3512,7 +3512,7 @@ name = "project-indexer"
 version = "0.3.5"
 dependencies = [
  "block2",
- "indexer-core",
+ "dexily-core",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",

@@ -24,7 +24,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
-indexer-core = { path = "../crates/core" }
+dexily-core = { path = "../crates/core" }
 # Only for command payloads defined in this crate rather than in core --
 # the sweep event, for one. Already in the tree via tauri, so this adds a
 # name this crate may use, not a build.
@@ -48,3 +48,8 @@ objc2 = "0.6"
 block2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSNotification", "NSString", "NSOperation", "block2"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSWindow"] }
+
+# The desktop app ships through its own release workflow (`v*` tags), not
+# cargo-dist, which releases only `dexily`.
+[package.metadata.dist]
+dist = false

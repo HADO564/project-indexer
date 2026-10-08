@@ -1,4 +1,4 @@
-# indexer-cli
+# dexily
 
 The command-line tool for Project Indexer. It records projects as you create them
 (`dexily git init` runs the real `git init`, then registers the repository),
@@ -65,9 +65,40 @@ src/
 
 ## Rules
 
-- **Depends on `indexer-core`, never on `src-tauri`.** Anything the app and the
+- **Depends on `dexily-core`, never on `src-tauri`.** Anything the app and the
   CLI both need belongs in core.
 - **Behaviour lives in core.** A command is argument parsing, a call or two into
   a core service, and rendering the result.
 - **A command is defined once** and used by both the shell and the TUI's `:` line.
 - **The database path must match the app's**, pinned by a test.
+
+## Releasing dexily
+
+The CLI is versioned apart from the app and released from `dexily-v<version>`
+tags by [cargo-dist](https://opensource.axo.dev/cargo-dist/)
+(`dist-workspace.toml`, `.github/workflows/dexily-release.yml`). The app's
+`release.yml` and its `v*` tags are separate and unaffected.
+
+1. Bump `version` in `crates/cli/Cargo.toml` and move the CHANGELOG's
+   Unreleased entries under that version.
+2. Merge to `main`.
+3. Publish to crates.io: `cargo publish -p dexily-core -p dexily` — leave out
+   `dexily-core` when its version has not changed since it was last
+   published. Needs `cargo login` once.
+4. Tag and push: `git tag dexily-v<version> && git push origin dexily-v<version>`.
+5. dist builds every target — macOS (Apple silicon and Intel), static Linux
+   (x86_64 and arm64), Windows x86_64 — and publishes the GitHub release with
+   archives, checksums and the installers. `restore-latest.yml` then marks the
+   newest app release "Latest" again, so the releases page keeps pointing app
+   users at the app.
+
+Users install it with any of:
+
+```sh
+cargo install dexily
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/HADO564/project-indexer/releases/download/dexily-v<version>/dexily-installer.sh | sh
+```
+
+```powershell
+irm https://github.com/HADO564/project-indexer/releases/download/dexily-v<version>/dexily-installer.ps1 | iex
+```

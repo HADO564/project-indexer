@@ -4,7 +4,7 @@ What's done and what's still open for the command-line tool, milestone by
 milestone. The design contract is
 [`../superpowers/specs/2026-09-14-cli-design.md`](../superpowers/specs/2026-09-14-cli-design.md),
 and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
-`indexer-core` features the CLI builds on are tracked in
+`dexily-core` features the CLI builds on are tracked in
 [`../app/checklist.md`](../app/checklist.md), where they shipped.
 
 ## Organisation
@@ -14,13 +14,13 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 - [x] Every crate is `publish = false`
 - [x] Binary named in one place (`[[bin]]` in `crates/cli/Cargo.toml`) — `indexer` as a placeholder until the name was chosen
 - [x] Docs split per product: this checklist and the CLI roadmap, plus the crate's README and changelog
-- [x] Choose the final binary name — **Dexily**, decided 2026-10-07: the command is `dexily`. The crates keep their names (`indexer-core`, `indexer-cli`), as do the app, its bundle id and the database path
+- [x] Choose the final binary name — **Dexily**, decided 2026-10-07: the command is `dexily`. The crates were renamed with it on 2026-10-08 — `dexily` and `dexily-core` (whose library is still `indexer_core`), so both could be claimed on crates.io; the app, its bundle id and the database path keep their names
 
 ## 1. Foundations
 
 - [x] `ensure_project` ignores binned projects in its directory check — the parked one-line `!p.is_deleted` filter, also listed in `../app/checklist.md`
 - [ ] A test pinning it: bin a project, `ensure_project` the same directory, get a new live project
-- [x] `indexer-core` added as a dependency of `crates/cli`
+- [x] `dexily-core` added as a dependency of `crates/cli`
 - [x] `paths.rs` resolves the shared `projects.db`, with a test pinning it to the app's path on the current OS (`src/tests/paths.rs` — also pins the identifier to `tauri.conf.json`)
 - [x] The version-skew error from `SqliteRepository::open` is printed, never swallowed (`main` prints the full error chain to stderr and exits 1)
 - [x] Module skeleton per the spec: `commands/`, `output/`, `observe/`, `tui/`, `context.rs`, `confirm.rs`, with each command stubbed to return "not implemented"
@@ -130,12 +130,23 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 
 ## Later — packaging
 
-- [ ] A CLI release workflow: `-p indexer-cli` per target, none of the app's system dependencies, on `cli-v*` tags
+- [x] A CLI release workflow (2026-10-08): cargo-dist on `dexily-v*` tags (`dist-workspace.toml`, `.github/workflows/dexily-release.yml`) — macOS arm64 and x86_64, static musl Linux x86_64 and arm64, Windows x86_64, checksums, and shell and PowerShell installers; none of the app's system dependencies. `dexily` and `dexily-core` are also on crates.io (`cargo install dexily`). How to cut one: `crates/cli/README.md` → *Releasing dexily*
 - [ ] **The desktop app provides `dexily` from its own binary** — brief: [`../handoffs/2026-09-15-gui-provides-indexer.md`](../handoffs/2026-09-15-gui-provides-indexer.md)
-  - [ ] `indexer-cli` gains a library entry point; the TUI goes behind a default-on `tui` feature
+  - [ ] `dexily` gains a library entry point; the TUI goes behind a default-on `tui` feature
   - [ ] The app's `main` runs the CLI when invoked as `dexily`, before Tauri starts — never opens a window
   - [ ] "Install command-line tool" in the app: puts `dexily` on `PATH` (macOS symlink, Windows, deb/rpm), detects an existing `dexily` rather than overwriting it, and can remove it
   - [ ] Windows console output decided and working (release builds use the `windows` subsystem)
   - [ ] `dexily list` through the app's binary starts within a measured budget (~100 ms)
-- [ ] Homebrew tap, winget manifest, Scoop bucket; Linux channels decided
-- [ ] Anything asking GitHub for "the latest release" filters by tag prefix
+- [ ] Homebrew tap, winget manifest, Scoop bucket; Linux channels decided — see the reminder below
+- [ ] Anything asking GitHub for "the latest release" filters by tag prefix. Nothing does yet (the app has no updater); meanwhile `restore-latest.yml` runs after each `dexily-v*` release and marks the newest app (`v*`) release "Latest" again, so the releases page and its `/latest` link keep pointing at the app
+
+> **Reminder (asked for 2026-10-08): the package-manager channels for `dexily`.** The first release ships as GitHub release archives, the shell/PowerShell installers and crates.io. Still to do:
+>
+> - [ ] **Homebrew tap** — `HADO564/homebrew-tap`; dist's `homebrew` installer generates the formula and pushes it on each release. Needs a token secret `HOMEBREW_TAP_TOKEN` with write access to the tap. Users: `brew install HADO564/tap/dexily` (macOS and Linux)
+> - [ ] **Scoop bucket** — `HADO564/scoop-bucket` with a `dexily.json` using `checkver` / `autoupdate`, so new releases are picked up. Users: `scoop bucket add hado https://github.com/HADO564/scoop-bucket` then `scoop install dexily`
+> - [ ] **winget** — `HADO564.Dexily`: the first submission by hand with `wingetcreate` (a PR to `microsoft/winget-pkgs`, reviewed), then the `winget-releaser` action on each release
+> - [ ] **AUR** — `dexily-bin`, a `PKGBUILD` over the release binary; needs the user's own AUR account and SSH key
+> - [ ] **`.deb` / `.rpm`** — `cargo-deb` and `cargo-generate-rpm`, attached to the release
+> - [ ] *Later:* an apt/dnf repository, so `apt upgrade` / `dnf upgrade` update it
+>
+> The user agreed (2026-10-08) that Claude may create the tap and bucket repos on their account when this is done.

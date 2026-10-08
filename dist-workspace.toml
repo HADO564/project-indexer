@@ -1,0 +1,38 @@
+[workspace]
+members = ["cargo:."]
+
+# Config for 'dist'
+[dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.32.0"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell", "powershell"]
+# Target platforms to build apps for (Rust target-triple syntax)
+# Linux builds are static (musl), so one binary runs on every distro whatever
+# its glibc.
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "aarch64-unknown-linux-musl", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Where to host releases
+hosting = "github"
+# Whether to install an updater program
+install-updater = false
+# Only tags starting `dexily` (`dexily-v0.1.0`) release the CLI: the app's own
+# `v*` tags belong to `release.yml`, which this must never answer.
+tag-namespace = "dexily"
+# Build only what is released, not the whole workspace: the workspace includes
+# the desktop app, whose GTK dependencies a static Linux build cannot have.
+precise-builds = true
+# After a release, hand "Latest" back to the newest app release, so the
+# releases page keeps pointing app users at the app.
+post-announce-jobs = ["./restore-latest"]
+
+# Pull requests only plan the release; set "upload" to build every artifact on
+# a PR, as the one that added this did before the first tag.
+pr-run-mode = "plan"
+
+[dist.github-custom-runners]
+# Native arm64 Linux runners, rather than cross-compiling.
+aarch64-unknown-linux-musl = "ubuntu-24.04-arm"

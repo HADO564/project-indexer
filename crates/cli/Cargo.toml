@@ -1,20 +1,30 @@
 [package]
-name = "indexer-cli"
-# Versioned independently of the desktop app and released as `cli-v<version>`
-# tags; see CHANGELOG.md beside this file. Unreleased so far.
+name = "dexily"
+# Versioned independently of the desktop app and released as `dexily-v<version>`
+# tags; see CHANGELOG.md beside this file.
 version = "0.1.0"
 edition = "2021"
-description = "Command-line tool and TUI for Project Indexer"
+description = "Track your projects from the terminal: the command line for Project Indexer"
+repository = "https://github.com/HADO564/project-indexer"
+readme = "README.md"
 license-file = "../../LICENSE"
-publish = false
+keywords = ["projects", "cli", "tui", "git", "workspace"]
+categories = ["command-line-utilities", "development-tools"]
 
-# The command is `dexily` (decided 2026-10-07); the crate keeps its name.
+# What goes in each release archive beside the binary. Listed rather than
+# detected: dist resolves `license-file` from the wrong folder and fails.
+[package.metadata.dist]
+auto-includes = false
+include = ["README.md", "CHANGELOG.md", "../../LICENSE"]
+
 [[bin]]
 name = "dexily"
 path = "src/main.rs"
 
 [dependencies]
-indexer-core = { path = "../core" }
+# `version` as well as `path`: crates.io resolves it by version, this
+# workspace by path.
+dexily-core = { path = "../core", version = "0.3.5" }
 anyhow = "1"
 # Only for the timestamp fields of `--json`'s project shape (`output/json.rs`).
 chrono = { version = "0.4.45", features = ["serde"] }

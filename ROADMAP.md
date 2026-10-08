@@ -9,7 +9,7 @@ detailed roadmap. This file is the overview.
 
 | Roadmap | Covers |
 |---|---|
-| **This file** | where things stand, the headline plans for both products, and everything they share through `indexer-core` — licensing, detection, git, storage, plugins, what was declined |
+| **This file** | where things stand, the headline plans for both products, and everything they share through `dexily-core` — licensing, detection, git, storage, plugins, what was declined |
 | [`docs/app/ROADMAP.md`](docs/app/ROADMAP.md) | the desktop app — folder scanning, project linking, the global shortcut, app updates |
 | [`docs/cli/ROADMAP.md`](docs/cli/ROADMAP.md) | the command-line tool — the observer, subcommands and `--json`, the TUI, agent access, distribution |
 
@@ -36,7 +36,7 @@ pass, with name collisions resolved automatically and the last scan's settings
 remembered for the next one.
 
 The Rust backend has been restructured so that all logic lives in
-`indexer-core`, a library crate the compiler forbids from importing Tauri —
+`dexily-core`, a library crate the compiler forbids from importing Tauri —
 which is what lets the CLI share it without touching the backend. Storage is SQLite behind numbered `user_version` migrations, currently
 at version 3.
 
@@ -68,7 +68,7 @@ cycle, separately from the app.
 - **Package-manager installs** — Homebrew, winget and the like. After the
   package itself works.
 
-**Shared — `indexer-core`**, detailed below
+**Shared — `dexily-core`**, detailed below
 
 - **The re-detect sweep, then Unity and Blender.** The sweep's backend half
   shipped in 0.3.1 and nothing triggers it yet; Unity must not ship before it
@@ -105,7 +105,7 @@ speculative one, and settling it after an API is published costs a migration.
 
 A plugin is its author's own work. A theme is a file of token values; a
 frontend plugin is code against a published host API; a backend plugin is a
-crate that depends on `indexer-core` and implements a trait. None of those are
+crate that depends on `dexily-core` and implements a trait. None of those are
 derivatives of the Software, and FSL has no copyleft clause reaching them — its
 restriction is on Competing Use of the Software, not on what licence a
 dependent work carries. Plugin authors pick their own licence, and a plugin

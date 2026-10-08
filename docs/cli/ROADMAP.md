@@ -2,7 +2,7 @@
 
 The CLI's detailed plans. The [main roadmap](../../ROADMAP.md) has where things
 stand, the headline plans for both products, and everything shared through
-`indexer-core`. The design contract is
+`dexily-core`. The design contract is
 [`2026-09-14-cli-design.md`](../superpowers/specs/2026-09-14-cli-design.md).
 
 **Status: the first commands work** — `list`, `show`, `config` and `--json`; see
@@ -222,7 +222,7 @@ person can. Briefed in `../handoffs/2026-09-27-cli-edit-form.md`.
   whenever another connection commits, so a cheap poll does the job a file
   watcher would.
 
-**What had to move into `indexer-core` first — done.** The GUI's views, counts
+**What had to move into `dexily-core` first — done.** The GUI's views, counts
 and search — the `name: value` property syntax included — used to live in
 TypeScript (`src/lib/views.ts`). A TUI that disagreed with the GUI about what
 "Ungrouped" or `client: acme` means would be a bug with no single place to fix
@@ -236,7 +236,7 @@ between runs.
 ## Agent access — MCP, or a CLI plus a skill
 
 Drive the app from an agent instead of a window. The premise is the same one the
-CLI rests on: `indexer-core` has no Tauri dependency, so an agent surface is a
+CLI rests on: `dexily-core` has no Tauri dependency, so an agent surface is a
 *fourth frontend* over the same `ProjectService` and the same SQLite file, not a
 new backend.
 
