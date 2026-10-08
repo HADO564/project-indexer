@@ -93,9 +93,9 @@ touches startup, the tray, or anything platform-specific, run the real thing.
 ## Project layout
 
 ```
-crates/core/     indexer-core — all domain logic, orchestration, persistence
+crates/core/     dexily-core — all domain logic, orchestration, persistence
   src/tests/       its unit tests, mirroring the module tree
-crates/cli/      indexer-cli — the command-line tool (not started; see its README)
+crates/cli/      dexily — the command-line tool (see its README)
 src-tauri/       the desktop app: Tauri commands, adapters, startup
 src/             SvelteKit frontend
   src/tests/       its vitest suites, mirroring the modules they cover
@@ -104,7 +104,7 @@ docs/            shared: architecture, knowledgebase, accomplishments, handoffs,
   cli/             the CLI's roadmap and checklist
 ```
 
-`indexer-core` is where the behaviour lives. `src-tauri` is a thin adapter over
+`dexily-core` is where the behaviour lives. `src-tauri` is a thin adapter over
 it: each `#[tauri::command]` is a ~3-line pass-through to `ProjectService`. The
 CLI will be the second adapter, under the same rule — see
 [`crates/cli/README.md`](crates/cli/README.md).
@@ -138,7 +138,7 @@ Two consequences worth knowing before you add a test:
 These are deliberate, and two of them are enforced by the compiler rather than by
 review.
 
-1. **`indexer-core` must not depend on Tauri.** A `use tauri::` inside `core`
+1. **`dexily-core` must not depend on Tauri.** A `use tauri::` inside `core`
    fails to build. This is what keeps a second frontend (the planned CLI, and the
    separate devmon app) possible without touching the backend. If a change seems
    to need Tauri in `core`, the boundary is in the wrong place — say so in the PR
@@ -242,8 +242,10 @@ this one repository.
 | Tag | `v<version>` | `cli-v<version>` |
 
 - **An app release does not bump the CLI, and a CLI release does not bump the
-  app.** `indexer-core` is internal (`publish = false`) and moves with the app's
-  version.
+  app.** `dexily-core` moves with the app's version. It is published to
+  crates.io only because `dexily` depends on it; the app and the CLI both use it
+  from this repository, never from the registry. Its library is still called
+  `indexer_core`, so code says `use indexer_core::…`.
 - **A schema bump ships with a CLI release that understands it.** Both products
   open the same `projects.db`, and `SqliteRepository::open` refuses a database
   written by a newer schema. So a pull request that changes

@@ -1,4 +1,4 @@
-# Changelog — indexer-cli
+# Changelog — dexily
 
 All notable changes to the Project Indexer command-line tool are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
@@ -14,7 +14,7 @@ Nothing released yet.
 
 ### Changed
 
-- The command is now `dexily`, its chosen name; `indexer` was a placeholder. Messages start `dexily:` too. The crate is still `indexer-cli`, so `cargo run -p indexer-cli` and `cargo install --path crates/cli` work as before, and the settings and the shared database are where they were.
+- The command is now `dexily`, its chosen name; `indexer` was a placeholder. Messages start `dexily:` too. The crates are renamed with it: the CLI is the `dexily` crate (`cargo run -p dexily`, `cargo install dexily`) and the shared core is `dexily-core`, whose library is still `indexer_core`. The settings and the shared database are where they were.
 
 ### Added
 

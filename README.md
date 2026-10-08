@@ -154,7 +154,7 @@ one:
             │                            │
             └──────────┬─────────────────┘
                        ▼
-         crates/core  «indexer-core»
+         crates/core  «dexily-core»
          no tauri dependency — enforced by the crate graph
 
          application/  ProjectService · GroupService · inspection
@@ -169,7 +169,7 @@ one:
               projects.db (SQLite, WAL)
 ```
 
-`indexer-core` holds every piece of domain logic, orchestration, and persistence,
+`dexily-core` holds every piece of domain logic, orchestration, and persistence,
 and cannot import Tauri — the compiler enforces it. The Tauri layer is a thin
 adapter: each command is a few lines that call a service method. A command-line
 frontend can therefore be added without changing the backend at all.
@@ -335,7 +335,7 @@ between the file-forwarding markers.
 ## Project layout
 
 ```
-crates/core/      indexer-core — domain, services, ports, detectors, SQLite
+crates/core/      dexily-core — domain, services, ports, detectors, SQLite
 crates/cli/       the command-line tool — not started; released separately
 src-tauri/        the Tauri desktop app: commands, adapters, tray, wiring
 src/              SvelteKit frontend
@@ -364,7 +364,7 @@ specific trigger and what has been considered and **declined**, with reasons.
 
 Development setup, the checks CI runs, and the structural rules the codebase
 enforces on purpose are in [**CONTRIBUTING.md**](CONTRIBUTING.md). Two worth
-knowing up front: `indexer-core` must never depend on Tauri (the compiler
+knowing up front: `dexily-core` must never depend on Tauri (the compiler
 enforces it), and a new detector should need no frontend code at all.
 
 Pull requests need agreement to the [**CLA**](CLA.md) — you keep the copyright
