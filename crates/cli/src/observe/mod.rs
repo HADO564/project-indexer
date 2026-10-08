@@ -7,7 +7,7 @@
 //! through `Command` — it is facts inferred after a command ran, not a command.
 
 mod recognizers;
-mod spawn;
+pub(crate) mod spawn;
 
 use std::ffi::OsString;
 use std::process::ExitCode;
