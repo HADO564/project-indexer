@@ -6,7 +6,7 @@
 //! never changes it. Recording goes through `ProjectService` directly, not
 //! through `Command` — it is facts inferred after a command ran, not a command.
 
-mod recognizers;
+pub(crate) mod recognizers;
 pub(crate) mod spawn;
 
 use std::ffi::OsString;
