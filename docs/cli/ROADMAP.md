@@ -9,7 +9,7 @@ stand, the headline plans for both products, and everything shared through
 [`checklist.md`](checklist.md). The command is called `dexily`
 (decided 2026-10-07; `indexer` until then).
 
-**Released on its own cycle.** The CLI is versioned and tagged (`cli-v*`)
+**Released on its own cycle.** The CLI is versioned and tagged (`dexily-v*`)
 separately from the desktop app, with its own
 [changelog](../../crates/cli/CHANGELOG.md). What ties the two together is the
 database, not a version number — see
@@ -297,7 +297,7 @@ blocks building the CLI.
   install binaries that CI builds — winget in particular cannot build from
   source — so a CLI release publishes per-platform archives. Users just never
   fetch them directly.
-- **Its own release cycle.** Tags are `cli-v<version>`, which the app's `v*`
+- **Its own release cycle.** Tags are `dexily-v<version>`, which the app's `v*`
   release workflow does not match. Anything that asks GitHub for "the latest
   release" must filter by prefix, because both products publish to one
   repository — the app's planned updater included.

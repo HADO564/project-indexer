@@ -210,7 +210,7 @@ pipeline that already exists.
 
 - `tauri-plugin-updater` wiring, with a `core::updates::latest_stable` helper
   that defines "latest" in one place — and considers only the app's `v*` tags,
-  since CLI releases (`cli-v*`) publish to the same repository.
+  since CLI releases (`dexily-v*`) publish to the same repository.
 - A dismissible in-app release notification, rather than an interrupting dialog.
 - Tag → signed bundle → GitHub Release in CI.
 

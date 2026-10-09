@@ -54,7 +54,7 @@ src/
 ```
 
 **Released independently of the desktop app** — its own version, its own
-[changelog](CHANGELOG.md), and tags of the form `cli-v<version>`.
+[changelog](CHANGELOG.md), and tags of the form `dexily-v<version>`.
 
 | Document | What it is for |
 |---|---|
