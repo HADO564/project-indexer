@@ -92,18 +92,25 @@ pub fn label(argv: &[OsString]) -> String {
 /// `/tmp/x/mkdir` is some other program that happens to share the name, so it
 /// is unknown.
 pub fn expect(argv: &[OsString], cwd: &Path) -> Result<Expectation, Refusal> {
+    expect_on(argv, cwd, cfg!(windows))
+}
+
+/// [`expect`] for a named system rather than the one this was built for, so
+/// both sets of rules are tested wherever the tests run: `windows` is cmd's
+/// `mkdir`, otherwise the Unix one.
+pub fn expect_on(argv: &[OsString], cwd: &Path, windows: bool) -> Result<Expectation, Refusal> {
     let (program, rest) = argv.split_first().ok_or(Refusal::Unknown)?;
     let program = program.to_str().ok_or(Refusal::Unknown)?;
     // cmd's names ignore case on Windows, and `md` is its other name for
     // mkdir.
-    let name = if cfg!(windows) {
+    let name = if windows {
         program.to_ascii_lowercase()
     } else {
         program.to_string()
     };
     let folders = match name.as_str() {
-        "mkdir" if !cfg!(windows) => new_folders(mkdir(rest), cwd),
-        "mkdir" | "md" if cfg!(windows) => new_folders(cmd_mkdir(rest), cwd),
+        "mkdir" if !windows => new_folders(mkdir(rest), cwd),
+        "mkdir" | "md" if windows => new_folders(cmd_mkdir(rest), cwd),
         "git" | "git.exe" => git(rest, cwd)?,
         _ => return Err(Refusal::Unknown),
     };

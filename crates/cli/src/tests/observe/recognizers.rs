@@ -4,7 +4,9 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::observe::recognizers::{confirm, expect, label, Expectation, Expected, Proof, Refusal};
+use crate::observe::recognizers::{
+    confirm, expect, expect_on, label, Expectation, Expected, Proof, Refusal,
+};
 
 fn cwd() -> &'static Path {
     Path::new("/home/me/code")
@@ -15,9 +17,18 @@ fn argv(words: &[&str]) -> Vec<OsString> {
 }
 
 /// The folders `words` should leave a project in, or `None` when dexily will
-/// not run it at all.
+/// not run it at all — by the Unix rules, whichever system runs the tests.
 fn expected(words: &[&str]) -> Option<Vec<PathBuf>> {
-    expect(&argv(words), cwd())
+    folders_of(expect_on(&argv(words), cwd(), false))
+}
+
+/// The same, by Windows' rules: cmd's `mkdir`.
+fn expected_on_windows(words: &[&str]) -> Option<Vec<PathBuf>> {
+    folders_of(expect_on(&argv(words), cwd(), true))
+}
+
+fn folders_of(result: Result<Expectation, Refusal>) -> Option<Vec<PathBuf>> {
+    result
         .ok()
         .map(|Expectation { folders }| folders.into_iter().map(|e| e.folder).collect())
 }
@@ -404,5 +415,52 @@ fn git_init_in_a_folder_that_was_already_a_repository_is_still_confirmed() {
     assert_eq!(
         confirm(&expectation, &held, 0),
         vec![root.path().join("app")]
+    );
+}
+
+// Windows: `mkdir` is cmd's, with rules of its own.
+
+#[test]
+fn on_windows_mkdir_and_md_are_known_whatever_their_case() {
+    for program in ["mkdir", "MKDIR", "md", "Md"] {
+        assert_eq!(
+            expected_on_windows(&[program, "thing"]),
+            under_cwd(&["thing"]),
+            "{program}"
+        );
+    }
+}
+
+#[test]
+fn off_windows_md_is_not_a_command_and_case_matters() {
+    assert_eq!(expected(&["md", "thing"]), None);
+    assert_eq!(expected(&["MKDIR", "thing"]), None);
+}
+
+#[test]
+fn cmd_s_mkdir_has_no_options_so_a_dash_starts_a_folder_name() {
+    // No `-p` or `-m` there: cmd makes parents by itself, and would make
+    // folders called `-p` and `755`.
+    assert_eq!(
+        expected_on_windows(&["mkdir", "-p", "thing"]),
+        under_cwd(&["-p", "thing"])
+    );
+}
+
+#[test]
+fn cmd_s_switches_start_with_a_slash_and_are_not_folders() {
+    assert_eq!(expected_on_windows(&["mkdir", "/?"]), Some(Vec::new()));
+    assert_eq!(
+        expected_on_windows(&["mkdir", "/?", "thing"]),
+        under_cwd(&["thing"])
+    );
+}
+
+#[test]
+fn the_system_this_was_built_for_is_the_one_expect_uses() {
+    let here = expect(&argv(&["mkdir", "-p", "thing"]), cwd());
+    assert_eq!(
+        here,
+        expect_on(&argv(&["mkdir", "-p", "thing"]), cwd(), cfg!(windows))
     );
 }
