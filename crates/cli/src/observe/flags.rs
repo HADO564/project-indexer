@@ -102,12 +102,7 @@ impl ObserveFlags {
     /// it — a group to look up, a name to find free. With neither it stays
     /// closed until the command has run, so a broken database cannot stand
     /// between the user and `mkdir`.
-    pub fn check(
-        self,
-        database: &mut Database,
-        cwd: &Path,
-        folders: usize,
-    ) -> anyhow::Result<Fields> {
+    pub fn check(self, database: &Database, cwd: &Path, folders: usize) -> anyhow::Result<Fields> {
         let given = !self.is_empty();
         let Self {
             name,

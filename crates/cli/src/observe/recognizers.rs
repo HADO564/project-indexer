@@ -82,10 +82,11 @@ impl Expected {
 pub enum Refusal {
     /// No recognizer: not a command dexily observes.
     Unknown,
-    /// A command dexily observes, but with an option that makes it run some
+    /// A command dexily observes, but with a word it does not pass on: an
+    /// option it does not know, or one that would make the command run some
     /// other program — which would make the allowlist mean nothing. The text
-    /// says which, for the message.
-    Unsafe(String),
+    /// is the message.
+    Refused(String),
 }
 
 /// The program's name as the recognizers match it: as typed, except that on
@@ -112,7 +113,9 @@ pub fn label(argv: &[OsString]) -> String {
             .unwrap_or_default();
     };
     if program == "git" {
-        if let Some(subcommand) = git_line(&argv[1..]).subcommand {
+        // A line refused for an option before the subcommand has none to
+        // name: it is just `git`.
+        if let Some(subcommand) = git_line(&argv[1..]).ok().and_then(|line| line.subcommand) {
             return format!("git {subcommand}");
         }
     }
@@ -206,6 +209,80 @@ fn cmd_mkdir(args: &[OsString]) -> Vec<PathBuf> {
         .collect()
 }
 
+/// What an option takes, so that its value is never read as something else —
+/// the subcommand, the repository, the folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Takes {
+    /// Nothing: `--quiet`.
+    Nothing,
+    /// A value, as the next word or after `=`: `--depth 1`, `--depth=1`.
+    Value,
+    /// A value only after `=`, or none at all: `--recurse-submodules[=path]`.
+    Optional,
+}
+
+/// The options dexily passes on to git, before the subcommand. Every other is
+/// refused: a git line runs only if dexily understands each word of it.
+///
+/// Failing closed is the point. Git takes more spellings than any list of bad
+/// ones can hold — any unique abbreviation of a long option (`--upl` is
+/// `--upload-pack`), short options run together (`-qu`), global options whose
+/// value is the next word (`--shallow-file init …` makes `init` a file name
+/// and the word after it the real subcommand) — and each of those ran another
+/// program while the list of refusals looked complete. A list of what is
+/// *passed* has no such gap: what it does not name does not run.
+const GIT_GLOBALS: &[(&str, Takes)] = &[
+    ("-C", Takes::Value),
+    ("--no-pager", Takes::Nothing),
+    ("--version", Takes::Nothing),
+    ("--help", Takes::Nothing),
+];
+
+/// Options that make git run another program: a setting can name one
+/// (`core.sshCommand`, `core.fsmonitor`, an alias), `--exec-path` swaps git's
+/// own, `--upload-pack` names one outright, and a template's hooks run on a
+/// clone's checkout and on every commit after an `init`. They are in no table
+/// of options passed on, so they are refused like any other; this only gives
+/// them the message that says why.
+const RUNS_A_PROGRAM: &[&str] = &[
+    "-c",
+    "--config",
+    "--config-env",
+    "--exec-path",
+    "-u",
+    "--upload-pack",
+    "--template",
+];
+
+/// One option word looked up in `table`: its name, what it takes, and whether
+/// the value came attached with `=`. Refused unless it is there exactly as
+/// spelled — no abbreviation, no run of short options — and takes what it was
+/// given.
+fn passed_on<'a>(
+    text: &'a str,
+    table: &[(&'static str, Takes)],
+    to: &str,
+) -> Result<(&'a str, Takes, bool), Refusal> {
+    let (name, attached) = match text.split_once('=') {
+        Some((name, _)) => (name, true),
+        None => (text, false),
+    };
+    let known = table.iter().find(|(known, _)| *known == name);
+    match known {
+        Some((_, Takes::Nothing)) if attached => Err(Refusal::Refused(format!(
+            "`{name}` takes no value, so `{text}` is not passed on to {to}. Run git directly."
+        ))),
+        Some((_, takes)) => Ok((name, *takes, attached)),
+        None if RUNS_A_PROGRAM.contains(&name) => Err(Refusal::Refused(format!(
+            "`{name}` makes git run another program, so it is not passed on. Run git directly."
+        ))),
+        None => Err(Refusal::Refused(format!(
+            "`{name}` is not an option dexily passes on to {to}: options go in full and one at \
+             a time (`--depth 1 -q`, not `--dep 1` or `-q1`). Run git directly for anything else."
+        ))),
+    }
+}
+
 /// Git's line before the subcommand's own arguments.
 struct GitLine<'a> {
     /// Where `-C` moves git to, relative to the working folder. It may repeat.
@@ -214,16 +291,13 @@ struct GitLine<'a> {
     subcommand: Option<String>,
     /// The arguments after the subcommand.
     rest: &'a [OsString],
-    /// A global option that makes git run another program, if one was given.
-    unsafe_option: Option<String>,
 }
 
-fn git_line(args: &[OsString]) -> GitLine<'_> {
+fn git_line(args: &[OsString]) -> Result<GitLine<'_>, Refusal> {
     let mut line = GitLine {
         base: PathBuf::new(),
         subcommand: None,
         rest: &[],
-        unsafe_option: None,
     };
     let mut at = 0;
     while let Some(arg) = args.get(at) {
@@ -234,42 +308,17 @@ fn git_line(args: &[OsString]) -> GitLine<'_> {
             break;
         }
         at += 1;
-        // `--name=value` carries its value; `--name value` takes the next
-        // argument, which must then not be read as the subcommand.
-        let (option, attached) = match text.split_once('=') {
-            Some((option, _)) => (option, true),
-            None => (text.as_ref(), false),
-        };
-        match option {
-            "-C" => {
+        let (name, takes, attached) = passed_on(&text, GIT_GLOBALS, "git")?;
+        if takes == Takes::Value && !attached {
+            if name == "-C" {
                 if let Some(path) = args.get(at) {
                     line.base = line.base.join(path);
                 }
-                at += 1;
             }
-            // A setting can name a program for git to run: `core.sshCommand`,
-            // `core.fsmonitor`, an alias. `-c` always takes the next argument.
-            "-c" => {
-                line.unsafe_option.get_or_insert_with(|| option.to_string());
-                at += 1;
-            }
-            // The same through the environment, in either spelling.
-            "--config-env" => {
-                line.unsafe_option.get_or_insert_with(|| option.to_string());
-                if !attached {
-                    at += 1;
-                }
-            }
-            // With a value it swaps git's own programs; bare, it only prints
-            // where they are.
-            "--exec-path" if attached => {
-                line.unsafe_option.get_or_insert_with(|| option.to_string());
-            }
-            "--git-dir" | "--work-tree" | "--namespace" | "--super-prefix" if !attached => at += 1,
-            _ => {}
+            at += 1;
         }
     }
-    line
+    Ok(line)
 }
 
 /// The git subcommands that make a project — the only ones that run.
@@ -288,50 +337,78 @@ impl GitCommand {
         }
     }
 
-    /// Its options whose value is the next argument, so that value is never
-    /// read as the repository or the folder.
-    fn valued(self) -> &'static [&'static str] {
+    fn name(self) -> &'static str {
         match self {
-            Self::Init => &[
-                "--template",
-                "--separate-git-dir",
-                "--object-format",
-                "--ref-format",
-                "-b",
-                "--initial-branch",
-            ],
-            Self::Clone => &[
-                "-b",
-                "--branch",
-                "-o",
-                "--origin",
-                "--reference",
-                "--reference-if-able",
-                "--separate-git-dir",
-                "--depth",
-                "--shallow-since",
-                "--shallow-exclude",
-                "-j",
-                "--jobs",
-                "--filter",
-                "--server-option",
-                "--bundle-uri",
-                "--revision",
-            ],
+            Self::Init => "git init",
+            Self::Clone => "git clone",
         }
     }
 
-    /// Whether `option` makes this subcommand run another program.
-    fn runs_a_program(self, option: &str) -> bool {
+    /// The options dexily passes on to it, each exactly as spelled. An option
+    /// that is not here is refused — which is how the ones that run another
+    /// program are kept out, along with any git adds later.
+    fn options(self) -> &'static [(&'static str, Takes)] {
+        use Takes::{Nothing, Optional, Value};
         match self {
-            Self::Init => false,
-            // `--upload-pack` names the program outright, a `-c` setting can
-            // (`core.fsmonitor`), and a clone checks the new repository out,
-            // which runs the template's hooks — `init` only copies them.
-            Self::Clone => matches!(
-                option,
-                "-u" | "--upload-pack" | "-c" | "--config" | "--template"
-            ),
+            Self::Init => &[
+                ("-q", Nothing),
+                ("--quiet", Nothing),
+                ("--bare", Nothing),
+                ("-b", Value),
+                ("--initial-branch", Value),
+                ("--object-format", Value),
+                ("--ref-format", Value),
+                ("--separate-git-dir", Value),
+                ("--shared", Optional),
+            ],
+            Self::Clone => &[
+                ("-q", Nothing),
+                ("--quiet", Nothing),
+                ("-v", Nothing),
+                ("--verbose", Nothing),
+                ("--progress", Nothing),
+                ("-n", Nothing),
+                ("--no-checkout", Nothing),
+                ("--bare", Nothing),
+                ("--mirror", Nothing),
+                ("-l", Nothing),
+                ("--local", Nothing),
+                ("--no-hardlinks", Nothing),
+                ("-s", Nothing),
+                ("--shared", Nothing),
+                ("--dissociate", Nothing),
+                ("--single-branch", Nothing),
+                ("--no-single-branch", Nothing),
+                ("--tags", Nothing),
+                ("--no-tags", Nothing),
+                ("--sparse", Nothing),
+                ("--recursive", Nothing),
+                ("--recurse-submodules", Optional),
+                ("--shallow-submodules", Nothing),
+                ("--no-shallow-submodules", Nothing),
+                ("--remote-submodules", Nothing),
+                ("--also-filter-submodules", Nothing),
+                ("--reject-shallow", Nothing),
+                ("--no-reject-shallow", Nothing),
+                ("-4", Nothing),
+                ("--ipv4", Nothing),
+                ("-6", Nothing),
+                ("--ipv6", Nothing),
+                ("-b", Value),
+                ("--branch", Value),
+                ("-o", Value),
+                ("--origin", Value),
+                ("--depth", Value),
+                ("--shallow-since", Value),
+                ("--shallow-exclude", Value),
+                ("-j", Value),
+                ("--jobs", Value),
+                ("--filter", Value),
+                ("--revision", Value),
+                ("--reference", Value),
+                ("--reference-if-able", Value),
+                ("--separate-git-dir", Value),
+            ],
         }
     }
 
@@ -350,15 +427,12 @@ struct GitArgs<'a> {
     positionals: Vec<&'a OsString>,
     /// `--bare` or `--mirror`: a repository nobody works in.
     bare: bool,
-    /// An option that makes it run another program, if one was given.
-    unsafe_option: Option<String>,
 }
 
-fn git_args(command: GitCommand, args: &[OsString]) -> GitArgs<'_> {
+fn git_args(command: GitCommand, args: &[OsString]) -> Result<GitArgs<'_>, Refusal> {
     let mut parsed = GitArgs {
         positionals: Vec::new(),
         bare: false,
-        unsafe_option: None,
     };
     let mut options_done = false;
     let mut args = args.iter();
@@ -368,39 +442,34 @@ fn git_args(command: GitCommand, args: &[OsString]) -> GitArgs<'_> {
             parsed.positionals.push(arg);
             continue;
         }
-        let (option, attached) = match text.split_once('=') {
-            Some((option, _)) => (option, true),
-            None => (text.as_ref(), false),
-        };
-        if option == "--" {
+        if text == "--" {
             options_done = true;
-        } else if matches!(option, "--bare" | "--mirror") {
+            continue;
+        }
+        let (name, takes, attached) = passed_on(&text, command.options(), command.name())?;
+        if matches!(name, "--bare" | "--mirror") {
             parsed.bare = true;
-        } else if command.runs_a_program(option) {
-            parsed
-                .unsafe_option
-                .get_or_insert_with(|| option.to_string());
-        } else if command.valued().contains(&option) && !attached {
+        }
+        if takes == Takes::Value && !attached {
             args.next();
         }
     }
     parsed.positionals.truncate(command.positionals());
-    parsed
+    Ok(parsed)
 }
 
-/// Git: only `init` and `clone` make a project, so only they run. Their proof
-/// is a `.git` in the folder, which may have existed already.
+/// Git: only `init` and `clone` make a project, so only they run, and only
+/// with options dexily knows. Their proof is a `.git` in the folder, which may
+/// have existed already.
 ///
 /// In two steps, in this order: first every reason to refuse the line, then —
 /// only for a line that will run — the folder it should leave a project in.
 /// Nothing about the folder can therefore let a refused line through.
 fn git(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
-    let line = git_line(args);
-    // Which subcommand comes first: `git push` is unknown whatever its
-    // options are.
+    let line = git_line(args)?;
     let command = GitCommand::parse(line.subcommand.as_deref()).ok_or(Refusal::Unknown)?;
-    let parsed = git_args(command, line.rest);
-    refuse_git(command, &line, &parsed)?;
+    let parsed = git_args(command, line.rest)?;
+    refuse_address(command, &parsed)?;
 
     let base = cwd.join(&line.base);
     Ok(git_folder(command, &base, &parsed)
@@ -412,23 +481,16 @@ fn git(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
         .collect())
 }
 
-/// Every reason not to run a git line: the options and addresses that make
-/// git run another program. dexily adds nothing to those, and an allowlist
-/// that let them through would not be one.
-fn refuse_git(command: GitCommand, line: &GitLine, parsed: &GitArgs) -> Result<(), Refusal> {
-    if let Some(option) = line
-        .unsafe_option
-        .as_ref()
-        .or(parsed.unsafe_option.as_ref())
-    {
-        return Err(refused(option));
-    }
+/// A clone's address can itself be a command line (`ext::`) or an open file
+/// handle (`fd::`): refused, bare clone or not.
+fn refuse_address(command: GitCommand, parsed: &GitArgs) -> Result<(), Refusal> {
     if command == GitCommand::Clone {
         if let Some(repository) = parsed.positionals.first() {
             let repository = repository.to_string_lossy();
-            // Transports that are a command line or an open file handle.
             if repository.starts_with("ext::") || repository.starts_with("fd::") {
-                return Err(refused(&repository));
+                return Err(Refusal::Refused(format!(
+                    "`{repository}` makes git run another program, so it is not passed on. Run git directly."
+                )));
             }
         }
     }
@@ -455,12 +517,6 @@ fn git_folder(command: GitCommand, base: &Path, parsed: &GitArgs) -> Option<Path
             }
         }
     }
-}
-
-fn refused(option: &str) -> Refusal {
-    Refusal::Unsafe(format!(
-        "`{option}` makes git run another program, so it is not passed on. Run git directly."
-    ))
 }
 
 /// The folder `git clone <repository>` makes when none is named, as git works

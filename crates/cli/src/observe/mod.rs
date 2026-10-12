@@ -26,6 +26,7 @@ pub(crate) mod flags;
 pub(crate) mod recognizers;
 pub(crate) mod spawn;
 
+use std::cell::LazyCell;
 use std::ffi::OsString;
 use std::io::Write;
 use std::path::Path;
@@ -78,45 +79,28 @@ pub fn run(argv: &[OsString], options: Options) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::from(u8::try_from(code).unwrap_or(1)))
 }
 
+/// How the database is opened, when it is.
+type Open<'a> = Box<dyn FnOnce() -> anyhow::Result<Context> + 'a>;
+
 /// The database, opened the first time something needs it: after the command
 /// has run, unless a flag has to be checked against it before. Whoever needs
-/// it asks, so no caller has to know in advance whether it will be open.
+/// it asks, so no caller has to know in advance whether it will be open; and
+/// one that could not be opened says so each time, rather than trying again.
 pub(crate) struct Database<'a> {
-    state: State<'a>,
-}
-
-enum State<'a> {
-    Closed(Box<dyn FnOnce() -> anyhow::Result<Context> + 'a>),
-    Open(Context),
-    /// It could not be opened, and why — kept, so asking again says the same
-    /// rather than trying a second time.
-    Failed(String),
+    cell: LazyCell<anyhow::Result<Context>, Open<'a>>,
 }
 
 impl<'a> Database<'a> {
     fn new(open: impl FnOnce() -> anyhow::Result<Context> + 'a) -> Self {
         Self {
-            state: State::Closed(Box::new(open)),
+            cell: LazyCell::new(Box::new(open)),
         }
     }
 
-    pub(crate) fn get(&mut self) -> anyhow::Result<&Context> {
-        if matches!(self.state, State::Closed(_)) {
-            let State::Closed(open) =
-                std::mem::replace(&mut self.state, State::Failed(String::new()))
-            else {
-                unreachable!("just matched as closed");
-            };
-            self.state = match open() {
-                Ok(ctx) => State::Open(ctx),
-                Err(e) => State::Failed(format!("{e:#}")),
-            };
-        }
-        match &self.state {
-            State::Open(ctx) => Ok(ctx),
-            State::Failed(why) => Err(anyhow::anyhow!("{why}")),
-            State::Closed(_) => unreachable!("opened or failed above"),
-        }
+    pub(crate) fn get(&self) -> anyhow::Result<&Context> {
+        LazyCell::force(&self.cell)
+            .as_ref()
+            .map_err(|e| anyhow::anyhow!("{e:#}"))
     }
 }
 
@@ -181,18 +165,18 @@ pub(crate) fn observe(
                 recognizers::KNOWN.join(", ")
             )))
         }
-        Err(Refusal::Unsafe(why)) => return Err(usage(why)),
+        Err(Refusal::Refused(why)) => return Err(usage(why)),
     };
 
     // dexily's own flags, checked before the command runs: a group that does
     // not exist must stop everything now, not after a folder has been made.
     // Flags also mean the user has already decided and described the project,
     // and `--json` has nobody to ask: either way, no question.
-    let mut database = Database::new(open);
+    let database = Database::new(open);
     let ask = options.flags.is_empty() && voice != Voice::Json;
     let fields = options
         .flags
-        .check(&mut database, cwd, expectation.folders.len())
+        .check(&database, cwd, expectation.folders.len())
         .map_err(|e| usage(format!("{e:#}")))?;
 
     let held_before = expectation.before();

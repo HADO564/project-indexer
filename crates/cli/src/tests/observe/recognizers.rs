@@ -233,8 +233,8 @@ fn git_init_s_options_with_a_value_are_not_the_folder() {
         &[
             "git",
             "init",
-            "--template",
-            "tpl",
+            "--separate-git-dir",
+            "elsewhere",
             "--object-format",
             "sha256",
             "app",
@@ -252,7 +252,7 @@ fn dash_c_moves_the_folder_git_works_in() {
         repo_at("a/b/x")
     );
     assert_eq!(
-        git_expects(&["git", "--git-dir", "elsewhere", "-C", "sub", "init"]),
+        git_expects(&["git", "--no-pager", "-C", "sub", "init"]),
         repo_at("sub")
     );
 }
@@ -321,8 +321,6 @@ fn any_other_git_command_is_not_known() {
         &["git", "--version"],
         &["git"],
         &["git", "-C", "sub", "pull"],
-        // Unknown first, whatever options it carries.
-        &["git", "-c", "alias.x=!sh", "push"],
     ] {
         assert_eq!(git_expects(words), Err(Refusal::Unknown), "{words:?}");
     }
@@ -362,7 +360,7 @@ fn an_option_that_makes_git_run_another_program_is_refused() {
         &["git", "clone", "--bare", "--upload-pack=evil", "host:thing"],
     ] {
         assert!(
-            matches!(git_expects(words), Err(Refusal::Unsafe(_))),
+            matches!(git_expects(words), Err(Refusal::Refused(_))),
             "{words:?}: {:?}",
             git_expects(words)
         );
@@ -371,7 +369,7 @@ fn an_option_that_makes_git_run_another_program_is_refused() {
 
 #[test]
 fn a_refusal_names_the_option_and_says_to_run_git_directly() {
-    let Err(Refusal::Unsafe(why)) = git_expects(&["git", "clone", "--upload-pack=evil", "x"])
+    let Err(Refusal::Refused(why)) = git_expects(&["git", "clone", "--upload-pack=evil", "x"])
     else {
         panic!("refused");
     };
@@ -473,13 +471,6 @@ fn the_system_this_was_built_for_is_the_one_expect_uses() {
 }
 
 #[test]
-fn a_bare_exec_path_only_prints_so_it_is_not_refused() {
-    // Not a project command either way; the point is which refusal it gets.
-    assert_eq!(git_expects(&["git", "--exec-path"]), Err(Refusal::Unknown));
-    assert_eq!(git_expects(&["git", "--exec-path", "init"]), repo_at(""));
-}
-
-#[test]
 fn every_command_the_refusal_names_is_one_dexily_runs() {
     // `KNOWN` is the list the refusal message prints. A name there that the
     // recognizers do not take would make the message a lie; this pins it on
@@ -509,4 +500,198 @@ fn on_windows_git_may_be_named_with_its_exe_and_in_any_case() {
         None,
         "not off Windows"
     );
+}
+
+// Fail closed: a git line runs only if dexily knows every word of it. Each of
+// these once reached git and ran another program, because a list of bad
+// spellings cannot hold every spelling git takes.
+
+fn refusal(words: &[&str]) -> String {
+    match git_expects(words) {
+        Err(Refusal::Refused(why)) => why,
+        other => panic!("{words:?} should be refused, but: {other:?}"),
+    }
+}
+
+#[test]
+fn a_global_option_dexily_does_not_know_is_refused_whatever_follows() {
+    // `--shallow-file` takes the next word as its value, so `init` here is a
+    // file name and the real subcommand is whatever comes after it: git would
+    // run `git -c alias.x=… x`, or with `status` in its place, `git status`.
+    let why = refusal(&[
+        "git",
+        "--shallow-file",
+        "init",
+        "-c",
+        "alias.x=!touch pwned",
+        "x",
+    ]);
+    assert!(
+        why.starts_with("`--shallow-file` is not an option dexily passes on to git:"),
+        "{why}"
+    );
+    refusal(&["git", "--shallow-file", "init", "status"]);
+    refusal(&["git", "--attr-source", "init", "status"]);
+    // Even one that changes nothing dangerous: where the repository goes is
+    // no longer where dexily would look.
+    refusal(&["git", "--git-dir", "elsewhere", "init"]);
+    refusal(&["git", "--work-tree=elsewhere", "init"]);
+}
+
+#[test]
+fn an_abbreviated_option_is_refused() {
+    // Git takes any unique start of a long option: `--upl` is `--upload-pack`.
+    let why = refusal(&[
+        "git",
+        "clone",
+        "--bare",
+        "--upl=touch pwned; false",
+        "file:///src",
+        "c.git",
+    ]);
+    assert!(
+        why.starts_with("`--upl` is not an option dexily passes on to git clone:"),
+        "{why}"
+    );
+    for abbreviated in ["--conf", "--templ", "--dep", "--bran"] {
+        refusal(&["git", "clone", abbreviated, "x", "host:thing"]);
+    }
+    refusal(&["git", "init", "--templ=hooks", "app"]);
+}
+
+#[test]
+fn short_options_run_together_are_refused() {
+    // `-qu` is `-q -u`, and `-u` names a program to run.
+    refusal(&[
+        "git",
+        "clone",
+        "--bare",
+        "-qu",
+        "touch pwned; false",
+        "file:///src",
+        "c.git",
+    ]);
+    refusal(&["git", "clone", "-qb", "dev", "host:thing"]);
+    refusal(&["git", "clone", "-j4", "host:thing"]);
+    refusal(&["git", "init", "-qb", "main", "app"]);
+}
+
+#[test]
+fn an_option_dexily_does_not_know_is_refused_on_either_subcommand() {
+    for words in [
+        &["git", "init", "--new-in-some-later-git", "app"][..],
+        &["git", "clone", "--new-in-some-later-git", "host:thing"],
+        &["git", "init", "--template", "hooks", "app"],
+        &["git", "clone", "--bundle-uri", "x", "host:thing"],
+        // A flag given a value it does not take.
+        &["git", "clone", "--quiet=yes", "host:thing"],
+    ] {
+        refusal(words);
+    }
+}
+
+#[test]
+fn a_value_is_never_read_as_the_repository_or_the_folder() {
+    // With every option's arity known. `--bran dev ../other` once made dexily
+    // look for the new project in `../other`, an existing repository.
+    refusal(&["git", "clone", "--bran", "dev", "../other"]);
+    assert_eq!(
+        git_expects(&[
+            "git",
+            "clone",
+            "--branch",
+            "dev",
+            "--depth",
+            "1",
+            "host:thing"
+        ]),
+        repo_at("thing")
+    );
+    assert_eq!(
+        git_expects(&["git", "clone", "--recurse-submodules", "host:thing"]),
+        repo_at("thing"),
+        "its value is optional, and only after `=`"
+    );
+    assert_eq!(
+        git_expects(&[
+            "git",
+            "clone",
+            "--recurse-submodules=lib",
+            "host:thing",
+            "mine"
+        ]),
+        repo_at("mine")
+    );
+}
+
+#[test]
+fn everyday_lines_still_run() {
+    for (words, folder) in [
+        (&["git", "init"][..], ""),
+        (&["git", "init", "-q", "-b", "main", "app"], "app"),
+        (
+            &["git", "init", "--initial-branch=main", "--shared", "app"],
+            "app",
+        ),
+        (&["git", "init", "--shared=group", "app"], "app"),
+        (&["git", "-C", "sub", "init"], "sub"),
+        (&["git", "--no-pager", "init", "app"], "app"),
+        (&["git", "clone", "https://host/you/thing.git"], "thing"),
+        (
+            &[
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "-b",
+                "dev",
+                "host:thing",
+                "dir",
+            ],
+            "dir",
+        ),
+        (
+            &[
+                "git",
+                "clone",
+                "--depth=1",
+                "--single-branch",
+                "--no-tags",
+                "host:thing",
+            ],
+            "thing",
+        ),
+        (
+            &[
+                "git",
+                "clone",
+                "-q",
+                "--recurse-submodules",
+                "-j",
+                "4",
+                "host:thing",
+            ],
+            "thing",
+        ),
+        (
+            &[
+                "git",
+                "clone",
+                "--filter=blob:none",
+                "--sparse",
+                "host:thing",
+            ],
+            "thing",
+        ),
+        (&["git", "clone", "--", "host:thing", "-odd"], "-odd"),
+    ] {
+        assert_eq!(git_expects(words), repo_at(folder), "{words:?}");
+    }
+}
+
+#[test]
+fn asking_git_about_itself_is_not_a_project_command() {
+    // Known words, no subcommand: unknown rather than refused.
+    assert_eq!(git_expects(&["git", "--version"]), Err(Refusal::Unknown));
+    assert_eq!(git_expects(&["git", "--help"]), Err(Refusal::Unknown));
 }
