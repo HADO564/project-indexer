@@ -5,7 +5,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 The CLI is released independently of the desktop app, under tags of the form
-`cli-v<version>`. The app's changes are in the root
+`dexily-v<version>`. The app's changes are in the root
 [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ## [Unreleased]
@@ -23,7 +23,11 @@ The CLI is released independently of the desktop app, under tags of the form
 
 - **dexily only runs commands it has a recognizer for** — today `mkdir`. Anything else, a path to another program named `mkdir` included, is refused before it starts (``dexily: `ls` isn't a command dexily observes (it knows: mkdir). Run it directly.``, exit 2), so a script or an agent given dexily cannot use it to run arbitrary programs. Arguments are handed to the command as a list, never joined into a line for a shell.
 
-Nothing released yet.
+## [0.1.0] — 2026-10-08
+
+The first release, as `dexily`: on crates.io (`cargo install dexily`), and as
+archives for macOS, Linux (static) and Windows with `curl | sh` and PowerShell
+installers on the GitHub release.
 
 ### Changed
 

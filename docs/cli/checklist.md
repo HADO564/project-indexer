@@ -10,7 +10,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 ## Organisation
 
 - [x] Stays in this workspace as `crates/cli`, not a separate repository (spec → *Decisions locked*, 1)
-- [x] Versioned and released independently: `0.1.0`, [`crates/cli/CHANGELOG.md`](../../crates/cli/CHANGELOG.md), `cli-v*` tags (`CONTRIBUTING.md` → *Versioning and releases*)
+- [x] Versioned and released independently: `0.1.0`, [`crates/cli/CHANGELOG.md`](../../crates/cli/CHANGELOG.md), `dexily-v*` tags (`CONTRIBUTING.md` → *Versioning and releases*)
 - [x] Every crate is `publish = false`
 - [x] Binary named in one place (`[[bin]]` in `crates/cli/Cargo.toml`) — `indexer` as a placeholder until the name was chosen
 - [x] Docs split per product: this checklist and the CLI roadmap, plus the crate's README and changelog

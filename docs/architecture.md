@@ -455,7 +455,7 @@ resolves them via the registry's App Paths / PATHEXT.
 
 The desktop app and the command-line tool live in one repository and one Cargo
 workspace — `src-tauri` and `crates/cli` over `crates/core` — and are versioned,
-tagged (`v*` / `cli-v*`) and changelogged independently. Every crate is
+tagged (`v*` / `dexily-v*`) and changelogged independently. Every crate is
 `publish = false`.
 
 *Why one repository:* the CLI is almost entirely calls into `dexily-core`, and

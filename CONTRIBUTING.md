@@ -239,7 +239,7 @@ this one repository.
 |---|---|---|
 | Version lives in | `src-tauri/Cargo.toml`, `crates/core/Cargo.toml`, `package.json`, `src-tauri/tauri.conf.json` | `crates/cli/Cargo.toml` |
 | Changelog | `CHANGELOG.md` | `crates/cli/CHANGELOG.md` |
-| Tag | `v<version>` | `cli-v<version>` |
+| Tag | `v<version>` | `dexily-v<version>` |
 
 - **An app release does not bump the CLI, and a CLI release does not bump the
   app.** `dexily-core` moves with the app's version. It is published to
