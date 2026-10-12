@@ -108,18 +108,22 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 
 ## 4. The observer
 
-Design decided 2026-10-08 — three phases, no threads; outcome not output; dexily's own flags before the command, checked before it runs — recorded in the CLI design spec, *The observer*. The user is building this one (`feat/observer`).
+Design decided 2026-10-08 — three phases, no threads; outcome not output; dexily's own flags before the command, checked before it runs — recorded in the CLI design spec, *The observer*. Built on `feat/observer` (2026-10-12) for its first recognizer, `mkdir`; documented in [`agents.md` → *Observed commands*](agents.md#observed-commands) and the crate's README.
 
-- [ ] **Security gatekeeper, first in phase 1:** only commands with a recognizer run (an allowlist that *is* the recognizer list; unknown commands and unrecognised subcommands refused, exit 2, not run); arguments as a list, never a joined string or a shell; on Windows' `cmd /C` path, arguments with cmd's special characters refused; programs found on `PATH` only and `cmd.exe` by its full path; the recorded folder resolved before tracking (decided 2026-10-08)
-- [ ] Spawn the wrapped command with inherited stdio; its exit code always wins, and Ctrl+C is left to it
-- [ ] Phase 1 — an expectation from argv and the disk, in memory only; nothing written before the command finishes
-- [ ] Phase 3 — the evidence (exit code, the folder now exists, what is in it) confirms or drops the expectation; a failed command leaves no project
-- [ ] First recognizers chosen, each with its project-directory rule written down; a before/after snapshot where the folder is hard to predict
-- [ ] Records through core services (`ensure_project`, `refresh_trackers`); a recording failure never changes the exit code
-- [ ] dexily's own flags before the command — `edit`'s field flags, applied as one `UpdateProject` after `ensure_project` — checked before the command runs (exit 2, command not run); flags on a command no recognizer knows are refused the same way
-- [ ] `mkdir` first (every folder it actually created; not `-p`'s parents or an option's value); how to run it on Windows, where it is a shell built-in
-- [ ] The `[Y/n/e]` prompt after a successful command — Enter tracks, `n` skips, `e` tracks and opens the edit form; none when piped, under `--json` or with `--yes`; the confirmer gains a third answer
-- [ ] Human-path output decided (silent, or one line on stderr), and whether `--quiet` exists; what is said when the command failed and the flags were dropped
+- [x] **Security gatekeeper, first in phase 1:** only commands with a recognizer run (an allowlist that *is* the recognizer list — `recognizers::KNOWN`; an unknown command, or a path to a program that shares a known name, is refused, exit 2, not run); arguments as a list, never a joined string or a shell; on Windows' `cmd /C` path, arguments with cmd's special characters refused, and `cmd.exe` taken by its full path; the recorded folder resolved through `add::absolute` before tracking (decided 2026-10-08). Other programs on Windows are found by Rust's own lookup, which does not search the current folder first — no `which` crate was needed
+- [x] Spawn the wrapped command with inherited stdio, in the working folder it was given; its exit code always wins (a signal is 128 + n), and Ctrl+C is left to it (`ctrlc`, a handler that does nothing)
+- [x] Phase 1 — an expectation from argv and the disk, in memory only (`recognizers::expect`, and which expected folders already exist); nothing written before the command finishes
+- [x] Phase 3 — the evidence confirms or drops the expectation (`recognizers::confirm`: exit 0, absent before, a folder now); a failed command leaves no project
+- [x] First recognizer chosen, with its project-directory rule written beside it: `mkdir`. The before/after check is per expected folder; a snapshot of the whole folder, for a command whose target is hard to predict, waits for one that needs it
+- [x] Records through core's `ensure_project`, which runs the detectors itself; a recording failure never changes the exit code — a warning with the `dexily add <folder>` that retries it, shown even under `--quiet`. The database is opened after the command has run, unless a flag (`--group`, `--name`) must be checked against it first
+- [x] dexily's own flags before the command — `edit`'s field flags (`--name`, `--description`, `--add-tag`, `--set`, `--notes`, `--open-with`, `--group`, `--color`, `--icon`), applied as one `UpdateProject` after `ensure_project` — checked before the command runs (exit 2, command not run), core's own rules by a dry run on a project that is never saved; before one of dexily's own commands they are a usage error
+- [x] `mkdir` first (every folder it actually created; not `-p`'s parents or an option's value); on Windows, where it is a shell built-in, through `cmd.exe /D /C` (`md` too), with cmd's own argument rules
+- [x] The `[Y/n/e]` prompt after a successful command, once per folder — Enter tracks, `n` skips, `e` tracks and opens the full edit form, anything else is asked again; none when piped, under `--json`, with `--yes` or with project flags; the confirmer gained `track` and a third answer
+- [x] Human-path output: one line on stderr when no prompt was shown (`dexily: tracking "thing" at …`), `dexily: mkdir failed (exit N), nothing tracked` for a failed command, and `-q/--quiet` to hide dexily's own lines. `--json` is one line on stderr, last
+- [ ] *Later:* a `config` setting to turn the prompt off, for those who find it noisy
+- [ ] *Later:* the tracker-based recognizers — `git init`, `git clone`, then Unreal — each with its directory rule; `git init` reopens whether dexily's flags apply to a folder that was already tracked
+- [ ] *Later:* system commands that change a project rather than create one — `mv` (update a tracked project's directory), `rm -rf` (a tracked folder gone), `cp -r` (a copy as a new project)
+- [ ] *Later:* `--json-file <path>`, if reading the last line of stderr proves awkward
 
 ## 5. The TUI
 

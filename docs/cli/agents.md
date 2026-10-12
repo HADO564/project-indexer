@@ -17,6 +17,9 @@ code is `crates/cli/src/output/json.rs`, and its tests are in
   nothing else goes to stdout, so `dexily list --json | jq` needs no filtering.
 - **A failed command prints `{"schema": 1, "error": …}` on stderr** and exits
   non-zero. Nothing goes to stdout.
+- **One exception: an observed command** (`dexily mkdir thing`). The command
+  dexily runs owns stdout and the exit code, so dexily's document goes to
+  stderr instead — see [Observed commands](#observed-commands).
 - **`schema` is bumped only for a change that breaks a reader.** Within one
   schema version, fields are only ever added. Ignore any field you don't
   recognise.
@@ -57,6 +60,7 @@ code is `crates/cli/src/output/json.rs`, and its tests are in
 | `dexily group list --json` | an array of [groups](#a-group) in the sidebar's order, each with `projects`, how many live projects it holds. No groups is an empty array, exit 0 |
 | `dexily group create <name> [--color <colour>] [--icon <icon>] --json` | the [group](#a-group) as saved, last in the sidebar. `--color` defaults to `cyan` and `--icon` to `briefcase`; colours follow `edit --color`'s rule, and a group's icon is a **bundled** one only, as in the app (`custom:` is refused). A name another group has, ignoring case, is an [error](#errors) |
 | `dexily group edit <group> [--name <text>] [--color <colour>] [--icon <icon>] --json` | the [group](#a-group) as saved. `<group>` is matched trimmed and ignoring case, exactly; a miss lists the groups. At least one flag, or it is a usage error (exit 2). A group always has a colour and an icon, so neither can be cleared |
+| `dexily [project flags] mkdir <folders…> --json` | **not on stdout** — one line on stderr, last: `{"exit_code": 0, "tracked": [projects], "failed": [{"directory", "message"}]}` inside the usual envelope. Runs the real `mkdir` and tracks each folder it created. The exit code is `mkdir`'s. See [Observed commands](#observed-commands) |
 | `dexily group delete <group> --json` | `{"group": {…}, "ungrouped": 2}` — the group as it was, and how many projects it left ungrouped, binned ones included. The projects are kept. **Needs `--yes` when stdin is not a terminal**, as `untrack` does |
 
 `scan` takes `--depth <n>` (1, the default, visits only the folder's
@@ -66,11 +70,97 @@ A command that asks for confirmation and is answered no returns
 `{"schema": 1, "data": {"cancelled": true}}` and exits 0 — nothing went wrong,
 so it is a result rather than an error. Pass `--yes` to agree in advance.
 
-The observer and the TUI are not written yet. They fail with an error of kind
+The TUI is not written yet: a bare `dexily` fails with an error of kind
 `error`.
 
 **To act on one project, use its id.** `show <id>` is exact, and names are not
 unique. Two projects called `app` in different folders is normal.
+
+## Observed commands
+
+`dexily mkdir thing` runs the real `mkdir thing` — same output, same prompts,
+same exit code — and then tracks the folder it made. This is the one place
+dexily runs another program, so its rules differ from every command above.
+
+- **Only a command dexily has a recognizer for runs.** Today that is `mkdir`
+  (and `md` on Windows), named bare. Anything else — `ls`, `rm`, `git`, a path
+  such as `/bin/mkdir` — is refused **before it runs**, exit 2, as prose:
+  ``dexily: `ls` isn't a command dexily observes (it knows: mkdir). Run it
+  directly.`` **dexily cannot be used to run arbitrary commands**; run those
+  yourself.
+- **The exit code is the command's own**, whatever dexily then manages to
+  record: `0` when `mkdir` succeeded, `mkdir`'s code when it failed, and
+  128 + the signal's number when a signal ended it (130 for Ctrl+C, which is
+  left to the command). Only a refusal before the command starts is dexily's
+  own exit code (2).
+- **What is tracked:** every folder the command names that it actually
+  created — absent before, a folder after, and the command exited 0. Not the
+  parents `-p` makes on the way (`mkdir -p work/clients/acme` tracks `acme`),
+  not an option's value (`-m 755`), not a folder that was already there. Each is
+  stored under its real, absolute path, as `add` stores one. A failed command
+  tracks nothing.
+- **Arguments are passed as a list, never through a shell**, so
+  `dexily mkdir 'x; rm -rf ~'` makes one oddly named folder. On Windows
+  `mkdir` is built into `cmd`, so it runs as `cmd.exe /D /C mkdir …`, with
+  `cmd.exe` taken by its full path; an argument containing `&`, `|`, `<`, `>`,
+  `^`, `%`, `"` or a line break is refused before anything runs (exit 2).
+
+**Flags for the new project go before the command.** Everything from the
+command's name on is the command's own, untouched:
+
+```
+dexily --add-tag rust --group Work --notes "client demo" mkdir thing
+```
+
+| Flag | Rule |
+|---|---|
+| `--name <text>` | The project's name instead of the folder's. Only for a command that makes one folder, and the name must be free (ignoring case) |
+| `--description <text>`, `--notes <text>`, `--open-with <app>` | As `edit`'s |
+| `--add-tag <tags>` | Repeats or takes commas; stored title-cased, as `edit --add-tag` |
+| `--set <key=value>` | Repeats; split at the first `=`; core's rule for a property name applies |
+| `--group <name>` | Must be an existing group, matched trimmed and ignoring case; a miss lists the groups |
+| `--color <colour>`, `--icon <icon>` | As `edit`'s: a palette name or `#rrggbb`; a bundled icon or `custom:<name>` |
+
+**Every flag is checked before the command runs.** One that does not check
+out — a group that does not exist, a colour that is not one, a name already
+taken — is a usage error, exit 2, and `mkdir` **never starts**: all or nothing.
+The same flags before one of dexily's own commands (`dexily --add-tag x list`)
+are a usage error too; use `edit` to change an existing project. With several
+folders, the flags apply to each one tracked.
+
+### The document
+
+Under `--json` there is no prompt and no prose. The command owns stdout, so
+dexily writes **one line to stderr, after the command has finished**:
+
+```json
+{"schema":1,"data":{"exit_code":0,"tracked":[{"id":"6c5d931e-…","name":"thing","directory":"/Users/me/code/thing",…}],"failed":[]}}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `exit_code` | integer | The command's exit code — also dexily's own |
+| `tracked` | array of [projects](#a-project) | Each folder now tracked, as saved, flags applied. Empty when the command failed or made nothing new |
+| `failed` | array of `{"directory", "message"}` | A folder the command made that dexily could not track. `directory` is the folder; run `dexily add <directory>` to retry |
+
+- **Read the last line of stderr.** The command's own error messages
+  (`mkdir: thing: File exists`) go to stderr too, before it; dexily's document
+  is always one line, compact, and last.
+- **It is written whenever the command ran**, failed or not — check
+  `exit_code`, or the process's exit status, which is the same number.
+- **A recording failure is not an error.** The command succeeded, so the exit
+  code stays 0 and the folder is listed in `failed`.
+- **A refusal before the command starts has no document**: a command dexily
+  does not observe, or a flag that does not check out, is prose on stderr with
+  exit 2, as every usage error is. If a flag needs the database (`--group`,
+  `--name`) and it cannot be opened, that is an ordinary
+  [`error` document](#errors), exit 1 — and the command has not run.
+
+Without `--json`, dexily asks before tracking when it can
+(`dexily: track "thing" at /Users/me/code/thing? [Y/n/e]`) and never when
+flags were given, `--yes` was passed, or stdin or stderr is not a terminal — so
+a script is never left waiting. `--quiet` (`-q`) hides dexily's own lines, but
+never a warning.
 
 ## A project
 
@@ -179,7 +269,7 @@ Today there are two kinds:
 |---|---|---|
 | `not_found` | No project matches the query. For `restore` and `purge` the message says it looked in the bin (`no project in the bin matches "app"`) | `query` |
 | `ambiguous` | Several projects match the query | `query`, and `matches`: the candidates as full [projects](#a-project), best first |
-| `error` | Anything else: a stub command, a database that can't be opened, a database written by a newer app | none |
+| `error` | Anything else: the unwritten TUI, a database that can't be opened, a database written by a newer app | none |
 
 `message` is always there and is meant for a person. Branch on `kind`, not on
 the message text. For `ambiguous`, pick a candidate and run the command again

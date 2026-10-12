@@ -9,10 +9,10 @@ step with no pairing — and it works without the app installed.
 **Status: every plain subcommand works.** `list`, `show`, `add`, `open`,
 `untrack`, `favorite`, `unfavorite`, `edit`, `restore`, `purge`, `scan` and
 `config` all run against the app's database, and a bare `edit` in a terminal
-opens a full-screen form (`edit --full` for every field); the observer and
-the TUI still return "not implemented". `group` lists, creates, changes and
-deletes groups; a project joins one with `edit --group`. The command is
-`dexily`.
+opens a full-screen form (`edit --full` for every field). `group` lists,
+creates, changes and deletes groups; a project joins one with `edit --group`.
+**The observer works for `mkdir`**: `dexily mkdir thing` makes the folder and
+tracks it. The TUI still returns "not implemented". The command is `dexily`.
 
 ```
 dexily list                     every project, as a table (--view, -s name|last-opened, -r to flip)
@@ -35,19 +35,57 @@ dexily group edit <group>       rename it (--name) or change its --color or --ic
 dexily group delete <group>     delete a group, keeping its projects ungrouped (asks first; --yes)
 dexily config form-wrap on|off  whether Tab wraps around at the ends of edit's form
 dexily config icons nerd|emoji|off   icons before names in tables (off by default)
+dexily mkdir <folders…>         run the real mkdir, then track each folder it made (asks [Y/n/e])
+dexily --add-tag rust --group Work mkdir <folder>   the same, set up in one go — flags go before the command
 dexily <anything> --json        {"schema": 1, "data": …} on stdout, or {"schema": 1, "error": …} on stderr
 ```
+
+### Observing
+
+Put `dexily` in front of a command and it runs the real one — same output, same
+prompts, same exit code — then tracks what the command created. **Only commands
+dexily has a recognizer for run at all**; today that is `mkdir` (`md` too on
+Windows). Anything else is refused before it starts, so dexily is never a way
+to run arbitrary programs:
+
+```
+$ dexily mkdir friction
+dexily: track "friction" at /Users/me/code/friction? [Y/n/e]
+$ dexily ls
+dexily: `ls` isn't a command dexily observes (it knows: mkdir). Run it directly.
+```
+
+- **The prompt**, once per folder the command made: Enter or `y` tracks it, `n`
+  leaves an ordinary folder, `e` tracks it and opens the full edit form. There
+  is no prompt with `--yes`, `--json`, project flags, or when stdin or stderr is
+  not a terminal — then dexily tracks and says
+  `dexily: tracking "friction" at …` on stderr. `--quiet` (`-q`) hides that
+  line, never a warning.
+- **Project flags go before the command** — `--name`, `--description`,
+  `--add-tag`, `--set k=v`, `--notes`, `--open-with`, `--group`, `--color`,
+  `--icon`, with `edit`'s rules — and are checked before it runs: a group that
+  does not exist stops everything, exit 2, and `mkdir` never starts.
+  Everything after the command's name is the command's own.
+- **What is tracked:** each named folder the command really created — not
+  `-p`'s parents, not `-m`'s value, not one that was already there — and only
+  if it exited 0. A failed command says
+  `dexily: mkdir failed (exit 1), nothing tracked`.
+- **The command's exit code always wins.** If the folder was made but could not
+  be recorded, the code stays 0 and dexily prints why, with the
+  `dexily add <folder>` that retries it.
+- **`--json`** prints one line on **stderr**, last — the command owns stdout.
+  See [`agents.md`](../../docs/cli/agents.md#observed-commands).
 
 ```
 src/
   main.rs        no arguments → TUI; a known command → run it; anything else → observe it
   paths.rs       the shared projects.db (pinned by src/tests/paths.rs)
   context.rs     opens the database and builds the core services
-  confirm.rs     confirmation for destructive commands (--yes in a shell)
+  confirm.rs     confirmation for destructive commands (--yes in a shell), and the observer's [Y/n/e]
   launcher.rs    AppLauncher over the system opener, Tauri-free
   commands/      one module per command: clap Args + run() -> Outcome
   output/        human rendering, and the --json envelope
-  observe/       the observer
+  observe/       the observer: recognizers (before and after), spawn (the command itself), flags
   settings.rs    cli-settings.json beside the database: the CLI's own colours
   tui/           the TUI — keys and a `:` line over the same commands
   tests/         unit tests, mirroring the source tree

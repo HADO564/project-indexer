@@ -10,6 +10,19 @@ The CLI is released independently of the desktop app, under tags of the form
 
 ## [Unreleased]
 
+### Added
+
+- **The observer: `dexily mkdir <folders…>` runs the real `mkdir`, then tracks each folder it made.** The command runs exactly as if typed — its own output, prompts and exit code, which always wins; a signal is reported as 128 + its number, and Ctrl+C is left to the command. Every folder named that the command actually created is tracked under its real path: not the parents `-p` makes on the way, not `-m`'s value, not a folder that was already there, and nothing at all when the command failed (`dexily: mkdir failed (exit 1), nothing tracked`).
+- A prompt for each folder made, `dexily: track "thing" at …? [Y/n/e]`: Enter or `y` tracks it, `n` leaves an ordinary folder, and `e` tracks it and opens the full edit form (Esc there keeps the project). There is no prompt with `--yes`, under `--json`, with project flags, or when stdin or stderr is not a terminal; dexily then tracks and prints `dexily: tracking "thing" at …` on stderr. `-q/--quiet` hides dexily's own lines, never a warning.
+- Flags before an observed command set the new project up in the same breath: `dexily --add-tag rust --group Work --notes "demo" mkdir thing`. They are `edit`'s field flags with its rules — `--name` (for a command making one folder; the name must be free), `--description`, `--add-tag`, `--set k=v`, `--notes`, `--open-with`, `--group`, `--color`, `--icon` — and all are checked before the command runs: one that does not check out is a usage error, exit 2, and the command never starts. Everything after the command's name belongs to the command. Before one of dexily's own commands they are a usage error.
+- If a folder was made but could not be recorded, the command's exit code stands and dexily prints `could not track "thing": <why>` with the `dexily add <folder>` that retries it — even under `--quiet`.
+- `--json` with an observed command prints one line on **stderr**, last, since the command owns stdout: `{"schema":1,"data":{"exit_code":0,"tracked":[…],"failed":[…]}}`. No prompt and no prose.
+- On Windows, `mkdir` and `md` are built into `cmd`, so they run through `cmd.exe /D /C`, with `cmd.exe` taken by its full path; an argument containing a character `cmd` would act on (`& | < > ^ % "`) is refused before anything runs.
+
+### Security
+
+- **dexily only runs commands it has a recognizer for** — today `mkdir`. Anything else, a path to another program named `mkdir` included, is refused before it starts (``dexily: `ls` isn't a command dexily observes (it knows: mkdir). Run it directly.``, exit 2), so a script or an agent given dexily cannot use it to run arbitrary programs. Arguments are handed to the command as a list, never joined into a line for a shell.
+
 Nothing released yet.
 
 ### Changed
