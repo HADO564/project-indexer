@@ -21,7 +21,7 @@ Start with [`app/USAGE.md`](app/USAGE.md) if you want to *use* the app, or
 - [`cli/checklist.md`](cli/checklist.md) — its milestones, and what's done.
 - [`cli/agents.md`](cli/agents.md) — the `--json` output, field by field, for scripts and LLM agents.
 - [`superpowers/specs/2026-09-14-cli-design.md`](superpowers/specs/2026-09-14-cli-design.md) — the design contract: structure, the command layer, releases.
-- [`../crates/cli/README.md`](../crates/cli/README.md) and [`../crates/cli/CHANGELOG.md`](../crates/cli/CHANGELOG.md) — the crate, and what shipped in each CLI release (`cli-v*` tags).
+- [`../crates/cli/README.md`](../crates/cli/README.md) and [`../crates/cli/CHANGELOG.md`](../crates/cli/CHANGELOG.md) — the crate, and what shipped in each CLI release (`dexily-v*` tags).
 - A usage guide joins these once there are commands to document.
 
 ## Shared — the repository and `indexer-core`
