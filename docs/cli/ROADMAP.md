@@ -48,9 +48,13 @@ A folder that was already tracked — `dexily mkdir app`, then `dexily git init`
 inside it — is not created again: its trackers are detected again, and
 dexily's flags still apply, adding to its tags and properties. Unreal has no
 recognizer and needs none: its projects are made in the editor, and the
-detectors find a `.uproject` in whichever folder is tracked. The git options
-that make git run another program (`-c`, `--upload-pack`, a clone's
-`--template`, `ext::` addresses…) are refused, so the allowlist stays one.
+detectors find a `.uproject` in whichever folder is tracked. A git line runs
+only if dexily knows every word of it: only the options in its tables are
+passed on, spelled in full and one at a time, so nothing git accepts under
+another spelling — an abbreviation, bundled short options, an option that runs
+another program (`-c`, `--upload-pack`, `--template`, an `ext::` address…) —
+gets through, and the allowlist stays one. The tables are in
+[`agents.md`](agents.md).
 
 Next: more commands that create a project (`cargo new`, `gh repo create` are
 the candidates), and the system commands that change a project rather than
