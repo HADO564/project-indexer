@@ -7,6 +7,10 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+/// The commands dexily observes, for the message that refuses any other. One
+/// name per recognizer in [`expect`].
+pub const KNOWN: &[&str] = &["mkdir"];
+
 /// What a command should leave behind, worked out before it runs.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Expectation {
@@ -24,9 +28,18 @@ pub struct Expectation {
 /// matches nothing.
 pub fn expect(argv: &[OsString], cwd: &Path) -> Option<Expectation> {
     let (program, rest) = argv.split_first()?;
-    let folders = match program.to_str()? {
-        "mkdir" => mkdir(rest),
-        _ => return None,
+    let program = program.to_str()?;
+    let folders = if cfg!(windows) {
+        // cmd's names ignore case, and `md` is its other name for mkdir.
+        match program.to_ascii_lowercase().as_str() {
+            "mkdir" | "md" => cmd_mkdir(rest),
+            _ => return None,
+        }
+    } else {
+        match program {
+            "mkdir" => mkdir(rest),
+            _ => return None,
+        }
     };
     Some(Expectation {
         // `join` leaves an absolute path as it is and puts a relative one
@@ -61,4 +74,35 @@ fn mkdir(args: &[OsString]) -> Vec<PathBuf> {
         }
     }
     folders
+}
+
+/// cmd's `mkdir` on Windows: it has no `-p` or `-m` — it makes parents by
+/// itself — and its one switch is `/?`. Every other argument is a folder, a
+/// name starting with `-` included.
+fn cmd_mkdir(args: &[OsString]) -> Vec<PathBuf> {
+    args.iter()
+        .filter(|arg| !arg.to_string_lossy().starts_with('/'))
+        .map(PathBuf::from)
+        .collect()
+}
+
+/// The folders to track: those the command was expected to create, that were
+/// not there before it ran, and are there now — and only if it succeeded.
+///
+/// `existed_before` is one flag per expected folder, in the same order, taken
+/// before the command ran: afterwards a folder just made looks exactly like
+/// one that was always there (`mkdir -p work/new` must not track an old
+/// `work`).
+pub fn confirm(expected: &Expectation, existed_before: &[bool], exit_code: i32) -> Vec<PathBuf> {
+    if exit_code != 0 {
+        // The command failed: whatever it left behind, it is not a project.
+        return Vec::new();
+    }
+    let mut confirmed = Vec::new();
+    for (folder, &existed) in expected.folders.iter().zip(existed_before) {
+        if !existed && folder.is_dir() {
+            confirmed.push(folder.clone());
+        }
+    }
+    confirmed
 }

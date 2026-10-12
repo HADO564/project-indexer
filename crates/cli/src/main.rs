@@ -27,6 +27,7 @@ use crate::commands::{Command, Failure};
 use crate::confirm::StdinConfirmer;
 use crate::context::Context;
 use crate::editor::TerminalEditor;
+use crate::observe::flags::ObserveFlags;
 use crate::output::color::Color;
 use crate::output::{Format, Look};
 
@@ -45,6 +46,11 @@ struct Cli {
     #[arg(long, short, global = true)]
     yes: bool,
 
+    /// With an observed command (`dexily mkdir thing`): none of dexily's own
+    /// lines — never the command's output, and never a warning.
+    #[arg(long, short, global = true)]
+    quiet: bool,
+
     /// The colour used to highlight each project's folder name, for this run
     /// only. Without it, the default set by `dexily config folder-color`
     /// applies, else cyan. `dexily config folder-color --help` lists the colours.
@@ -55,6 +61,11 @@ struct Cli {
     /// set by `dexily config header-color` applies, else magenta.
     #[arg(long, value_enum, global = true, hide_possible_values = true)]
     header_color: Option<Color>,
+
+    /// dexily's flags for the project an observed command creates. They go
+    /// before the command; everything after its name is the command's own.
+    #[command(flatten)]
+    observe: ObserveFlags,
 
     #[command(subcommand)]
     invocation: Option<Invocation>,
@@ -96,6 +107,17 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> anyhow::Result<ExitCode> {
+    // The project flags before a command belong to an observed one: on
+    // dexily's own commands there is no new project for them to describe.
+    if !cli.observe.is_empty() && !matches!(cli.invocation, Some(Invocation::Observe(_))) {
+        return Err(Failure::Usage {
+            message: "flags like --add-tag or --group before a command describe the project \
+                      an observed command creates (dexily --add-tag rust mkdir thing); to \
+                      change a project, use `dexily edit <project>`"
+                .to_string(),
+        }
+        .into());
+    }
     match cli.invocation {
         None => {
             let ctx = Context::open(
@@ -117,7 +139,15 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         }
         // The observer opens the database itself, *after* the wrapped command
         // has run: a broken database must never stop `git init` from running.
-        Some(Invocation::Observe(argv)) => observe::run(&argv),
+        Some(Invocation::Observe(argv)) => observe::run(
+            &argv,
+            observe::Options {
+                yes: cli.yes,
+                json: cli.json,
+                quiet: cli.quiet,
+                flags: cli.observe,
+            },
+        ),
     }
 }
 

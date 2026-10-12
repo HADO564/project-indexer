@@ -194,13 +194,13 @@ fn has_field_flag(args: &EditArgs) -> bool {
 /// A box in a box, as `UpdateProject.notes` takes it: the outer one says
 /// whether to touch the field at all, the inner one what to store. `--notes ""`
 /// clears them — `Some(None)` — as an emptied notes box does in the app.
-fn cleared_if_empty(text: Option<String>) -> Option<Option<String>> {
+pub(crate) fn cleared_if_empty(text: Option<String>) -> Option<Option<String>> {
     text.map(|text| if text.is_empty() { None } else { Some(text) })
 }
 
 /// The same, trimmed, for `--open-with`: spaces around an app's name are never
 /// part of it, and the launcher would read a blank one as no app anyway.
-fn cleared_if_blank(text: Option<String>) -> Option<Option<String>> {
+pub(crate) fn cleared_if_blank(text: Option<String>) -> Option<Option<String>> {
     text.map(|text| {
         let trimmed = text.trim();
         if trimmed.is_empty() {
@@ -288,7 +288,7 @@ pub fn edited_tags(current: &[String], add: Vec<String>, remove: &[String]) -> V
 /// empty one, or one containing `:`, with its own message, and a second copy
 /// of that rule could drift from the first. An `Err` becomes clap's usage
 /// error, exit 2, before anything is looked up.
-fn parse_property(s: &str) -> Result<(String, String), String> {
+pub(crate) fn parse_property(s: &str) -> Result<(String, String), String> {
     match s.split_once("=") {
         Some((key, value)) => Ok((key.to_string(), value.to_string())),
         None => Err("expected KEY=VALUE, with an `=` between the name and the value".to_string()),

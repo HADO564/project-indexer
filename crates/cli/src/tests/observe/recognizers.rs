@@ -4,7 +4,7 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::observe::recognizers::{expect, Expectation};
+use crate::observe::recognizers::{confirm, expect, Expectation};
 
 fn cwd() -> &'static Path {
     Path::new("/home/me/code")
@@ -104,4 +104,62 @@ fn only_the_bare_name_is_known_never_a_path_to_another_program() {
 #[test]
 fn nothing_at_all_is_not_known() {
     assert_eq!(expected(&[]), None);
+}
+
+// Phase 3: the evidence. Real folders in a temp dir, made-up exit codes.
+
+/// An expectation of `names` under `root`, with each folder's "was it there
+/// before" taken now, as the observer takes it before running the command.
+fn before(root: &Path, names: &[&str]) -> (Expectation, Vec<bool>) {
+    let folders: Vec<PathBuf> = names.iter().map(|name| root.join(name)).collect();
+    let existed = folders.iter().map(|f| f.exists()).collect();
+    (Expectation { folders }, existed)
+}
+
+#[test]
+fn a_folder_made_by_a_command_that_succeeded_is_confirmed() {
+    let root = tempfile::tempdir().unwrap();
+    let (expectation, existed) = before(root.path(), &["thing"]);
+    std::fs::create_dir(root.path().join("thing")).unwrap();
+    assert_eq!(
+        confirm(&expectation, &existed, 0),
+        vec![root.path().join("thing")]
+    );
+}
+
+#[test]
+fn a_failed_command_confirms_nothing_whatever_it_left_behind() {
+    let root = tempfile::tempdir().unwrap();
+    let (expectation, existed) = before(root.path(), &["thing"]);
+    std::fs::create_dir(root.path().join("thing")).unwrap();
+    assert_eq!(confirm(&expectation, &existed, 1), Vec::<PathBuf>::new());
+}
+
+#[test]
+fn a_folder_that_was_already_there_is_not_this_command_s() {
+    // `mkdir -p old new`: exit 0, both exist, only `new` was made.
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir(root.path().join("old")).unwrap();
+    let (expectation, existed) = before(root.path(), &["old", "new"]);
+    std::fs::create_dir(root.path().join("new")).unwrap();
+    assert_eq!(
+        confirm(&expectation, &existed, 0),
+        vec![root.path().join("new")]
+    );
+}
+
+#[test]
+fn a_folder_expected_but_never_made_is_not_confirmed() {
+    // Exit 0 without the folder: the prediction was wrong, so trust the disk.
+    let root = tempfile::tempdir().unwrap();
+    let (expectation, existed) = before(root.path(), &["thing"]);
+    assert_eq!(confirm(&expectation, &existed, 0), Vec::<PathBuf>::new());
+}
+
+#[test]
+fn a_file_where_the_folder_was_expected_is_not_a_project() {
+    let root = tempfile::tempdir().unwrap();
+    let (expectation, existed) = before(root.path(), &["thing"]);
+    std::fs::write(root.path().join("thing"), "").unwrap();
+    assert_eq!(confirm(&expectation, &existed, 0), Vec::<PathBuf>::new());
 }

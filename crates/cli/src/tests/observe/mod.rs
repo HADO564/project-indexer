@@ -2,4 +2,5 @@
 
 mod spawn;
 
+mod end_to_end;
 mod recognizers;
