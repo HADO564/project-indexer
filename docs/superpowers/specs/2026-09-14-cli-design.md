@@ -402,10 +402,29 @@ notes above, or goes past them:
   projects are made in the editor, and the detectors find a `.uproject` in
   whichever folder is tracked. The project's name is core's: the remote's
   repository if there is one, else the folder, parent-qualified when taken.
-- **Git options that run another program are refused** before git starts, exit
-  2 — `-c` / `--config`, `--config-env` (in either spelling), `--exec-path=`, `-u` /
-  `--upload-pack`, `--template` on a clone, and `ext::` / `fd::` addresses —
-  since an allowlist that let them through would not be one.
+- **Git options fail closed: a git line runs only if dexily knows every word
+  of it.** The first build refused a list of options that run another program
+  and passed everything else. A second review ran another program past it
+  three ways: a global option dexily did not know that takes the next word as
+  its value (`git --shallow-file init -c alias.x=… x` — `init` is a file name
+  there, and the real subcommand whatever follows, so any git command ran); an
+  abbreviation (`--upl=…` is `--upload-pack`, and the refusal compared exact
+  names); and `-u` inside a run of short options (`-qu`). Git takes more
+  spellings than a list of bad ones can hold, so the rule is now the command
+  allowlist's: tables in `recognizers.rs` of the options passed on — before
+  the subcommand `-C`, `--no-pager`, `--version`, `--help`; one per subcommand,
+  each option exactly as spelled with what it takes — and anything not in them
+  is refused before git starts, exit 2. The options that run a program (`-c` /
+  `--config`, `--config-env`, `--exec-path`, `-u` / `--upload-pack`,
+  `--template`) are simply in no table and keep the message that says why;
+  `ext::` / `fd::` addresses are refused, bare clone or not. Every option's
+  arity is known, so a value is never read as the repository or the folder.
+  No longer passed on, having only ever been allowed by not being listed:
+  `--git-dir`, `--work-tree`, `--namespace`, an init `--template`,
+  `--bundle-uri`, `--server-option`, a bare `--exec-path`.
+- **The database handle is a `LazyCell`:** opened by whoever first asks — a
+  flag that needs it before the command, else phase 3 — with no predicate to
+  keep in step and nothing that can panic after the command has run.
 - **From review:** Ctrl+C is left to the command only while it runs, and ends
   dexily (130) at the prompt; a failure after a folder is tracked is
   `tracked "x", but could not save its details: …` with `dexily edit "x"`, not

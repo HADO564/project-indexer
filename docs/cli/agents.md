@@ -131,12 +131,45 @@ dexily runs another program, so its rules differ from every command above.
   `mkdir` is built into `cmd`, so it runs as `cmd.exe /D /V:OFF /C mkdir …`,
   with `cmd.exe` taken by its full path; an argument containing `&`, `|`, `<`,
   `>`, `^`, `%`, `"` or a line break is refused before anything runs (exit 2).
-- **Git options that make git run another program are refused**, exit 2, and
-  git never starts — an allowlist that let them through would not be one:
-  `-c` / `--config`, `--config-env` (in either spelling), `--exec-path=`, `-u` / `--upload-pack`,
-  `--template` on a clone (its hooks would run), and `ext::` and `fd::`
-  addresses. The message names the option: ``dexily: `--upload-pack` makes git
-  run another program, so it is not passed on. Run git directly.``
+- **A git line runs only if dexily knows every word of it.** Only the options
+  in the table below are passed on, each spelled in full and given one at a
+  time. Anything else is refused before git starts, exit 2: an abbreviation
+  (`--dep 1`, `--upl=…`), short options run together (`-qb main`, `-j4`), a
+  global option dexily does not know (`--git-dir`, `--work-tree`,
+  `--shallow-file`, …), or any option git adds later. Git takes more spellings than any list of bad options can hold —
+  any unique abbreviation of a long option, short options run together, global options whose value is the next word (which turns `init` into a file name and the word after it into the real subcommand) —
+  and each of those once ran another program.
+  A list of what is *passed* has no such gap: what it does not name does not
+  run.
+
+  | Where | Options passed on |
+  |---|---|
+  | Before the subcommand | `-C <path>`, `--no-pager`, `--version`, `--help` |
+  | `git init` | `-q` / `--quiet`, `--bare`, `-b` / `--initial-branch <name>`, `--object-format <format>`, `--ref-format <format>`, `--separate-git-dir <dir>`, `--shared[=<perm>]` |
+  | `git clone` — no value | `-q` / `--quiet`, `-v` / `--verbose`, `--progress`, `-n` / `--no-checkout`, `--bare`, `--mirror`, `-l` / `--local`, `--no-hardlinks`, `-s` / `--shared`, `--dissociate`, `--single-branch`, `--no-single-branch`, `--tags`, `--no-tags`, `--sparse`, `--recursive`, `--recurse-submodules[=<path>]`, `--shallow-submodules`, `--no-shallow-submodules`, `--remote-submodules`, `--also-filter-submodules`, `--reject-shallow`, `--no-reject-shallow`, `-4` / `--ipv4`, `-6` / `--ipv6` |
+  | `git clone` — with a value | `-b` / `--branch`, `-o` / `--origin`, `--depth`, `--shallow-since`, `--shallow-exclude`, `-j` / `--jobs`, `--filter`, `--revision`, `--reference`, `--reference-if-able`, `--separate-git-dir` |
+
+  A value goes as the next word or after `=` (`--depth 1`, `--depth=1`); a
+  value in `[…]` only after `=`. Because what each option takes is known, a
+  value is never read as the repository or the folder. `--` ends the options.
+
+  The refusal says which word, in one of three ways:
+  - An option that makes git run another program — `-c`, `--config`,
+    `--config-env`, `--exec-path`, `-u`, `--upload-pack`, `--template` (on
+    `init` as well as `clone`) — is in no table, and keeps a message of its
+    own: ``dexily: `--upload-pack` makes git run another program, so it is not
+    passed on. Run git directly.`` So do the `ext::` and `fd::` addresses,
+    bare clone or not.
+  - Any other option dexily does not know: ``dexily: `--upl` is not an option
+    dexily passes on to git clone: options go in full and one at a time
+    (`--depth 1 -q`, not `--dep 1` or `-q1`). Run git directly for anything
+    else.``
+  - A flag given a value: ``dexily: `--quiet` takes no value, so `--quiet=yes`
+    is not passed on to git clone. Run git directly.``
+
+  Not passed on, though harmless on their own, because they are in no table:
+  `--git-dir`, `--work-tree`, `--namespace`, `--bundle-uri`, `--server-option`,
+  and `--exec-path` even without a value.
 
 **Flags for the new project go before the command.** Everything from the
 command's name on is the command's own, untouched:

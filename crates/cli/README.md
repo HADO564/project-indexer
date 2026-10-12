@@ -96,11 +96,18 @@ dexily: `git push` isn't a command dexily observes (it knows: mkdir, git init, g
   its projects are made in the editor. Any tracked folder holding a
   `.uproject` gets the Unreal tracker: `dexily git clone` of an Unreal project
   comes out with both.
-- **Git options that run another program are refused**, exit 2, before git
-  starts: `-c`/`--config`, `--config-env` (in either spelling), `--exec-path=`, `-u`/`--upload-pack`,
-  a clone's `--template`, and `ext::` / `fd::` addresses
-  (`` `--upload-pack` makes git run another program, so it is not passed on.
-  Run git directly. ``).
+- **A git line runs only if dexily knows every word of it.** Only the options
+  dexily lists are passed on, each in full and one at a time; anything else is
+  refused before git starts, exit 2 — an abbreviation (`--dep 1`), short
+  options run together (`-qb main`), a global option it does not know
+  (`--git-dir`, `--shallow-file`), or one git adds later. Git takes more
+  spellings than a list of bad options can hold, and each of those once ran
+  another program. The options that do run one (`-c`/`--config`,
+  `--config-env`, `--exec-path`, `-u`/`--upload-pack`, `--template`) and
+  `ext::` / `fd::` addresses say so:
+  `` `--upload-pack` makes git run another program, so it is not passed on.
+  Run git directly. `` The full list of options passed on is in
+  [`docs/cli/agents.md`](../../docs/cli/agents.md).
 - **The command's exit code always wins.** If the folder could not be recorded
   at all, the code stays 0 and dexily prints why, with the
   `dexily add <folder>` that retries it. If it was tracked but its details —
