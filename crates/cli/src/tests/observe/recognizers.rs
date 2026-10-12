@@ -75,9 +75,12 @@ fn an_absolute_path_stays_as_it_is() {
 }
 
 #[test]
-fn mkdir_naming_nothing_expects_nothing() {
-    assert_eq!(expected(&["mkdir"]), None);
-    assert_eq!(expected(&["mkdir", "-p"]), None);
+fn mkdir_naming_nothing_is_still_known_and_expects_no_folders() {
+    // It runs — mkdir prints its own usage, `--help` works — and there is
+    // nothing to track. `None` would call mkdir an unknown command.
+    for argv in [&["mkdir"][..], &["mkdir", "-p"], &["mkdir", "--help"]] {
+        assert_eq!(expected(argv), Some(Vec::new()), "{argv:?}");
+    }
 }
 
 #[test]

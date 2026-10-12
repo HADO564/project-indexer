@@ -16,6 +16,9 @@ pub struct Expectation {
 /// The folders `argv` should create, or `None` when dexily has no recognizer
 /// for it — which is what keeps unknown commands from running at all.
 ///
+/// A known command that names no folder (`mkdir`, `mkdir --help`) is still
+/// known: it runs, says whatever it says, and there is nothing to track.
+///
 /// The program must be named bare (`mkdir`), as found on `PATH`: a path such as
 /// `/tmp/x/mkdir` is some other program that happens to share the name, so it
 /// matches nothing.
@@ -25,9 +28,6 @@ pub fn expect(argv: &[OsString], cwd: &Path) -> Option<Expectation> {
         "mkdir" => mkdir(rest),
         _ => return None,
     };
-    if folders.is_empty() {
-        return None;
-    }
     Some(Expectation {
         // `join` leaves an absolute path as it is and puts a relative one
         // under `cwd`, where mkdir itself would make it.
