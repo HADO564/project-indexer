@@ -25,7 +25,7 @@ The CLI is released independently of the desktop app, under tags of the form
 ### Security
 
 - **dexily only runs commands it has a recognizer for** — today `mkdir`, `git init` and `git clone`. Anything else, any other git command and a path to another program named `mkdir` included, is refused before it starts (``dexily: `git push` isn't a command dexily observes (it knows: mkdir, git init, git clone). Run it directly.``, exit 2), so a script or an agent given dexily cannot use it to run arbitrary programs. Arguments are handed to the command as a list, never joined into a line for a shell.
-- **Git options that make git run another program are refused**, exit 2, before git starts — an allowlist that let them through would not be one: `-c` / `--config` (a setting can name a program, as `core.sshCommand` does), `--config-env=`, `--exec-path=`, `-u` / `--upload-pack`, `--template` on a clone, whose hooks would run, and the `ext::` and `fd::` transports. The message names the option: `` `--upload-pack` makes git run another program, so it is not passed on. Run git directly. ``
+- **Git options that make git run another program are refused**, exit 2, before git starts — an allowlist that let them through would not be one: `-c` / `--config` (a setting can name a program, as `core.sshCommand` does), `--config-env` (in either spelling), `--exec-path=`, `-u` / `--upload-pack`, `--template` on a clone, whose hooks would run, and the `ext::` and `fd::` transports. The message names the option: `` `--upload-pack` makes git run another program, so it is not passed on. Run git directly. ``
 
 ## [0.1.0] — 2026-10-08
 

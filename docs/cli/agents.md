@@ -133,7 +133,7 @@ dexily runs another program, so its rules differ from every command above.
   `>`, `^`, `%`, `"` or a line break is refused before anything runs (exit 2).
 - **Git options that make git run another program are refused**, exit 2, and
   git never starts — an allowlist that let them through would not be one:
-  `-c` / `--config`, `--config-env=`, `--exec-path=`, `-u` / `--upload-pack`,
+  `-c` / `--config`, `--config-env` (in either spelling), `--exec-path=`, `-u` / `--upload-pack`,
   `--template` on a clone (its hooks would run), and `ext::` and `fd::`
   addresses. The message names the option: ``dexily: `--upload-pack` makes git
   run another program, so it is not passed on. Run git directly.``
@@ -210,6 +210,7 @@ prompt ends dexily with 130. Its own lines, all on stderr:
 | `dexily: <command> made nothing new, nothing tracked` | It exited 0, but the folder it should have made a project of is not one — it was already there (`mkdir -p existing`), or was never made |
 | `dexily: could not track "thing": <why>`, then ``run `dexily add <dir>` to try again`` | Recording failed; the exit code is still the command's |
 | `dexily: tracked "thing", but could not save its details: <why>`, then ``run `dexily edit "thing"` to set them`` | It is tracked, but the flags or the form could not be saved |
+| `dexily: "thing" is tracked, but its trackers could not be detected again: <why>` | An already-tracked folder whose re-detection failed (a malformed `.uproject`, say). It is still tracked and the flags are still applied; it is in `tracked`, not `failed`. A warning, so shown under `--quiet` too |
 
 `--quiet` (`-q`) hides the first four, never the two warnings.
 

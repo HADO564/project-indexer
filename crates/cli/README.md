@@ -97,7 +97,7 @@ dexily: `git push` isn't a command dexily observes (it knows: mkdir, git init, g
   `.uproject` gets the Unreal tracker: `dexily git clone` of an Unreal project
   comes out with both.
 - **Git options that run another program are refused**, exit 2, before git
-  starts: `-c`/`--config`, `--config-env=`, `--exec-path=`, `-u`/`--upload-pack`,
+  starts: `-c`/`--config`, `--config-env` (in either spelling), `--exec-path=`, `-u`/`--upload-pack`,
   a clone's `--template`, and `ext::` / `fd::` addresses
   (`` `--upload-pack` makes git run another program, so it is not passed on.
   Run git directly. ``).

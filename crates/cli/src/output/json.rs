@@ -15,6 +15,7 @@ use serde::ser::{Error as _, SerializeMap};
 use serde::{Serialize, Serializer};
 
 use crate::commands::{Failure, Outcome};
+use crate::observe::Failed;
 
 /// Bumped only for a change that breaks a reader.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -296,16 +297,16 @@ pub fn write_observed(
     out: &mut dyn Write,
     exit_code: i32,
     tracked: &[Project],
-    failed: &[(String, String)],
+    failed: &[Failed],
 ) -> anyhow::Result<()> {
     #[derive(Serialize)]
     struct Observed<'a> {
         exit_code: i32,
         tracked: Vec<ProjectJson<'a>>,
-        failed: Vec<Failed<'a>>,
+        failed: Vec<FailedJson<'a>>,
     }
     #[derive(Serialize)]
-    struct Failed<'a> {
+    struct FailedJson<'a> {
         directory: &'a str,
         message: &'a str,
     }
@@ -314,7 +315,7 @@ pub fn write_observed(
         tracked: tracked.iter().map(ProjectJson::from).collect(),
         failed: failed
             .iter()
-            .map(|(directory, message)| Failed { directory, message })
+            .map(|Failed { directory, message }| FailedJson { directory, message })
             .collect(),
     };
     let envelope = Envelope {

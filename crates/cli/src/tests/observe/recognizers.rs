@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::observe::recognizers::{
-    confirm, expect, expect_on, label, Expectation, Expected, Proof, Refusal,
+    confirm, expect, expect_on, label, Expectation, Expected, Proof, Refusal, KNOWN,
 };
 
 fn cwd() -> &'static Path {
@@ -338,6 +338,8 @@ fn an_option_that_makes_git_run_another_program_is_refused() {
             "clone",
             "host:thing",
         ],
+        // Both spellings: git takes the value as the next argument too.
+        &["git", "--config-env", "core.sshCommand=EVIL", "init", "x"],
         &["git", "--exec-path=/tmp/evil", "init"],
         &["git", "clone", "-u", "evil", "host:thing"],
         &["git", "clone", "--upload-pack", "evil", "host:thing"],
@@ -353,6 +355,11 @@ fn an_option_that_makes_git_run_another_program_is_refused() {
         &["git", "clone", "--template=/tmp/hooks", "host:thing"],
         &["git", "clone", "ext::sh -c evil", "x"],
         &["git", "clone", "fd::7", "x"],
+        // A bare clone tracks nothing, and is refused all the same: every
+        // refusal is decided before anything about the folder.
+        &["git", "clone", "--bare", "ext::true", "x"],
+        &["git", "clone", "--mirror", "fd::7", "x"],
+        &["git", "clone", "--bare", "--upload-pack=evil", "host:thing"],
     ] {
         assert!(
             matches!(git_expects(words), Err(Refusal::Unsafe(_))),
@@ -462,5 +469,44 @@ fn the_system_this_was_built_for_is_the_one_expect_uses() {
     assert_eq!(
         here,
         expect_on(&argv(&["mkdir", "-p", "thing"]), cwd(), cfg!(windows))
+    );
+}
+
+#[test]
+fn a_bare_exec_path_only_prints_so_it_is_not_refused() {
+    // Not a project command either way; the point is which refusal it gets.
+    assert_eq!(git_expects(&["git", "--exec-path"]), Err(Refusal::Unknown));
+    assert_eq!(git_expects(&["git", "--exec-path", "init"]), repo_at(""));
+}
+
+#[test]
+fn every_command_the_refusal_names_is_one_dexily_runs() {
+    // `KNOWN` is the list the refusal message prints. A name there that the
+    // recognizers do not take would make the message a lie; this pins it on
+    // both systems.
+    for known in KNOWN {
+        let words: Vec<&str> = known.split(' ').collect();
+        for windows in [false, true] {
+            assert!(
+                expect_on(&argv(&words), cwd(), windows).is_ok(),
+                "`{known}` (windows: {windows})"
+            );
+        }
+    }
+}
+
+#[test]
+fn on_windows_git_may_be_named_with_its_exe_and_in_any_case() {
+    for program in ["git.exe", "GIT", "Git.EXE"] {
+        assert_eq!(
+            folders_of(expect_on(&argv(&[program, "init", "app"]), cwd(), true)),
+            under_cwd(&["app"]),
+            "{program}"
+        );
+    }
+    assert_eq!(
+        expected(&["git.exe", "init", "app"]),
+        None,
+        "not off Windows"
     );
 }

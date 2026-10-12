@@ -403,7 +403,7 @@ notes above, or goes past them:
   whichever folder is tracked. The project's name is core's: the remote's
   repository if there is one, else the folder, parent-qualified when taken.
 - **Git options that run another program are refused** before git starts, exit
-  2 — `-c` / `--config`, `--config-env=`, `--exec-path=`, `-u` /
+  2 — `-c` / `--config`, `--config-env` (in either spelling), `--exec-path=`, `-u` /
   `--upload-pack`, `--template` on a clone, and `ext::` / `fd::` addresses —
   since an allowlist that let them through would not be one.
 - **From review:** Ctrl+C is left to the command only while it runs, and ends

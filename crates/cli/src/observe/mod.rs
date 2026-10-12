@@ -78,6 +78,85 @@ pub fn run(argv: &[OsString], options: Options) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::from(u8::try_from(code).unwrap_or(1)))
 }
 
+/// The database, opened the first time something needs it: after the command
+/// has run, unless a flag has to be checked against it before. Whoever needs
+/// it asks, so no caller has to know in advance whether it will be open.
+pub(crate) struct Database<'a> {
+    state: State<'a>,
+}
+
+enum State<'a> {
+    Closed(Box<dyn FnOnce() -> anyhow::Result<Context> + 'a>),
+    Open(Context),
+    /// It could not be opened, and why — kept, so asking again says the same
+    /// rather than trying a second time.
+    Failed(String),
+}
+
+impl<'a> Database<'a> {
+    fn new(open: impl FnOnce() -> anyhow::Result<Context> + 'a) -> Self {
+        Self {
+            state: State::Closed(Box::new(open)),
+        }
+    }
+
+    pub(crate) fn get(&mut self) -> anyhow::Result<&Context> {
+        if matches!(self.state, State::Closed(_)) {
+            let State::Closed(open) =
+                std::mem::replace(&mut self.state, State::Failed(String::new()))
+            else {
+                unreachable!("just matched as closed");
+            };
+            self.state = match open() {
+                Ok(ctx) => State::Open(ctx),
+                Err(e) => State::Failed(format!("{e:#}")),
+            };
+        }
+        match &self.state {
+            State::Open(ctx) => Ok(ctx),
+            State::Failed(why) => Err(anyhow::anyhow!("{why}")),
+            State::Closed(_) => unreachable!("opened or failed above"),
+        }
+    }
+}
+
+/// Who dexily's own lines are for, decided once from the flags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Voice {
+    /// A person: every line.
+    Prose,
+    /// `--quiet`: warnings only — quiet hides success, never a problem.
+    Quiet,
+    /// `--json`: no prose at all; one document at the end.
+    Json,
+}
+
+impl Voice {
+    fn of(options: &Options) -> Self {
+        if options.json {
+            Voice::Json
+        } else if options.quiet {
+            Voice::Quiet
+        } else {
+            Voice::Prose
+        }
+    }
+
+    /// A line saying what happened.
+    fn say(self, err: &mut dyn Write, line: std::fmt::Arguments) {
+        if self == Voice::Prose {
+            let _ = writeln!(err, "{line}");
+        }
+    }
+
+    /// A line saying something went wrong.
+    fn warn(self, err: &mut dyn Write, line: std::fmt::Arguments) {
+        if self != Voice::Json {
+            let _ = writeln!(err, "{line}");
+        }
+    }
+}
+
 /// [`run`] with its surroundings passed in — the working folder, how to open
 /// the database, where dexily's own lines go — so a test can supply them.
 /// Returns the command's exit code.
@@ -88,6 +167,8 @@ pub(crate) fn observe(
     open: impl FnOnce() -> anyhow::Result<Context>,
     err: &mut dyn Write,
 ) -> anyhow::Result<i32> {
+    let voice = Voice::of(&options);
+
     // Phase 1. The gatekeeper: only a command with a recognizer runs. Anything
     // else is refused here, before it starts — it would gain nothing from
     // dexily, and dexily must not be a way to run arbitrary programs.
@@ -105,14 +186,13 @@ pub(crate) fn observe(
 
     // dexily's own flags, checked before the command runs: a group that does
     // not exist must stop everything now, not after a folder has been made.
-    let mut open = Some(open);
-    let mut ctx = None;
-    if options.flags.need_the_database() {
-        ctx = Some(open.take().expect("not opened yet")()?);
-    }
+    // Flags also mean the user has already decided and described the project,
+    // and `--json` has nobody to ask: either way, no question.
+    let mut database = Database::new(open);
+    let ask = options.flags.is_empty() && voice != Voice::Json;
     let fields = options
         .flags
-        .check(ctx.as_ref(), cwd, expectation.folders.len())
+        .check(&mut database, cwd, expectation.folders.len())
         .map_err(|e| usage(format!("{e:#}")))?;
 
     let held_before = expectation.before();
@@ -121,62 +201,45 @@ pub(crate) fn observe(
     let code = spawn::run(argv, cwd)?;
 
     // Phase 3. From here on nothing may change `code`: every problem is a
-    // warning, never an error returned.
+    // warning, never an error returned, and nothing here may panic.
     let proven = recognizers::confirm(&expectation, &held_before, code);
-    let mut report = Report {
-        tracked: Vec::new(),
-        failed: Vec::new(),
-    };
-    let say = !options.quiet && !options.json;
+    let mut report = Report::default();
 
     if proven.is_empty() {
         // Only worth a line when a folder was expected: `mkdir --help` is not
         // a failure to track anything.
-        if say && !expectation.folders.is_empty() {
+        if !expectation.folders.is_empty() {
             if code == 0 {
-                let _ = writeln!(err, "dexily: {command} made nothing new, nothing tracked");
-            } else {
-                let _ = writeln!(
+                voice.say(
                     err,
-                    "dexily: {command} failed (exit {code}), nothing tracked"
+                    format_args!("dexily: {command} made nothing new, nothing tracked"),
+                );
+            } else {
+                voice.say(
+                    err,
+                    format_args!("dexily: {command} failed (exit {code}), nothing tracked"),
                 );
             }
         }
-    } else {
-        // The database is opened only now, after the command has run, unless
+    }
+    for folder in &proven {
+        // The database is opened only here, after the command has run, unless
         // a flag needed it earlier — so a broken one never stands in the way
         // of the command itself.
-        let ctx = match ctx {
-            Some(ctx) => Ok(ctx),
-            None => open.take().expect("not opened yet")(),
-        };
-        match ctx {
-            Ok(ctx) => {
-                // Flags mean the user has already decided and described the
-                // project, and `--json` has nobody to ask.
-                let ask = fields.is_empty() && !options.json;
-                for folder in &proven {
-                    match track(&ctx, folder, &fields, ask) {
-                        Ok(Some(tracked)) => {
-                            if !options.json {
-                                tracked.say(say, err);
-                            }
-                            report.tracked.push(tracked.project);
-                        }
-                        Ok(None) => {}
-                        Err(e) => report.fail(folder, &e, options.json, err),
-                    }
-                }
+        let tracked = database
+            .get()
+            .and_then(|ctx| track(ctx, folder, &fields, ask));
+        match tracked {
+            Ok(Some(tracked)) => {
+                tracked.say(voice, err);
+                report.tracked.push(tracked.project);
             }
-            Err(e) => {
-                for folder in &proven {
-                    report.fail(folder, &e, options.json, err);
-                }
-            }
+            Ok(None) => {}
+            Err(e) => report.fail(folder, &e, voice, err),
         }
     }
 
-    if options.json {
+    if voice == Voice::Json {
         // One line, last: the command's own errors share stderr.
         let _ = json::write_observed(err, code, &report.tracked, &report.failed);
     }
@@ -186,39 +249,70 @@ pub(crate) fn observe(
 /// A folder now tracked, and how it came to be, for the line that says so.
 struct Tracked {
     project: Project,
-    /// It was tracked before this command: its trackers were detected again
-    /// rather than a project created.
+    /// It was tracked before this command, so no project was created.
     already: bool,
     /// A `[Y/n/e]` prompt was shown and answered.
     asked: bool,
-    /// The project is tracked, but its details — the flags, the form — could
-    /// not be saved, and why.
-    details: Option<String>,
+    /// Things that went wrong once it was tracked — its trackers, its details
+    /// — each with the command that puts it right. It is tracked all the
+    /// same, so none of them is "could not track".
+    problems: Vec<Problem>,
+}
+
+/// Something that failed about a folder that *is* tracked, and why.
+enum Problem {
+    /// Its trackers could not be detected again. The CLI has no command that
+    /// does only that, so no retry is offered: the reason is the lead.
+    Trackers(String),
+    /// The flags, or what the form gave, could not be saved.
+    Details(String),
 }
 
 impl Tracked {
-    fn say(&self, say: bool, err: &mut dyn Write) {
+    fn say(&self, voice: Voice, err: &mut dyn Write) {
         let Project {
             name, directory, ..
         } = &self.project;
-        // After a prompt the user has just answered it; a line would only
-        // repeat them.
-        if say && self.already {
-            let _ = writeln!(
+        let detected = !self
+            .problems
+            .iter()
+            .any(|problem| matches!(problem, Problem::Trackers(_)));
+        if self.already && detected {
+            voice.say(
                 err,
-                "dexily: \"{name}\" was already tracked; detected its trackers again"
+                format_args!("dexily: \"{name}\" was already tracked; detected its trackers again"),
             );
-        } else if say && !self.asked {
-            let _ = writeln!(err, "dexily: tracking \"{name}\" at {directory}");
+        } else if self.already {
+            voice.say(err, format_args!("dexily: \"{name}\" was already tracked"));
+        } else if !self.asked {
+            // After a prompt the user has just answered it; a line would only
+            // repeat them.
+            voice.say(
+                err,
+                format_args!("dexily: tracking \"{name}\" at {directory}"),
+            );
         }
-        // A warning, so even under `--quiet`. Not "could not track": it is
-        // tracked, and `add` would be the wrong thing to retry.
-        if let Some(why) = &self.details {
-            let _ = writeln!(
-                err,
-                "dexily: tracked \"{name}\", but could not save its details: {why}"
-            );
-            let _ = writeln!(err, "        run `dexily edit \"{name}\"` to set them");
+        for problem in &self.problems {
+            match problem {
+                Problem::Trackers(why) => voice.warn(
+                    err,
+                    format_args!(
+                        "dexily: \"{name}\" is tracked, but its trackers could not be detected again: {why}"
+                    ),
+                ),
+                Problem::Details(why) => {
+                    voice.warn(
+                        err,
+                        format_args!(
+                            "dexily: tracked \"{name}\", but could not save its details: {why}"
+                        ),
+                    );
+                    voice.warn(
+                        err,
+                        format_args!("        run `dexily edit \"{name}\"` to set them"),
+                    );
+                }
+            }
         }
     }
 }
@@ -232,7 +326,7 @@ impl Tracked {
 /// the edit form if the answer was `e`.
 ///
 /// `None` when the user said no. `Err` only if the folder could not be tracked
-/// at all: once it is, a later problem is a warning carried in [`Tracked`].
+/// at all: once it is, a later failure is a [`Problem`] carried in [`Tracked`].
 fn track(
     ctx: &Context,
     folder: &Path,
@@ -265,64 +359,92 @@ fn track(
         return Ok(None);
     }
 
+    let mut problems = Vec::new();
     let mut project = match existing {
-        Some(project) => ctx.projects.refresh_trackers(&project.id)?,
+        // Already tracked, whatever detection says next. `refresh_trackers`
+        // is all or nothing — one malformed `.uproject` fails it — where
+        // `ensure_project` on a new folder keeps what it could detect, so a
+        // failure here must not read as the folder not being tracked.
+        Some(project) => match ctx.projects.refresh_trackers(&project.id) {
+            Ok(refreshed) => refreshed,
+            Err(e) => {
+                problems.push(Problem::Trackers(e.to_string()));
+                project
+            }
+        },
         None => ctx.projects.ensure_project(&directory)?,
     };
 
-    // Tracked. From here a failure is about the details only.
-    let details = (|| -> anyhow::Result<()> {
-        let update = fields.update(&project);
-        if !update.is_empty() {
-            project = ctx.projects.update(&project.id, update)?;
-        }
-        if answer == Track::Edit {
-            // Esc in the form keeps the project and skips the details: it
-            // was already tracked on the way in.
-            let groups = ctx.groups.list()?;
-            if let Some(changes) = ctx.editor.edit(&project, groups, FormKind::Full)? {
-                if !changes.is_empty() {
-                    project = ctx.projects.update(&project.id, changes)?;
-                }
-            }
-        }
-        Ok(())
-    })()
-    .err()
-    .map(|e| format!("{e:#}"));
+    if let Err(e) = save_details(ctx, &mut project, fields, answer == Track::Edit) {
+        problems.push(Problem::Details(format!("{e:#}")));
+    }
 
     Ok(Some(Tracked {
         project,
         already,
         asked,
-        details,
+        problems,
     }))
 }
 
+/// The flags as one update on a project that is already tracked, then the
+/// edit form when the answer was `e`. `project` is left as last saved, so a
+/// failure half-way still reports what did go in.
+fn save_details(
+    ctx: &Context,
+    project: &mut Project,
+    fields: &Fields,
+    form: bool,
+) -> anyhow::Result<()> {
+    let update = fields.update(project);
+    if !update.is_empty() {
+        *project = ctx.projects.update(&project.id, update)?;
+    }
+    if form {
+        // Esc in the form keeps the project and skips the details: it was
+        // already tracked on the way in.
+        let groups = ctx.groups.list()?;
+        if let Some(changes) = ctx.editor.edit(project, groups, FormKind::Full)? {
+            if !changes.is_empty() {
+                *project = ctx.projects.update(&project.id, changes)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// What phase 3 did, for `--json`.
+#[derive(Default)]
 struct Report {
     tracked: Vec<Project>,
-    /// A folder that could not be tracked, and why.
-    failed: Vec<(String, String)>,
+    failed: Vec<Failed>,
+}
+
+/// A folder the command made a project of, which dexily could not track.
+pub(crate) struct Failed {
+    pub directory: String,
+    pub message: String,
 }
 
 impl Report {
     /// A folder the command made but dexily could not track. Never an error:
-    /// the command succeeded, and its exit code stands. Said even under
-    /// `--quiet` — quiet hides success, not a problem — with the command that
-    /// retries it.
-    fn fail(&mut self, folder: &Path, error: &anyhow::Error, json: bool, err: &mut dyn Write) {
+    /// the command succeeded, and its exit code stands. A warning, so it is
+    /// said even under `--quiet`, with the command that retries it.
+    fn fail(&mut self, folder: &Path, error: &anyhow::Error, voice: Voice, err: &mut dyn Write) {
         let directory = folder.display().to_string();
         let message = format!("{error:#}");
-        if !json {
-            let _ = writeln!(
-                err,
+        voice.warn(
+            err,
+            format_args!(
                 "dexily: could not track \"{}\": {message}",
                 folder_name(folder)
-            );
-            let _ = writeln!(err, "        run `dexily add {directory}` to try again");
-        }
-        self.failed.push((directory, message));
+            ),
+        );
+        voice.warn(
+            err,
+            format_args!("        run `dexily add {directory}` to try again"),
+        );
+        self.failed.push(Failed { directory, message });
     }
 }
 

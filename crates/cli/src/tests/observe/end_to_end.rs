@@ -32,9 +32,9 @@ impl Confirmer for Says {
 }
 
 /// A confirmer for runs that must not ask at all.
-struct NeverAsked;
+struct MustNotAsk;
 
-impl Confirmer for NeverAsked {
+impl Confirmer for MustNotAsk {
     fn confirm(&self, _prompt: &str) -> anyhow::Result<bool> {
         panic!("asked, but nothing should have been")
     }
@@ -234,7 +234,7 @@ fn flags_set_the_project_up_without_asking() {
             "mkdir",
             "thing",
         ],
-        NeverAsked,
+        MustNotAsk,
         never_asked,
     );
     assert_eq!(result.unwrap(), 0);
@@ -255,7 +255,7 @@ fn a_name_flag_names_the_project() {
     let run = Run::new();
     let (result, _) = run.go(
         &["--name", "friction", "mkdir", "thing"],
-        NeverAsked,
+        MustNotAsk,
         never_asked,
     );
     assert_eq!(result.unwrap(), 0);
@@ -274,7 +274,7 @@ fn a_flag_that_does_not_check_out_stops_the_command_before_it_runs() {
         let run = Run::new();
         let mut words = flags.to_vec();
         words.extend(["mkdir", "thing"]);
-        let (result, _) = run.go(&words, NeverAsked, never_asked);
+        let (result, _) = run.go(&words, MustNotAsk, never_asked);
         assert!(is_usage(&result), "{flags:?}: {result:?}");
         assert!(
             !run.folder("thing").exists(),
@@ -287,7 +287,7 @@ fn a_flag_that_does_not_check_out_stops_the_command_before_it_runs() {
 #[test]
 fn one_name_cannot_name_two_folders() {
     let run = Run::new();
-    let (result, _) = run.go(&["--name", "x", "mkdir", "a", "b"], NeverAsked, never_asked);
+    let (result, _) = run.go(&["--name", "x", "mkdir", "a", "b"], MustNotAsk, never_asked);
     assert!(is_usage(&result));
     assert!(!run.folder("a").exists());
 }
@@ -300,11 +300,25 @@ fn the_database_is_opened_before_the_command_only_for_a_flag_that_needs_it() {
     std::fs::create_dir(run.folder("thing")).unwrap();
     let (result, _) = run.go(
         &["--color", "cyan", "mkdir", "thing"],
-        NeverAsked,
+        MustNotAsk,
         never_asked,
     );
     assert_ne!(result.unwrap(), 0);
     assert!(!run.opened.get());
+}
+
+#[test]
+fn a_property_set_twice_in_another_case_is_one_property() {
+    let run = Run::new();
+    let (result, _) = run.go(
+        &["--set", "a=1", "--set", "A=2", "mkdir", "thing"],
+        MustNotAsk,
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let properties = &run.tracked()[0].properties;
+    assert_eq!(properties.len(), 1, "{properties:?}");
+    assert_eq!(properties.get("A").map(String::as_str), Some("2"));
 }
 
 // The gatekeeper, and commands that fail.
@@ -334,7 +348,7 @@ fn a_command_without_a_recognizer_never_runs() {
 fn a_failed_command_keeps_its_exit_code_and_tracks_nothing() {
     let run = Run::new();
     std::fs::create_dir(run.folder("thing")).unwrap();
-    let (result, said) = run.go(&["mkdir", "thing"], NeverAsked, never_asked);
+    let (result, said) = run.go(&["mkdir", "thing"], MustNotAsk, never_asked);
     let code = result.unwrap();
     assert_ne!(code, 0, "mkdir refuses a folder that exists");
     assert!(run.tracked().is_empty());
@@ -388,7 +402,7 @@ fn quiet_hides_the_tracking_line() {
 #[test]
 fn json_is_one_last_line_with_the_exit_code_and_the_projects_and_no_questions() {
     let run = Run::new();
-    let (result, said) = run.go(&["--json", "mkdir", "thing"], NeverAsked, never_asked);
+    let (result, said) = run.go(&["--json", "mkdir", "thing"], MustNotAsk, never_asked);
     assert_eq!(result.unwrap(), 0);
     assert_eq!(said.lines().count(), 1, "one line, no prose: {said}");
     let doc: serde_json::Value = serde_json::from_str(&said).unwrap();
@@ -402,41 +416,11 @@ fn json_is_one_last_line_with_the_exit_code_and_the_projects_and_no_questions() 
 fn json_reports_a_failed_command_too() {
     let run = Run::new();
     std::fs::create_dir(run.folder("thing")).unwrap();
-    let (result, said) = run.go(&["--json", "mkdir", "thing"], NeverAsked, never_asked);
+    let (result, said) = run.go(&["--json", "mkdir", "thing"], MustNotAsk, never_asked);
     let code = result.unwrap();
     let doc: serde_json::Value = serde_json::from_str(said.trim()).unwrap();
     assert_eq!(doc["data"]["exit_code"], code);
     assert_eq!(doc["data"]["tracked"], serde_json::json!([]));
-}
-
-// The project flags belong to an observed command only.
-
-#[test]
-fn project_flags_parse_before_an_observed_command_and_leave_its_own_alone() {
-    let cli =
-        Cli::try_parse_from(["dexily", "--add-tag", "rust", "mkdir", "-p", "--name"]).unwrap();
-    assert_eq!(cli.observe.add_tag, ["rust"]);
-    assert_eq!(cli.observe.name, None, "--name after mkdir is mkdir's");
-    let Some(Invocation::Observe(command)) = cli.invocation else {
-        panic!("expected an observed command");
-    };
-    assert_eq!(command, ["mkdir", "-p", "--name"]);
-}
-
-// Fixes from review.
-
-#[test]
-fn a_property_set_twice_in_another_case_is_one_property() {
-    let run = Run::new();
-    let (result, _) = run.go(
-        &["--set", "a=1", "--set", "A=2", "mkdir", "thing"],
-        NeverAsked,
-        never_asked,
-    );
-    assert_eq!(result.unwrap(), 0);
-    let properties = &run.tracked()[0].properties;
-    assert_eq!(properties.len(), 1, "{properties:?}");
-    assert_eq!(properties.get("A").map(String::as_str), Some("2"));
 }
 
 #[test]
@@ -465,12 +449,24 @@ fn details_that_cannot_be_saved_leave_the_project_tracked_and_say_so() {
     assert!(!said.contains("could not track"), "{said}");
 }
 
+// The project flags belong to an observed command only.
+
+#[test]
+fn project_flags_parse_before_an_observed_command_and_leave_its_own_alone() {
+    let cli =
+        Cli::try_parse_from(["dexily", "--add-tag", "rust", "mkdir", "-p", "--name"]).unwrap();
+    assert_eq!(cli.observe.add_tag, ["rust"]);
+    assert_eq!(cli.observe.name, None, "--name after mkdir is mkdir's");
+    let Some(Invocation::Observe(command)) = cli.invocation else {
+        panic!("expected an observed command");
+    };
+    assert_eq!(command, ["mkdir", "-p", "--name"]);
+}
+
 // Git, with the real `git`.
 
 fn has_git_tracker(project: &Project) -> bool {
-    serde_json::to_string(&project.trackers)
-        .unwrap()
-        .contains("Git")
+    project.trackers.iter().any(|tracker| tracker.is("git"))
 }
 
 #[test]
@@ -499,7 +495,7 @@ fn git_init_inside_a_tracked_folder_detects_its_trackers_again_without_asking() 
     let (result, said) = run.go_in(
         &run.folder("thing"),
         &["git", "init", "-q"],
-        NeverAsked,
+        MustNotAsk,
         never_asked,
     );
     assert_eq!(result.unwrap(), 0);
@@ -517,7 +513,7 @@ fn flags_on_an_already_tracked_folder_add_to_its_tags() {
     let run = Run::new();
     run.go(
         &["--add-tag", "one", "mkdir", "thing"],
-        NeverAsked,
+        MustNotAsk,
         never_asked,
     )
     .0
@@ -525,7 +521,7 @@ fn flags_on_an_already_tracked_folder_add_to_its_tags() {
     let (result, _) = run.go_in(
         &run.folder("thing"),
         &["--add-tag", "two", "git", "init", "-q"],
-        NeverAsked,
+        MustNotAsk,
         never_asked,
     );
     assert_eq!(result.unwrap(), 0);
@@ -566,7 +562,7 @@ fn a_git_clone_that_fails_tracks_nothing() {
     let run = Run::new();
     let (result, said) = run.go(
         &["git", "clone", "-q", "no-such-repository", "copy"],
-        NeverAsked,
+        MustNotAsk,
         never_asked,
     );
     let code = result.unwrap();
@@ -615,10 +611,51 @@ fn a_git_option_that_runs_another_program_is_refused_before_git_starts() {
             "source",
             "copy",
         ],
-        NeverAsked,
+        MustNotAsk,
         never_asked,
     );
     assert!(is_usage(&result));
     assert!(!run.folder("copy").exists());
     assert!(!run.folder("pwned").exists());
+}
+
+#[test]
+fn trackers_that_cannot_be_detected_again_leave_the_project_tracked_and_its_flags_applied() {
+    // Already tracked; a `.uproject` that is not one makes re-detection fail
+    // outright. The folder is tracked all the same — not "could not track",
+    // no `dexily add` to retry — and the flags still go in.
+    let run = Run::new();
+    run.go(
+        &["--add-tag", "one", "mkdir", "thing"],
+        MustNotAsk,
+        never_asked,
+    )
+    .0
+    .unwrap();
+    std::fs::write(run.folder("thing").join("Broken.uproject"), "not json").unwrap();
+
+    let (result, said) = run.go_in(
+        &run.folder("thing"),
+        &["--add-tag", "two", "git", "init", "-q"],
+        MustNotAsk,
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(
+        tracked[0].tags,
+        ["One", "Two"],
+        "the flags were still applied"
+    );
+    assert!(
+        said.contains(
+            "dexily: \"thing\" is tracked, but its trackers could not be detected again: "
+        ),
+        "{said}"
+    );
+    assert!(
+        !said.contains("could not track") && !said.contains("dexily add"),
+        "{said}"
+    );
 }

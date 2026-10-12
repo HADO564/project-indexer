@@ -43,15 +43,36 @@ impl Expectation {
     /// runs. Afterwards a folder just made looks exactly like one that was
     /// always there.
     pub fn before(&self) -> Vec<bool> {
-        self.folders.iter().map(Expected::holds).collect()
+        self.folders
+            .iter()
+            .map(|expected| match expected.proof {
+                // Anything at that path, a file included: only a path that
+                // was free can become a folder the command made.
+                Proof::NewFolder => expected.folder.exists(),
+                Proof::Holds(_) => expected.holds(),
+            })
+            .collect()
     }
 }
 
 impl Expected {
+    /// Whether the proof holds on disk right now.
     fn holds(&self) -> bool {
         match self.proof {
-            Proof::NewFolder => self.folder.exists(),
+            Proof::NewFolder => self.folder.is_dir(),
             Proof::Holds(entry) => self.folder.join(entry).exists(),
+        }
+    }
+
+    /// Whether the command made a project of this folder, given whether the
+    /// proof already held before it ran. A new folder must not have been
+    /// there (`mkdir -p work/new` must not track an old `work`); a `.git` may
+    /// have been — `git init` in a repository is still a project to track —
+    /// and what matters is that it is there now.
+    fn proven(&self, held_before: bool) -> bool {
+        match self.proof {
+            Proof::NewFolder => !held_before && self.holds(),
+            Proof::Holds(_) => self.holds(),
         }
     }
 }
@@ -67,15 +88,31 @@ pub enum Refusal {
     Unsafe(String),
 }
 
+/// The program's name as the recognizers match it: as typed, except that on
+/// Windows names ignore case and a program may be given with its `.exe`.
+/// One rule for [`expect_on`] and [`label`], so they cannot name a command
+/// differently.
+fn program_name(argv: &[OsString], windows: bool) -> Option<String> {
+    let program = argv.first()?.to_str()?;
+    Some(if windows {
+        let lower = program.to_ascii_lowercase();
+        lower.strip_suffix(".exe").unwrap_or(&lower).to_string()
+    } else {
+        program.to_string()
+    })
+}
+
 /// The command as a person would name it — `mkdir`, `git clone` — for
 /// dexily's own lines.
 pub fn label(argv: &[OsString]) -> String {
-    let program = argv
-        .first()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let Some(program) = program_name(argv, cfg!(windows)) else {
+        return argv
+            .first()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default();
+    };
     if program == "git" {
-        if let Some(subcommand) = git_line(&argv[1..], Path::new("")).subcommand {
+        if let Some(subcommand) = git_line(&argv[1..]).subcommand {
             return format!("git {subcommand}");
         }
     }
@@ -99,19 +136,13 @@ pub fn expect(argv: &[OsString], cwd: &Path) -> Result<Expectation, Refusal> {
 /// both sets of rules are tested wherever the tests run: `windows` is cmd's
 /// `mkdir`, otherwise the Unix one.
 pub fn expect_on(argv: &[OsString], cwd: &Path, windows: bool) -> Result<Expectation, Refusal> {
-    let (program, rest) = argv.split_first().ok_or(Refusal::Unknown)?;
-    let program = program.to_str().ok_or(Refusal::Unknown)?;
-    // cmd's names ignore case on Windows, and `md` is its other name for
-    // mkdir.
-    let name = if windows {
-        program.to_ascii_lowercase()
-    } else {
-        program.to_string()
-    };
+    let name = program_name(argv, windows).ok_or(Refusal::Unknown)?;
+    let rest = &argv[1..];
     let folders = match name.as_str() {
         "mkdir" if !windows => new_folders(mkdir(rest), cwd),
+        // `md` is cmd's other name for it.
         "mkdir" | "md" if windows => new_folders(cmd_mkdir(rest), cwd),
-        "git" | "git.exe" => git(rest, cwd)?,
+        "git" => git(rest, cwd)?,
         _ => return Err(Refusal::Unknown),
     };
     // A folder named twice (`mkdir -p a a`) is one folder: one question, one
@@ -177,7 +208,7 @@ fn cmd_mkdir(args: &[OsString]) -> Vec<PathBuf> {
 
 /// Git's line before the subcommand's own arguments.
 struct GitLine<'a> {
-    /// The folder git will work in: `-C` moves it, and may repeat.
+    /// Where `-C` moves git to, relative to the working folder. It may repeat.
     base: PathBuf,
     /// `init`, `clone`, … or `None` when the line has none (`git --version`).
     subcommand: Option<String>,
@@ -187,9 +218,9 @@ struct GitLine<'a> {
     unsafe_option: Option<String>,
 }
 
-fn git_line<'a>(args: &'a [OsString], cwd: &Path) -> GitLine<'a> {
+fn git_line(args: &[OsString]) -> GitLine<'_> {
     let mut line = GitLine {
-        base: cwd.to_path_buf(),
+        base: PathBuf::new(),
         subcommand: None,
         rest: &[],
         unsafe_option: None,
@@ -203,7 +234,12 @@ fn git_line<'a>(args: &'a [OsString], cwd: &Path) -> GitLine<'a> {
             break;
         }
         at += 1;
-        let option = text.split('=').next().unwrap_or_default();
+        // `--name=value` carries its value; `--name value` takes the next
+        // argument, which must then not be read as the subcommand.
+        let (option, attached) = match text.split_once('=') {
+            Some((option, _)) => (option, true),
+            None => (text.as_ref(), false),
+        };
         match option {
             "-C" => {
                 if let Some(path) = args.get(at) {
@@ -211,52 +247,52 @@ fn git_line<'a>(args: &'a [OsString], cwd: &Path) -> GitLine<'a> {
                 }
                 at += 1;
             }
-            // A setting can name a program for git to run (`core.sshCommand`,
-            // `core.fsmonitor`, an alias), and `--exec-path` swaps git's own.
-            "-c" | "--config-env" | "--exec-path" if option == "-c" || text.contains('=') => {
+            // A setting can name a program for git to run: `core.sshCommand`,
+            // `core.fsmonitor`, an alias. `-c` always takes the next argument.
+            "-c" => {
                 line.unsafe_option.get_or_insert_with(|| option.to_string());
-                if option == "-c" {
+                at += 1;
+            }
+            // The same through the environment, in either spelling.
+            "--config-env" => {
+                line.unsafe_option.get_or_insert_with(|| option.to_string());
+                if !attached {
                     at += 1;
                 }
             }
-            // Options whose value is the next argument.
-            "--git-dir" | "--work-tree" | "--namespace" | "--config-env" | "--super-prefix"
-                if !text.contains('=') =>
-            {
-                at += 1
+            // With a value it swaps git's own programs; bare, it only prints
+            // where they are.
+            "--exec-path" if attached => {
+                line.unsafe_option.get_or_insert_with(|| option.to_string());
             }
+            "--git-dir" | "--work-tree" | "--namespace" | "--super-prefix" if !attached => at += 1,
             _ => {}
         }
     }
     line
 }
 
-/// Git: only `init` and `clone` make a project, so only they run. Their proof
-/// is a `.git` in the folder, which may have existed already.
-///
-/// Refused outright: the options that make git run another program — a
-/// `-c`/`--config` setting (`core.sshCommand`, `core.fsmonitor`, an alias),
-/// `--upload-pack`, a `--template` whose hooks a clone would run, and the
-/// `ext::` and `fd::` transports. dexily adds nothing to those, and an
-/// allowlist that let them through would not be one.
-fn git(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
-    let GitLine {
-        base,
-        subcommand,
-        rest,
-        unsafe_option,
-    } = git_line(args, cwd);
-    // Which subcommand comes first: `git push` is unknown whatever its
-    // options are.
-    if !matches!(subcommand.as_deref(), Some("init" | "clone")) {
-        return Err(Refusal::Unknown);
+/// The git subcommands that make a project — the only ones that run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GitCommand {
+    Init,
+    Clone,
+}
+
+impl GitCommand {
+    fn parse(subcommand: Option<&str>) -> Option<Self> {
+        match subcommand? {
+            "init" => Some(Self::Init),
+            "clone" => Some(Self::Clone),
+            _ => None,
+        }
     }
-    if let Some(option) = unsafe_option {
-        return Err(refused(&option));
-    }
-    let (valued, positionals_wanted): (&[&str], usize) = match subcommand.as_deref() {
-        Some("init") => (
-            &[
+
+    /// Its options whose value is the next argument, so that value is never
+    /// read as the repository or the folder.
+    fn valued(self) -> &'static [&'static str] {
+        match self {
+            Self::Init => &[
                 "--template",
                 "--separate-git-dir",
                 "--object-format",
@@ -264,10 +300,7 @@ fn git(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
                 "-b",
                 "--initial-branch",
             ],
-            1,
-        ),
-        Some("clone") => (
-            &[
+            Self::Clone => &[
                 "-b",
                 "--branch",
                 "-o",
@@ -285,68 +318,143 @@ fn git(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
                 "--bundle-uri",
                 "--revision",
             ],
-            2,
-        ),
-        _ => unreachable!("only init and clone reach here"),
-    };
-    let clone = subcommand.as_deref() == Some("clone");
+        }
+    }
 
-    let mut positionals: Vec<&OsString> = Vec::new();
-    let mut bare = false;
+    /// Whether `option` makes this subcommand run another program.
+    fn runs_a_program(self, option: &str) -> bool {
+        match self {
+            Self::Init => false,
+            // `--upload-pack` names the program outright, a `-c` setting can
+            // (`core.fsmonitor`), and a clone checks the new repository out,
+            // which runs the template's hooks — `init` only copies them.
+            Self::Clone => matches!(
+                option,
+                "-u" | "--upload-pack" | "-c" | "--config" | "--template"
+            ),
+        }
+    }
+
+    /// How many arguments it reads: `init [folder]`, `clone <repository>
+    /// [folder]`.
+    fn positionals(self) -> usize {
+        match self {
+            Self::Init => 1,
+            Self::Clone => 2,
+        }
+    }
+}
+
+/// A git subcommand's own arguments, read once.
+struct GitArgs<'a> {
+    positionals: Vec<&'a OsString>,
+    /// `--bare` or `--mirror`: a repository nobody works in.
+    bare: bool,
+    /// An option that makes it run another program, if one was given.
+    unsafe_option: Option<String>,
+}
+
+fn git_args(command: GitCommand, args: &[OsString]) -> GitArgs<'_> {
+    let mut parsed = GitArgs {
+        positionals: Vec::new(),
+        bare: false,
+        unsafe_option: None,
+    };
     let mut options_done = false;
-    let mut rest = rest.iter();
-    while let Some(arg) = rest.next() {
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
         let text = arg.to_string_lossy();
         if options_done || !text.starts_with('-') || text == "-" {
-            positionals.push(arg);
+            parsed.positionals.push(arg);
             continue;
         }
-        let option = text.split('=').next().unwrap_or_default();
-        match option {
-            "--" => options_done = true,
-            "--bare" | "--mirror" => bare = true,
-            "-u" | "--upload-pack" | "-c" | "--config" => return Err(refused(option)),
-            // A clone checks the new repository out, which runs the
-            // template's hooks; `init` only copies them.
-            "--template" if clone => return Err(refused(option)),
-            _ if valued.contains(&option) && !text.contains('=') => {
-                rest.next();
-            }
-            _ => {}
-        }
-    }
-    positionals.truncate(positionals_wanted);
-
-    // A bare repository is not a folder anyone works in: it runs, and there
-    // is nothing to track.
-    if bare {
-        return Ok(Vec::new());
-    }
-    let folder = if clone {
-        let Some(repository) = positionals.first() else {
-            return Ok(Vec::new()); // `git clone` alone: git prints its usage
+        let (option, attached) = match text.split_once('=') {
+            Some((option, _)) => (option, true),
+            None => (text.as_ref(), false),
         };
-        let repository = repository.to_string_lossy();
-        if repository.starts_with("ext::") || repository.starts_with("fd::") {
-            return Err(refused(&repository));
+        if option == "--" {
+            options_done = true;
+        } else if matches!(option, "--bare" | "--mirror") {
+            parsed.bare = true;
+        } else if command.runs_a_program(option) {
+            parsed
+                .unsafe_option
+                .get_or_insert_with(|| option.to_string());
+        } else if command.valued().contains(&option) && !attached {
+            args.next();
         }
-        match positionals.get(1) {
+    }
+    parsed.positionals.truncate(command.positionals());
+    parsed
+}
+
+/// Git: only `init` and `clone` make a project, so only they run. Their proof
+/// is a `.git` in the folder, which may have existed already.
+///
+/// In two steps, in this order: first every reason to refuse the line, then —
+/// only for a line that will run — the folder it should leave a project in.
+/// Nothing about the folder can therefore let a refused line through.
+fn git(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
+    let line = git_line(args);
+    // Which subcommand comes first: `git push` is unknown whatever its
+    // options are.
+    let command = GitCommand::parse(line.subcommand.as_deref()).ok_or(Refusal::Unknown)?;
+    let parsed = git_args(command, line.rest);
+    refuse_git(command, &line, &parsed)?;
+
+    let base = cwd.join(&line.base);
+    Ok(git_folder(command, &base, &parsed)
+        .map(|folder| Expected {
+            folder,
+            proof: Proof::Holds(".git"),
+        })
+        .into_iter()
+        .collect())
+}
+
+/// Every reason not to run a git line: the options and addresses that make
+/// git run another program. dexily adds nothing to those, and an allowlist
+/// that let them through would not be one.
+fn refuse_git(command: GitCommand, line: &GitLine, parsed: &GitArgs) -> Result<(), Refusal> {
+    if let Some(option) = line
+        .unsafe_option
+        .as_ref()
+        .or(parsed.unsafe_option.as_ref())
+    {
+        return Err(refused(option));
+    }
+    if command == GitCommand::Clone {
+        if let Some(repository) = parsed.positionals.first() {
+            let repository = repository.to_string_lossy();
+            // Transports that are a command line or an open file handle.
+            if repository.starts_with("ext::") || repository.starts_with("fd::") {
+                return Err(refused(&repository));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The folder a git line that will run should leave a repository in, or
+/// `None` when there is nothing to track: a bare repository is not a folder
+/// anyone works in, and `git clone` alone only prints its usage.
+fn git_folder(command: GitCommand, base: &Path, parsed: &GitArgs) -> Option<PathBuf> {
+    if parsed.bare {
+        return None;
+    }
+    match command {
+        GitCommand::Init => Some(match parsed.positionals.first() {
             Some(directory) => base.join(directory),
-            None => match humanish(&repository) {
-                Some(name) => base.join(name),
-                None => return Ok(Vec::new()),
-            },
+            None => base.to_path_buf(),
+        }),
+        GitCommand::Clone => {
+            let repository = parsed.positionals.first()?.to_string_lossy();
+            match parsed.positionals.get(1) {
+                Some(directory) => Some(base.join(directory)),
+                None => humanish(&repository).map(|name| base.join(name)),
+            }
         }
-    } else {
-        match positionals.first() {
-            Some(directory) => base.join(directory),
-            None => base,
-        }
-    };
-    Ok(vec![Expected {
-        folder,
-        proof: Proof::Holds(".git"),
-    }])
+    }
 }
 
 fn refused(option: &str) -> Refusal {
@@ -370,24 +478,23 @@ fn humanish(repository: &str) -> Option<String> {
 /// The folders to track: those whose proof holds now that the command has
 /// run — and only if it succeeded.
 ///
-/// `held_before` is [`Expectation::before`], taken before the command ran. A
-/// new folder must not have been there (`mkdir -p work/new` must not track an
-/// old `work`); a `.git` may have been — `git init` in a repository is still a
-/// project to track — and what matters is that it is there now.
+/// `held_before` is [`Expectation::before`], taken before the command ran, one
+/// flag per expected folder in the same order.
 pub fn confirm(expected: &Expectation, held_before: &[bool], exit_code: i32) -> Vec<PathBuf> {
+    debug_assert_eq!(
+        expected.folders.len(),
+        held_before.len(),
+        "one before-flag per expected folder"
+    );
     if exit_code != 0 {
         // The command failed: whatever it left behind, it is not a project.
         return Vec::new();
     }
-    let mut confirmed = Vec::new();
-    for (expected, &held) in expected.folders.iter().zip(held_before) {
-        let proven = match expected.proof {
-            Proof::NewFolder => !held && expected.folder.is_dir(),
-            Proof::Holds(entry) => expected.folder.join(entry).exists(),
-        };
-        if proven {
-            confirmed.push(expected.folder.clone());
-        }
-    }
-    confirmed
+    expected
+        .folders
+        .iter()
+        .zip(held_before)
+        .filter(|(expected, &held)| expected.proven(held))
+        .map(|(expected, _)| expected.folder.clone())
+        .collect()
 }
