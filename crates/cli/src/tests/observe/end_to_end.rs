@@ -73,6 +73,17 @@ impl Run {
         confirmer: impl Confirmer + 'static,
         editor: fn(&Project) -> Option<UpdateProject>,
     ) -> (anyhow::Result<i32>, String) {
+        self.go_in(self.root.path(), words, confirmer, editor)
+    }
+
+    /// [`Run::go`] from another working folder.
+    fn go_in(
+        &self,
+        cwd: &Path,
+        words: &[&str],
+        confirmer: impl Confirmer + 'static,
+        editor: fn(&Project) -> Option<UpdateProject>,
+    ) -> (anyhow::Result<i32>, String) {
         let mut argv = vec!["dexily"];
         argv.extend_from_slice(words);
         let cli = Cli::try_parse_from(argv).expect("arguments should parse");
@@ -93,7 +104,7 @@ impl Run {
         let mut err = Vec::new();
         let result = observe(
             &command,
-            self.root.path(),
+            cwd,
             options,
             move || {
                 opened.set(true);
@@ -314,7 +325,7 @@ fn a_command_without_a_recognizer_never_runs() {
     assert!(is_usage(&result));
     assert_eq!(
         result.unwrap_err().to_string(),
-        "`rm` isn't a command dexily observes (it knows: mkdir). Run it directly."
+        "`rm` isn't a command dexily observes (it knows: mkdir, git init, git clone). Run it directly."
     );
     assert!(run.folder("thing").is_dir(), "rm never ran");
 }
@@ -410,4 +421,204 @@ fn project_flags_parse_before_an_observed_command_and_leave_its_own_alone() {
         panic!("expected an observed command");
     };
     assert_eq!(command, ["mkdir", "-p", "--name"]);
+}
+
+// Fixes from review.
+
+#[test]
+fn a_property_set_twice_in_another_case_is_one_property() {
+    let run = Run::new();
+    let (result, _) = run.go(
+        &["--set", "a=1", "--set", "A=2", "mkdir", "thing"],
+        NeverAsked,
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let properties = &run.tracked()[0].properties;
+    assert_eq!(properties.len(), 1, "{properties:?}");
+    assert_eq!(properties.get("A").map(String::as_str), Some("2"));
+}
+
+#[test]
+fn details_that_cannot_be_saved_leave_the_project_tracked_and_say_so() {
+    // The form hands back a name core refuses. The project was tracked on
+    // the way in: it stays, the exit code stands, and the message does not
+    // claim it could not be tracked.
+    let run = Run::new();
+    let form = |_: &Project| {
+        Some(UpdateProject {
+            name: Some("  ".into()),
+            ..Default::default()
+        })
+    };
+    let (result, said) = run.go(&["mkdir", "thing"], Says(Some(Track::Edit)), form);
+    assert_eq!(result.unwrap(), 0);
+    assert_eq!(run.tracked().len(), 1);
+    assert!(
+        said.starts_with("dexily: tracked \"thing\", but could not save its details: "),
+        "{said}"
+    );
+    assert!(
+        said.contains("run `dexily edit \"thing\"` to set them"),
+        "{said}"
+    );
+    assert!(!said.contains("could not track"), "{said}");
+}
+
+// Git, with the real `git`.
+
+fn has_git_tracker(project: &Project) -> bool {
+    serde_json::to_string(&project.trackers)
+        .unwrap()
+        .contains("Git")
+}
+
+#[test]
+fn git_init_tracks_the_folder_with_its_git_tracker() {
+    let run = Run::new();
+    let (result, _) = run.go(
+        &["git", "init", "-q", "repo"],
+        Says(Some(Track::Yes)),
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(tracked[0].name, "repo");
+    assert!(has_git_tracker(&tracked[0]), "{:?}", tracked[0].trackers);
+}
+
+#[test]
+fn git_init_inside_a_tracked_folder_detects_its_trackers_again_without_asking() {
+    let run = Run::new();
+    run.go(&["mkdir", "thing"], Says(Some(Track::Yes)), never_asked)
+        .0
+        .unwrap();
+    assert!(!has_git_tracker(&run.tracked()[0]), "a bare folder so far");
+
+    let (result, said) = run.go_in(
+        &run.folder("thing"),
+        &["git", "init", "-q"],
+        NeverAsked,
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1, "the same project, not a second one");
+    assert!(has_git_tracker(&tracked[0]));
+    assert_eq!(
+        said,
+        "dexily: \"thing\" was already tracked; detected its trackers again\n"
+    );
+}
+
+#[test]
+fn flags_on_an_already_tracked_folder_add_to_its_tags() {
+    let run = Run::new();
+    run.go(
+        &["--add-tag", "one", "mkdir", "thing"],
+        NeverAsked,
+        never_asked,
+    )
+    .0
+    .unwrap();
+    let (result, _) = run.go_in(
+        &run.folder("thing"),
+        &["--add-tag", "two", "git", "init", "-q"],
+        NeverAsked,
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    assert_eq!(run.tracked()[0].tags, ["One", "Two"]);
+}
+
+#[test]
+fn git_clone_tracks_the_folder_it_made() {
+    let run = Run::new();
+    // A local repository to clone, so the test needs no network.
+    run.go(
+        &["git", "init", "-q", "source"],
+        Says(Some(Track::No)),
+        never_asked,
+    )
+    .0
+    .unwrap();
+    let (result, _) = run.go(
+        &["git", "clone", "-q", "source", "copy"],
+        Says(Some(Track::Yes)),
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1, "source was answered no");
+    assert_eq!(
+        Path::new(&tracked[0].directory),
+        std::fs::canonicalize(run.folder("copy")).unwrap()
+    );
+    // Named after the repository it was cloned from, as core names any git
+    // project with a remote — the app's Add does the same.
+    assert_eq!(tracked[0].name, "source");
+    assert!(has_git_tracker(&tracked[0]));
+}
+
+#[test]
+fn a_git_clone_that_fails_tracks_nothing() {
+    let run = Run::new();
+    let (result, said) = run.go(
+        &["git", "clone", "-q", "no-such-repository", "copy"],
+        NeverAsked,
+        never_asked,
+    );
+    let code = result.unwrap();
+    assert_ne!(code, 0);
+    assert!(run.tracked().is_empty());
+    assert!(
+        said.ends_with(&format!(
+            "dexily: git clone failed (exit {code}), nothing tracked\n"
+        )),
+        "{said}"
+    );
+}
+
+#[test]
+fn git_commands_that_make_no_project_never_run() {
+    let run = Run::new();
+    for words in [&["git", "push"][..], &["git", "status"]] {
+        let command: Vec<OsString> = words.iter().map(OsString::from).collect();
+        let mut err = Vec::new();
+        let result = observe(
+            &command,
+            run.root.path(),
+            Options::default(),
+            || panic!("the database is not opened for a refused command"),
+            &mut err,
+        );
+        assert!(is_usage(&result), "{words:?}");
+        assert!(
+            result.unwrap_err().to_string().starts_with(&format!(
+                "`{}` isn't a command dexily observes",
+                words.join(" ")
+            )),
+            "{words:?}"
+        );
+    }
+}
+
+#[test]
+fn a_git_option_that_runs_another_program_is_refused_before_git_starts() {
+    let run = Run::new();
+    let (result, _) = run.go(
+        &[
+            "git",
+            "clone",
+            "--upload-pack=touch pwned",
+            "source",
+            "copy",
+        ],
+        NeverAsked,
+        never_asked,
+    );
+    assert!(is_usage(&result));
+    assert!(!run.folder("copy").exists());
+    assert!(!run.folder("pwned").exists());
 }

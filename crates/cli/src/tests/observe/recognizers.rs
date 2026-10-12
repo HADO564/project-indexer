@@ -4,15 +4,22 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::observe::recognizers::{confirm, expect, Expectation};
+use crate::observe::recognizers::{confirm, expect, label, Expectation, Expected, Proof, Refusal};
 
 fn cwd() -> &'static Path {
     Path::new("/home/me/code")
 }
 
+fn argv(words: &[&str]) -> Vec<OsString> {
+    words.iter().map(OsString::from).collect()
+}
+
+/// The folders `words` should leave a project in, or `None` when dexily will
+/// not run it at all.
 fn expected(words: &[&str]) -> Option<Vec<PathBuf>> {
-    let argv: Vec<OsString> = words.iter().map(OsString::from).collect();
-    expect(&argv, cwd()).map(|Expectation { folders }| folders)
+    expect(&argv(words), cwd())
+        .ok()
+        .map(|Expectation { folders }| folders.into_iter().map(|e| e.folder).collect())
 }
 
 fn under_cwd(names: &[&str]) -> Option<Vec<PathBuf>> {
@@ -111,9 +118,20 @@ fn nothing_at_all_is_not_known() {
 /// An expectation of `names` under `root`, with each folder's "was it there
 /// before" taken now, as the observer takes it before running the command.
 fn before(root: &Path, names: &[&str]) -> (Expectation, Vec<bool>) {
-    let folders: Vec<PathBuf> = names.iter().map(|name| root.join(name)).collect();
-    let existed = folders.iter().map(|f| f.exists()).collect();
-    (Expectation { folders }, existed)
+    before_with(root, names, Proof::NewFolder)
+}
+
+fn before_with(root: &Path, names: &[&str], proof: Proof) -> (Expectation, Vec<bool>) {
+    let folders = names
+        .iter()
+        .map(|name| Expected {
+            folder: root.join(name),
+            proof,
+        })
+        .collect();
+    let expectation = Expectation { folders };
+    let held = expectation.before();
+    (expectation, held)
 }
 
 #[test]
@@ -162,4 +180,229 @@ fn a_file_where_the_folder_was_expected_is_not_a_project() {
     let (expectation, existed) = before(root.path(), &["thing"]);
     std::fs::write(root.path().join("thing"), "").unwrap();
     assert_eq!(confirm(&expectation, &existed, 0), Vec::<PathBuf>::new());
+}
+
+#[test]
+fn a_folder_named_twice_is_expected_once() {
+    assert_eq!(
+        expected(&["mkdir", "-p", "dup", "dup"]),
+        under_cwd(&["dup"])
+    );
+}
+
+// Git: only `init` and `clone` make a project, and a `.git` proves it.
+
+fn git_expects(words: &[&str]) -> Result<Vec<Expected>, Refusal> {
+    expect(&argv(words), cwd()).map(|e| e.folders)
+}
+
+fn repo_at(path: &str) -> Result<Vec<Expected>, Refusal> {
+    Ok(vec![Expected {
+        folder: cwd().join(path),
+        proof: Proof::Holds(".git"),
+    }])
+}
+
+#[test]
+fn git_init_is_the_working_folder_or_the_one_it_names() {
+    assert_eq!(git_expects(&["git", "init"]), repo_at(""));
+    assert_eq!(git_expects(&["git", "init", "app"]), repo_at("app"));
+    assert_eq!(
+        git_expects(&["git", "init", "-q", "--", "app"]),
+        repo_at("app")
+    );
+}
+
+#[test]
+fn git_init_s_options_with_a_value_are_not_the_folder() {
+    for words in [
+        &["git", "init", "-b", "main", "app"][..],
+        &["git", "init", "--initial-branch", "main", "app"],
+        &["git", "init", "--initial-branch=main", "app"],
+        &[
+            "git",
+            "init",
+            "--template",
+            "tpl",
+            "--object-format",
+            "sha256",
+            "app",
+        ],
+    ] {
+        assert_eq!(git_expects(words), repo_at("app"), "{words:?}");
+    }
+}
+
+#[test]
+fn dash_c_moves_the_folder_git_works_in() {
+    assert_eq!(git_expects(&["git", "-C", "sub", "init"]), repo_at("sub"));
+    assert_eq!(
+        git_expects(&["git", "-C", "a", "-C", "b", "init", "x"]),
+        repo_at("a/b/x")
+    );
+    assert_eq!(
+        git_expects(&["git", "--git-dir", "elsewhere", "-C", "sub", "init"]),
+        repo_at("sub")
+    );
+}
+
+#[test]
+fn git_clone_is_the_folder_named_after_the_repository() {
+    for repository in [
+        "https://github.com/you/thing.git",
+        "https://github.com/you/thing",
+        "https://github.com/you/thing/",
+        "git@github.com:you/thing.git",
+        "host:thing",
+        "../elsewhere/thing",
+        "/srv/git/thing/.git",
+        "thing.bundle",
+    ] {
+        assert_eq!(
+            git_expects(&["git", "clone", repository]),
+            repo_at("thing"),
+            "{repository}"
+        );
+    }
+}
+
+#[test]
+fn git_clone_into_a_named_folder_is_that_folder() {
+    assert_eq!(
+        git_expects(&["git", "clone", "https://host/you/thing.git", "mine"]),
+        repo_at("mine")
+    );
+    assert_eq!(
+        git_expects(&[
+            "git",
+            "clone",
+            "-b",
+            "dev",
+            "--depth",
+            "1",
+            "--origin=up",
+            "-q",
+            "https://host/you/thing.git",
+            "mine",
+        ]),
+        repo_at("mine")
+    );
+}
+
+#[test]
+fn a_bare_repository_runs_but_is_not_a_project() {
+    for words in [
+        &["git", "init", "--bare", "x.git"][..],
+        &["git", "clone", "--bare", "https://host/you/thing.git"],
+        &["git", "clone", "--mirror", "https://host/you/thing.git"],
+        &["git", "clone"], // nothing named: git prints its usage
+    ] {
+        assert_eq!(git_expects(words), Ok(Vec::new()), "{words:?}");
+    }
+}
+
+#[test]
+fn any_other_git_command_is_not_known() {
+    for words in [
+        &["git", "push"][..],
+        &["git", "status"],
+        &["git", "commit", "-m", "init"],
+        &["git", "--version"],
+        &["git"],
+        &["git", "-C", "sub", "pull"],
+        // Unknown first, whatever options it carries.
+        &["git", "-c", "alias.x=!sh", "push"],
+    ] {
+        assert_eq!(git_expects(words), Err(Refusal::Unknown), "{words:?}");
+    }
+}
+
+#[test]
+fn an_option_that_makes_git_run_another_program_is_refused() {
+    for words in [
+        &["git", "-c", "core.sshCommand=evil", "clone", "host:thing"][..],
+        &[
+            "git",
+            "--config-env=core.sshCommand=EVIL",
+            "clone",
+            "host:thing",
+        ],
+        &["git", "--exec-path=/tmp/evil", "init"],
+        &["git", "clone", "-u", "evil", "host:thing"],
+        &["git", "clone", "--upload-pack", "evil", "host:thing"],
+        &["git", "clone", "--upload-pack=evil", "host:thing"],
+        &["git", "clone", "-c", "core.fsmonitor=evil", "host:thing"],
+        &[
+            "git",
+            "clone",
+            "--config",
+            "core.fsmonitor=evil",
+            "host:thing",
+        ],
+        &["git", "clone", "--template=/tmp/hooks", "host:thing"],
+        &["git", "clone", "ext::sh -c evil", "x"],
+        &["git", "clone", "fd::7", "x"],
+    ] {
+        assert!(
+            matches!(git_expects(words), Err(Refusal::Unsafe(_))),
+            "{words:?}: {:?}",
+            git_expects(words)
+        );
+    }
+}
+
+#[test]
+fn a_refusal_names_the_option_and_says_to_run_git_directly() {
+    let Err(Refusal::Unsafe(why)) = git_expects(&["git", "clone", "--upload-pack=evil", "x"])
+    else {
+        panic!("refused");
+    };
+    assert_eq!(
+        why,
+        "`--upload-pack` makes git run another program, so it is not passed on. Run git directly."
+    );
+}
+
+#[test]
+fn a_command_is_labelled_as_a_person_would_name_it() {
+    assert_eq!(label(&argv(&["mkdir", "-p", "x"])), "mkdir");
+    assert_eq!(label(&argv(&["git", "clone", "u"])), "git clone");
+    assert_eq!(label(&argv(&["git", "-C", "sub", "push"])), "git push");
+    assert_eq!(label(&argv(&["git"])), "git");
+}
+
+// Git's proof: the folder holds a `.git` now, whether or not it did before.
+
+#[test]
+fn a_git_folder_is_confirmed_when_it_holds_dot_git_after() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir(root.path().join("app")).unwrap();
+    let (expectation, held) = before_with(root.path(), &["app"], Proof::Holds(".git"));
+    assert_eq!(
+        confirm(&expectation, &held, 0),
+        Vec::<PathBuf>::new(),
+        "not yet"
+    );
+    std::fs::create_dir(root.path().join("app/.git")).unwrap();
+    assert_eq!(
+        confirm(&expectation, &held, 0),
+        vec![root.path().join("app")]
+    );
+    assert_eq!(
+        confirm(&expectation, &held, 128),
+        Vec::<PathBuf>::new(),
+        "git failed"
+    );
+}
+
+#[test]
+fn git_init_in_a_folder_that_was_already_a_repository_is_still_confirmed() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(root.path().join("app/.git")).unwrap();
+    let (expectation, held) = before_with(root.path(), &["app"], Proof::Holds(".git"));
+    assert_eq!(held, [true]);
+    assert_eq!(
+        confirm(&expectation, &held, 0),
+        vec![root.path().join("app")]
+    );
 }

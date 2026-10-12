@@ -10,7 +10,10 @@ use std::{
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
     process::{Command, ExitStatus},
-    sync::Once,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Once,
+    },
 };
 
 use anyhow::{bail, Context};
@@ -36,11 +39,12 @@ pub fn run(argv: &[OsString], cwd: &Path) -> anyhow::Result<i32> {
         bail!("no command to run");
     };
     let mut command = command(program, rest)?;
-    ignore_interrupts();
-    let status = command
-        .current_dir(cwd)
-        .status()
-        .with_context(|| format!("could not run `{}`", program.to_string_lossy()))?;
+    leave_interrupts_to_the_command();
+    RUNNING.store(true, Ordering::SeqCst);
+    let status = command.current_dir(cwd).status();
+    RUNNING.store(false, Ordering::SeqCst);
+    let status =
+        status.with_context(|| format!("could not run `{}`", program.to_string_lossy()))?;
     Ok(exit_code(status))
 }
 
@@ -72,10 +76,15 @@ fn command(program: &OsStr, rest: &[OsString]) -> anyhow::Result<Command> {
         return Err(Failure::Usage { message }.into());
     }
     let mut command = Command::new(cmd_exe(std::env::var_os("SystemRoot")));
-    // `/D` skips any AutoRun commands from the registry. The tail is appended
+    // `/D` skips any AutoRun commands from the registry, and `/V:OFF` keeps
+    // `!name!` from expanding even where the registry turns that on. The tail is appended
     // raw: `cmd` has its own quoting rules, and Rust's escaping would fight
     // them.
-    command.arg("/D").arg("/C").raw_arg(cmd_tail(builtin, rest));
+    command
+        .arg("/D")
+        .arg("/V:OFF")
+        .arg("/C")
+        .raw_arg(cmd_tail(builtin, rest));
     Ok(command)
 }
 
@@ -178,17 +187,30 @@ pub fn exit_code(status: ExitStatus) -> i32 {
     1
 }
 
+/// Whether the wrapped command is running right now.
+static RUNNING: AtomicBool = AtomicBool::new(false);
+
 /// Ctrl+C reaches dexily as well as the command, since they share the
 /// terminal. Without this dexily would die on the spot, before it could report
-/// the command's exit code or record anything; with it, the command alone
-/// decides what Ctrl+C means, and dexily carries on once it has exited.
+/// the command's exit code or record anything; with it, while the command
+/// runs the command alone decides what Ctrl+C means, and dexily carries on
+/// once it has exited.
+///
+/// Only while it runs. Afterwards — at the `[Y/n/e]` prompt — Ctrl+C is the
+/// user's to stop dexily with, and ends it as a shell would report it, 130.
+/// A handler cannot be taken back out once installed, so it checks which of
+/// the two moments this is.
 ///
 /// Installed once: a process may hold only one handler. If it cannot be
 /// installed, Ctrl+C simply ends dexily too, as it would without it — never a
 /// reason to refuse to run the command.
-fn ignore_interrupts() {
+fn leave_interrupts_to_the_command() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        let _ = ctrlc::set_handler(|| {});
+        let _ = ctrlc::set_handler(|| {
+            if !RUNNING.load(Ordering::SeqCst) {
+                std::process::exit(130);
+            }
+        });
     });
 }

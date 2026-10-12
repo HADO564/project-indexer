@@ -9,7 +9,6 @@
 //! or a colour that is not one stops everything, and the command never starts:
 //! all or nothing, rather than a folder left behind with half a project.
 
-use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::bail;
@@ -17,7 +16,9 @@ use clap::Args;
 use indexer_core::{Project, UpdateProject};
 
 use crate::appearance;
-use crate::commands::edit::{cleared_if_blank, cleared_if_empty, parse_property};
+use crate::commands::edit::{
+    cleared_if_blank, cleared_if_empty, edited_properties, edited_tags, parse_property,
+};
 use crate::commands::group;
 use crate::context::Context;
 
@@ -125,14 +126,11 @@ impl ObserveFlags {
             }
         }
 
-        let tags = (!self.add_tag.is_empty()).then_some(self.add_tag);
-        let properties =
-            (!self.set.is_empty()).then(|| self.set.into_iter().collect::<BTreeMap<_, _>>());
         let fields = Fields {
             name: self.name,
             description: self.description,
-            tags,
-            properties,
+            add_tags: self.add_tag,
+            set: self.set,
             notes: cleared_if_empty(self.notes),
             open_with: cleared_if_blank(self.open_with),
             group_id,
@@ -142,14 +140,19 @@ impl ObserveFlags {
 
         // Core's own rules — an empty name, a property name with `:` — by
         // letting core apply the update to a project that is never saved, so
-        // no second copy of a rule can drift from the first.
-        Project::new(
-            "dexily".into(),
-            cwd.to_string_lossy().into_owned(),
-            None,
-            None,
-        )?
-        .update(fields.update())?;
+        // no second copy of a rule can drift from the first. Not without
+        // flags: there is nothing to check, and a working folder core would
+        // not take as a project's must not stand in a bare command's way.
+        if !fields.is_empty() {
+            let mut scratch = Project::new(
+                "dexily".into(),
+                cwd.to_string_lossy().into_owned(),
+                None,
+                None,
+            )?;
+            let update = fields.update(&scratch);
+            scratch.update(update)?;
+        }
         Ok(fields)
     }
 }
@@ -159,8 +162,8 @@ impl ObserveFlags {
 pub struct Fields {
     name: Option<String>,
     description: Option<String>,
-    tags: Option<Vec<String>>,
-    properties: Option<BTreeMap<String, String>>,
+    add_tags: Vec<String>,
+    set: Vec<(String, String)>,
     notes: Option<Option<String>>,
     open_with: Option<Option<String>>,
     group_id: Option<Option<String>>,
@@ -169,14 +172,34 @@ pub struct Fields {
 }
 
 impl Fields {
-    /// One update for one new project, built as `edit` builds its own.
-    pub fn update(&self) -> UpdateProject {
+    /// Whether no flag was given, so there is nothing to set.
+    pub fn is_empty(&self) -> bool {
+        self.name.is_none()
+            && self.description.is_none()
+            && self.add_tags.is_empty()
+            && self.set.is_empty()
+            && self.notes.is_none()
+            && self.open_with.is_none()
+            && self.group_id.is_none()
+            && self.color.is_none()
+            && self.icon.is_none()
+    }
+
+    /// One update for `project`, built as `edit` builds its own: tags and
+    /// properties are *added* to what the project has — core replaces the
+    /// whole list — so flags on a folder that was already tracked never cost
+    /// it a tag, and property names match ignoring case, as `edit --set` does.
+    pub fn update(&self, project: &Project) -> UpdateProject {
         let fields = self.clone();
+        let tags =
+            (!fields.add_tags.is_empty()).then(|| edited_tags(&project.tags, fields.add_tags, &[]));
+        let properties = (!fields.set.is_empty())
+            .then(|| edited_properties(&project.properties, fields.set, &[]));
         UpdateProject {
             name: fields.name,
             description: fields.description,
-            tags: fields.tags,
-            properties: fields.properties,
+            tags,
+            properties,
             notes: fields.notes,
             open_with: fields.open_with,
             group_id: fields.group_id,

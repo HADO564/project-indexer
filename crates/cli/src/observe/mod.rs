@@ -11,11 +11,13 @@
 //!
 //! 1. **Before.** The gatekeeper — only a command with a recognizer runs — then
 //!    dexily's own flags are checked, and an *expectation* formed: the folders
-//!    the command should make, and which of them are already there. Nothing is
-//!    written.
+//!    the command should leave a project in, what would prove it, and whether
+//!    that already holds. Nothing is written.
 //! 2. **Run.** The command, untouched; its exit code.
-//! 3. **After.** The evidence — it succeeded, the folder is there now and was
-//!    not before — and only then the one write, `ensure_project`.
+//! 3. **After.** The evidence — it succeeded, and the proof holds: a folder
+//!    that is new, or one that now has a `.git` — and only then the write:
+//!    `ensure_project`, or for a folder already tracked, its trackers detected
+//!    again.
 //!
 //! dexily sees the command's *outcome*, never its output, which goes straight
 //! to the terminal.
@@ -38,6 +40,7 @@ use crate::editor::{FormKind, TerminalEditor};
 use crate::output::json;
 
 use flags::{Fields, ObserveFlags};
+use recognizers::Refusal;
 
 /// How an observed command was asked for: dexily's global flags, and its own
 /// flags for the project the command creates.
@@ -69,8 +72,10 @@ pub fn run(argv: &[OsString], options: Options) -> anyhow::Result<ExitCode> {
         },
         &mut std::io::stderr().lock(),
     )?;
-    // A shell sees an exit code as one byte, so this keeps what it would see.
-    Ok(ExitCode::from(code as u8))
+    // A shell sees an exit code as one byte. Windows allows more: one that
+    // does not fit must not be cut down to something else — 256 would read
+    // as 0, success — so it becomes a plain failure.
+    Ok(ExitCode::from(u8::try_from(code).unwrap_or(1)))
 }
 
 /// [`run`] with its surroundings passed in — the working folder, how to open
@@ -86,22 +91,22 @@ pub(crate) fn observe(
     // Phase 1. The gatekeeper: only a command with a recognizer runs. Anything
     // else is refused here, before it starts — it would gain nothing from
     // dexily, and dexily must not be a way to run arbitrary programs.
-    let Some(expectation) = recognizers::expect(argv, cwd) else {
-        let program = argv
-            .first()
-            .map(|p| p.to_string_lossy())
-            .unwrap_or_default();
-        return Err(usage(format!(
-            "`{program}` isn't a command dexily observes (it knows: {}). Run it directly.",
-            recognizers::KNOWN.join(", ")
-        )));
+    let command = recognizers::label(argv);
+    let expectation = match recognizers::expect(argv, cwd) {
+        Ok(expectation) => expectation,
+        Err(Refusal::Unknown) => {
+            return Err(usage(format!(
+                "`{command}` isn't a command dexily observes (it knows: {}). Run it directly.",
+                recognizers::KNOWN.join(", ")
+            )))
+        }
+        Err(Refusal::Unsafe(why)) => return Err(usage(why)),
     };
 
     // dexily's own flags, checked before the command runs: a group that does
     // not exist must stop everything now, not after a folder has been made.
     let mut open = Some(open);
     let mut ctx = None;
-    let asked_for_fields = !options.flags.is_empty();
     if options.flags.need_the_database() {
         ctx = Some(open.take().expect("not opened yet")()?);
     }
@@ -110,22 +115,21 @@ pub(crate) fn observe(
         .check(ctx.as_ref(), cwd, expectation.folders.len())
         .map_err(|e| usage(format!("{e:#}")))?;
 
-    let existed_before: Vec<bool> = expectation.folders.iter().map(|f| f.exists()).collect();
+    let held_before = expectation.before();
 
     // Phase 2.
     let code = spawn::run(argv, cwd)?;
 
     // Phase 3. From here on nothing may change `code`: every problem is a
     // warning, never an error returned.
-    let created = recognizers::confirm(&expectation, &existed_before, code);
+    let proven = recognizers::confirm(&expectation, &held_before, code);
     let mut report = Report {
         tracked: Vec::new(),
         failed: Vec::new(),
     };
-    let command = argv[0].to_string_lossy();
     let say = !options.quiet && !options.json;
 
-    if created.is_empty() {
+    if proven.is_empty() {
         // Only worth a line when a folder was expected: `mkdir --help` is not
         // a failure to track anything.
         if say && !expectation.folders.is_empty() {
@@ -150,20 +154,14 @@ pub(crate) fn observe(
             Ok(ctx) => {
                 // Flags mean the user has already decided and described the
                 // project, and `--json` has nobody to ask.
-                let ask = !asked_for_fields && !options.json;
-                for folder in &created {
+                let ask = fields.is_empty() && !options.json;
+                for folder in &proven {
                     match track(&ctx, folder, &fields, ask) {
-                        Ok(Some((project, asked))) => {
-                            // After a prompt the user has just answered it;
-                            // a line would only repeat them.
-                            if say && !asked {
-                                let _ = writeln!(
-                                    err,
-                                    "dexily: tracking \"{}\" at {}",
-                                    project.name, project.directory
-                                );
+                        Ok(Some(tracked)) => {
+                            if !options.json {
+                                tracked.say(say, err);
                             }
-                            report.tracked.push(project);
+                            report.tracked.push(tracked.project);
                         }
                         Ok(None) => {}
                         Err(e) => report.fail(folder, &e, options.json, err),
@@ -171,7 +169,7 @@ pub(crate) fn observe(
                 }
             }
             Err(e) => {
-                for folder in &created {
+                for folder in &proven {
                     report.fail(folder, &e, options.json, err);
                 }
             }
@@ -185,24 +183,75 @@ pub(crate) fn observe(
     Ok(code)
 }
 
-/// Tracks one folder the command made: asks when `ask`, then `ensure_project`,
-/// the flags as one update, and the edit form if the answer was `e`.
+/// A folder now tracked, and how it came to be, for the line that says so.
+struct Tracked {
+    project: Project,
+    /// It was tracked before this command: its trackers were detected again
+    /// rather than a project created.
+    already: bool,
+    /// A `[Y/n/e]` prompt was shown and answered.
+    asked: bool,
+    /// The project is tracked, but its details — the flags, the form — could
+    /// not be saved, and why.
+    details: Option<String>,
+}
+
+impl Tracked {
+    fn say(&self, say: bool, err: &mut dyn Write) {
+        let Project {
+            name, directory, ..
+        } = &self.project;
+        // After a prompt the user has just answered it; a line would only
+        // repeat them.
+        if say && self.already {
+            let _ = writeln!(
+                err,
+                "dexily: \"{name}\" was already tracked; detected its trackers again"
+            );
+        } else if say && !self.asked {
+            let _ = writeln!(err, "dexily: tracking \"{name}\" at {directory}");
+        }
+        // A warning, so even under `--quiet`. Not "could not track": it is
+        // tracked, and `add` would be the wrong thing to retry.
+        if let Some(why) = &self.details {
+            let _ = writeln!(
+                err,
+                "dexily: tracked \"{name}\", but could not save its details: {why}"
+            );
+            let _ = writeln!(err, "        run `dexily edit \"{name}\"` to set them");
+        }
+    }
+}
+
+/// Tracks one folder the command made a project of.
 ///
-/// `None` when the user said no. Otherwise the project, and whether a prompt
-/// was actually shown.
+/// A folder not yet tracked: asks when `ask`, then `ensure_project`. One that
+/// already is — `dexily git init` inside a project made with `dexily mkdir` —
+/// is not asked about or created again: its trackers are detected again, which
+/// is what the command changed. Either way the flags follow as one update, and
+/// the edit form if the answer was `e`.
+///
+/// `None` when the user said no. `Err` only if the folder could not be tracked
+/// at all: once it is, a later problem is a warning carried in [`Tracked`].
 fn track(
     ctx: &Context,
     folder: &Path,
     fields: &Fields,
     ask: bool,
-) -> anyhow::Result<Option<(Project, bool)>> {
+) -> anyhow::Result<Option<Tracked>> {
     // The real path, as `add` stores one, so a symlink or `..` cannot point
     // dexily somewhere other than where the folder is.
     let directory = add::absolute(Some(folder.to_path_buf()), "track")?;
 
+    let existing = ctx
+        .projects
+        .find_by_directory(&directory)?
+        .filter(|p| !p.is_deleted);
+    let already = existing.is_some();
+
     // `None` from the confirmer: there was nobody to ask (`--yes`, a pipe),
     // so the prefix is the answer and no prompt was shown.
-    let answer = if ask {
+    let answer = if ask && !already {
         ctx.confirmer.track(&format!(
             "dexily: track \"{}\" at {directory}?",
             folder_name(folder)
@@ -216,22 +265,38 @@ fn track(
         return Ok(None);
     }
 
-    let mut project = ctx.projects.ensure_project(&directory)?;
-    let update = fields.update();
-    if !update.is_empty() {
-        project = ctx.projects.update(&project.id, update)?;
-    }
-    if answer == Track::Edit {
-        // Esc in the form keeps the project and skips the details: it was
-        // already tracked on the way in.
-        let groups = ctx.groups.list()?;
-        if let Some(changes) = ctx.editor.edit(&project, groups, FormKind::Full)? {
-            if !changes.is_empty() {
-                project = ctx.projects.update(&project.id, changes)?;
+    let mut project = match existing {
+        Some(project) => ctx.projects.refresh_trackers(&project.id)?,
+        None => ctx.projects.ensure_project(&directory)?,
+    };
+
+    // Tracked. From here a failure is about the details only.
+    let details = (|| -> anyhow::Result<()> {
+        let update = fields.update(&project);
+        if !update.is_empty() {
+            project = ctx.projects.update(&project.id, update)?;
+        }
+        if answer == Track::Edit {
+            // Esc in the form keeps the project and skips the details: it
+            // was already tracked on the way in.
+            let groups = ctx.groups.list()?;
+            if let Some(changes) = ctx.editor.edit(&project, groups, FormKind::Full)? {
+                if !changes.is_empty() {
+                    project = ctx.projects.update(&project.id, changes)?;
+                }
             }
         }
-    }
-    Ok(Some((project, asked)))
+        Ok(())
+    })()
+    .err()
+    .map(|e| format!("{e:#}"));
+
+    Ok(Some(Tracked {
+        project,
+        already,
+        asked,
+        details,
+    }))
 }
 
 /// What phase 3 did, for `--json`.
