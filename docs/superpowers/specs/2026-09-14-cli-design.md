@@ -341,6 +341,9 @@ records inferred facts through core.
      nothing, a recording failure keeps exit 0.
 - **Comes back with `git init`:** whether dexily's flags apply to a folder that
   was already tracked. `mkdir` cannot meet it — its folders are always new.
+  **Decided 2026-10-12: yes.** They were asked for; only the create is
+  skipped, and they add to the project's tags and properties rather than
+  replace them.
 - **Security (decided 2026-10-08).** dexily runs a command as the user, with
   the user's rights and no more, so passing a command through adds no power on
   its own; these rules keep it from adding risk.
@@ -372,6 +375,49 @@ records inferred facts through core.
   command on the allowlist; do dexily's flags check out; on the `cmd /C` path,
   are the arguments free of special characters — any "no" is exit 2 with the
   command not run. Only then is the expectation formed.
+
+**As built 2026-10-12** (`feat/observer`) — where the build differs from the
+notes above, or goes past them:
+
+- **No `which` crate.** A program is found by Rust's own lookup, which does not
+  search the current folder first. On Windows a `cmd` built-in runs as
+  `cmd.exe /D /V:OFF /C <built-in> …`, `cmd.exe` by its full path under
+  `%SystemRoot%`; `/V:OFF` keeps `!name!` from expanding where the registry
+  turns that on.
+- **Evidence is per expected folder, with a *proof*,** not a snapshot of the
+  whole directory: `NewFolder` — absent before, a folder now — for `mkdir`, and
+  `Holds(".git")` for git, which may have held before the command ran. Whether
+  each proof already held is taken before the command runs
+  (`Expectation::before`). A whole-folder snapshot waits for a command whose
+  target cannot be worked out from its arguments.
+- **`ensure_project` runs the detectors itself,** so `refresh_trackers` is
+  called only for a folder that was already tracked — which is not asked about
+  or created again, and prints
+  `dexily: "name" was already tracked; detected its trackers again`.
+- **Git was added the same day, at the user's request,** ahead of the "later"
+  it had been given: `git init [dir]` (the working folder or the one named;
+  `-C` moves it) and `git clone <repo> [dir]` (the folder named, or as git names
+  it from the address); `--bare` and `--mirror` run and track nothing; any
+  other subcommand is unknown and never runs. Unreal needs no recognizer — its
+  projects are made in the editor, and the detectors find a `.uproject` in
+  whichever folder is tracked. The project's name is core's: the remote's
+  repository if there is one, else the folder, parent-qualified when taken.
+- **Git options that run another program are refused** before git starts, exit
+  2 — `-c` / `--config`, `--config-env=`, `--exec-path=`, `-u` /
+  `--upload-pack`, `--template` on a clone, and `ext::` / `fd::` addresses —
+  since an allowlist that let them through would not be one.
+- **From review:** Ctrl+C is left to the command only while it runs, and ends
+  dexily (130) at the prompt; a failure after a folder is tracked is
+  `tracked "x", but could not save its details: …` with `dexily edit "x"`, not
+  "could not track", and the project stays in `--json`'s `tracked`; `--set`
+  names match ignoring case, as `edit --set`; a folder named twice is one; an
+  exit code above 255 is 1, not its low byte; core's rules are dry-run only
+  when a flag was given.
+- **Two lines the notes did not have:**
+  `dexily: <command> made nothing new, nothing tracked` (exit 0, but no proof
+  holds), and `--group ""` before an observed command is a usage error.
+- **Still later:** the `config` setting to turn the prompt off, `--json-file`,
+  `mv` / `rm -rf` / `cp -r`, `cargo new`, `gh repo create`.
 
 ### Output
 
