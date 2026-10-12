@@ -131,6 +131,7 @@ and the plans and their reasoning are in [`ROADMAP.md`](ROADMAP.md). The shared
 ## Later — packaging
 
 - [x] A CLI release workflow (2026-10-08): cargo-dist on `dexily-v*` tags (`dist-workspace.toml`, `.github/workflows/dexily-release.yml`) — macOS arm64 and x86_64, static musl Linux x86_64 and arm64, Windows x86_64, checksums, and shell and PowerShell installers; none of the app's system dependencies. `dexily` and `dexily-core` are also on crates.io (`cargo install dexily`). How to cut one: `crates/cli/README.md` → *Releasing dexily*
+- [x] The release tag checks, then publishes the crates with the binaries (2026-10-12): `release-checks.yml` runs CI's own jobs on the tagged commit before anything is built, and `publish-crates.yml` publishes `dexily-core` and `dexily` to crates.io together once every binary is built and before the release is announced — a version already there is left out, so the core goes up only when it changed. One tag, one outcome: `cargo install dexily`, the archives and the installers are the same code, and none of it from a commit that fails the checks. Needs the `CARGO_REGISTRY_TOKEN` secret
 - [ ] **The desktop app provides `dexily` from its own binary** — brief: [`../handoffs/2026-09-15-gui-provides-indexer.md`](../handoffs/2026-09-15-gui-provides-indexer.md)
   - [ ] `dexily` gains a library entry point; the TUI goes behind a default-on `tui` feature
   - [ ] The app's `main` runs the CLI when invoked as `dexily`, before Tauri starts — never opens a window

@@ -1,0 +1,37 @@
+# Run by dist before it builds a `dexily-v*` release (`plan-jobs` in
+# dist-workspace.toml): the same checks as CI, on the tagged commit. A tag can
+# be pushed on a commit CI never saw, or saw before `main` moved; nothing is
+# built or published from one that fails here.
+#
+# dist calls this on every pull request too, where it only plans. CI is already
+# running the checks there, so `checks` skips itself; `token` still runs and
+# passes, because a workflow whose every job is skipped counts as skipped, and
+# that would skip the builds a pull request asks for with `pr-run-mode =
+# "upload"`.
+name: Release checks
+
+on:
+  workflow_call:
+
+jobs:
+  checks:
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/ci.yml
+
+  # Found now rather than after twenty minutes of builds: the crates cannot be
+  # published without it.
+  token:
+    runs-on: ubuntu-latest
+    steps:
+      - name: The crates.io token is set
+        if: ${{ github.event_name == 'push' }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::error::The CARGO_REGISTRY_TOKEN secret is not set, so the crates could not be published. Add it with: gh secret set CARGO_REGISTRY_TOKEN"
+            exit 1
+          fi
+      - name: Nothing to check on a pull request
+        if: ${{ github.event_name != 'push' }}
+        run: echo "CI checks this pull request; a release is checked when its tag is pushed."

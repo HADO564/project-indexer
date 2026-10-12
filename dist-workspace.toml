@@ -25,6 +25,12 @@ tag-namespace = "dexily"
 # Build only what is released, not the whole workspace: the workspace includes
 # the desktop app, whose GTK dependencies a static Linux build cannot have.
 precise-builds = true
+# Before anything is built: the same checks as CI, on the tagged commit.
+plan-jobs = ["./release-checks"]
+# Once every binary is built and uploaded, and before the release is
+# announced: `dexily-core` and `dexily` to crates.io, together, so the crates
+# and the archives are the same code. If this fails the release stays a draft.
+publish-jobs = ["./publish-crates"]
 # After a release, hand "Latest" back to the newest app release, so the
 # releases page keeps pointing app users at the app.
 post-announce-jobs = ["./restore-latest"]
