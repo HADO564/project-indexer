@@ -90,7 +90,10 @@ dexily runs another program, so its rules differ from every command above.
   `/bin/mkdir` — is refused **before it runs**, exit 2, as prose:
   ``dexily: `git push` isn't a command dexily observes (it knows: mkdir, git
   init, git clone). Run it directly.`` **dexily cannot be used to run arbitrary
-  commands**; run those yourself.
+  commands**; run those yourself. A person at a terminal can be prompted to run
+  a refused command anyway (`run it anyway? [y/N]`), but a script, a pipe, a
+  redirect and `--json` are never asked — they always get the refusal — so this
+  does not widen what you, calling dexily non-interactively, can run.
 - **The exit code is the command's own**, whatever dexily then manages to
   record: `0` when it succeeded, its own code when it failed, and 128 + the
   signal's number when a signal ended it (130 for Ctrl+C, which is left to the

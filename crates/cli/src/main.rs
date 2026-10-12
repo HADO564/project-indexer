@@ -95,7 +95,12 @@ fn main() -> ExitCode {
             // even under `--json`, which the contract reserves for results
             // and for failures a script can act on.
             if let Some(Failure::Usage { message }) = e.downcast_ref::<Failure>() {
-                eprintln!("dexily: {message}");
+                // An empty message is already-reported: the observer's override
+                // prompt showed the reason, the user declined, and there is
+                // nothing to add — just the exit code.
+                if !message.is_empty() {
+                    eprintln!("dexily: {message}");
+                }
                 return ExitCode::from(2);
             }
             // The whole cause chain is printed, so core's own message — the

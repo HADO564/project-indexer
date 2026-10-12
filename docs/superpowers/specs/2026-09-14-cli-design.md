@@ -355,7 +355,12 @@ records inferred facts through core.
      programs, and no command "works" while recording nothing. The allowlist
      *is* the list of recognizers, so the two cannot drift; for a command with
      subcommands only the recognised ones pass (`git init`, `git clone` — not
-     `git push`).
+     `git push`). **One exception, for a person only:** at a real terminal a
+     refusal can be overridden by answering `run it anyway? [y/N]` (default no,
+     `--yes` ignored), which runs the command untouched and tracks nothing. A
+     pipe, a script, a redirect and `--json` are never asked and always get the
+     refusal, so the "no arbitrary programs" guarantee holds for every
+     non-interactive caller — the AI agent or script above included.
   2. **Never a text line, never a shell.** `Command::new(program).args(list)`
      hands each argument over separately with no shell, so
      `dexily mkdir 'x; rm -rf ~'` makes one oddly named folder. Arguments are

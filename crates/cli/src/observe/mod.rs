@@ -9,10 +9,11 @@
 //! Three phases, in order, and no threads — the command is its own process, so
 //! dexily only waits while it runs:
 //!
-//! 1. **Before.** The gatekeeper — only a command with a recognizer runs — then
-//!    dexily's own flags are checked, and an *expectation* formed: the folders
-//!    the command should leave a project in, what would prove it, and whether
-//!    that already holds. Nothing is written.
+//! 1. **Before.** The gatekeeper — only a command with a recognizer runs,
+//!    unless a person at a terminal answers a prompt to run a refused one
+//!    anyway — then dexily's own flags are checked, and an *expectation*
+//!    formed: the folders the command should leave a project in, what would
+//!    prove it, and whether that already holds. Nothing is written.
 //! 2. **Run.** The command, untouched; its exit code.
 //! 3. **After.** The evidence — it succeeded, and the proof holds: a folder
 //!    that is new, or one that now has a `.git` — and only then the write:
@@ -35,7 +36,7 @@ use std::process::ExitCode;
 use indexer_core::Project;
 
 use crate::commands::{add, Failure};
-use crate::confirm::{StdinConfirmer, Track};
+use crate::confirm::{Gate, StdinConfirmer, TerminalGate, Track, UnsafeGate};
 use crate::context::Context;
 use crate::editor::{FormKind, TerminalEditor};
 use crate::output::json;
@@ -63,6 +64,9 @@ pub fn run(argv: &[OsString], options: Options) -> anyhow::Result<ExitCode> {
         argv,
         &cwd,
         options,
+        // The gate for a command dexily refuses: a prompt on the real terminal,
+        // or no offer at all when there is no terminal to ask at.
+        &TerminalGate,
         // The database, opened when it is first needed: after the command has
         // run, unless a flag has to be checked against it first.
         || {
@@ -148,24 +152,65 @@ pub(crate) fn observe(
     argv: &[OsString],
     cwd: &Path,
     options: Options,
+    gate: &dyn UnsafeGate,
     open: impl FnOnce() -> anyhow::Result<Context>,
     err: &mut dyn Write,
 ) -> anyhow::Result<i32> {
     let voice = Voice::of(&options);
 
-    // Phase 1. The gatekeeper: only a command with a recognizer runs. Anything
-    // else is refused here, before it starts — it would gain nothing from
-    // dexily, and dexily must not be a way to run arbitrary programs.
+    // Phase 1. The gatekeeper: only a command with a recognizer runs — dexily
+    // must not be a way for a script or an agent to run arbitrary programs. The
+    // one exception is a person at a terminal, who may answer a prompt to run a
+    // refused command anyway, knowing dexily cannot vet it and will track
+    // nothing it makes. A pipe, a script and `--json` never reach that prompt,
+    // so the guarantee holds for everything but a human's own keyboard.
     let command = recognizers::label(argv);
     let expectation = match recognizers::expect(argv, cwd) {
         Ok(expectation) => expectation,
-        Err(Refusal::Unknown) => {
-            return Err(usage(format!(
-                "`{command}` isn't a command dexily observes (it knows: {}). Run it directly.",
-                recognizers::KNOWN.join(", ")
-            )))
+        Err(refusal) => {
+            let reason = match refusal {
+                Refusal::Unknown => format!(
+                    "`{command}` isn't a command dexily observes (it knows: {}). Run it directly.",
+                    recognizers::KNOWN.join(", ")
+                ),
+                Refusal::Refused(why) => why,
+            };
+            // `--json` is a machine's channel, with nobody to prompt; anything
+            // else offers the gate, which itself declines when there is no
+            // terminal.
+            let verdict = if voice == Voice::Json {
+                Gate::Unavailable
+            } else {
+                gate.allow(&reason)?
+            };
+            match verdict {
+                // A person said to run it. dexily has no recognizer for a
+                // refused command, so it runs untouched and nothing is tracked
+                // — the flags, which describe a project, have none to describe.
+                Gate::Allowed => {
+                    if !options.flags.is_empty() {
+                        voice.warn(
+                            err,
+                            format_args!(
+                                "dexily: ignoring the project flags — a command dexily cannot vet makes nothing it can track"
+                            ),
+                        );
+                    }
+                    voice.warn(
+                        err,
+                        format_args!(
+                            "dexily: running `{command}` as you asked; nothing it makes will be tracked"
+                        ),
+                    );
+                    return spawn::run(argv, cwd);
+                }
+                // The reason was shown as the prompt, so the error adds nothing:
+                // an empty message exits 2 in silence.
+                Gate::Declined => return Err(usage(String::new())),
+                // Nobody to ask: the refusal stands and its reason is the error.
+                Gate::Unavailable => return Err(usage(reason)),
+            }
         }
-        Err(Refusal::Refused(why)) => return Err(usage(why)),
     };
 
     // dexily's own flags, checked before the command runs: a group that does

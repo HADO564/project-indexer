@@ -49,8 +49,8 @@ Put `dexily` in front of a command and it runs the real one — same output, sam
 prompts, same exit code — then tracks what the command created. **Only commands
 dexily has a recognizer for run at all**; today that is `mkdir` (`md` too on
 Windows), `git init` and `git clone`. Anything else — any other git command
-included — is refused before it starts, so dexily is never a way to run
-arbitrary programs:
+included — is refused before it starts, so a script or an agent given dexily can
+never use it to run arbitrary programs:
 
 ```
 $ dexily mkdir friction
@@ -61,6 +61,14 @@ $ dexily git push
 dexily: `git push` isn't a command dexily observes (it knows: mkdir, git init, git clone). Run it directly.
 ```
 
+- **Overriding a refusal, at a terminal.** The refusal protects scripts and
+  agents; a person who typed the command and can see why it was refused may run
+  it anyway. dexily prints the reason, then asks `run it anyway? [y/N]` — a
+  deliberate `y` runs the command untouched, knowing dexily cannot vet it and
+  will **track nothing** it makes. The default is no, `--yes` never reaches this
+  prompt, and only a real terminal is ever asked: a pipe, a script, a redirect
+  and `--json` cannot answer it and get the refusal as before. So the "no
+  arbitrary programs" guarantee holds for everything but your own keyboard.
 - **The prompt**, once per folder the command made: Enter or `y` tracks it, `n`
   leaves an ordinary folder, `e` tracks it and opens the full edit form. There
   is no prompt with `--yes`, `--json`, project flags, or when stdin or stderr is

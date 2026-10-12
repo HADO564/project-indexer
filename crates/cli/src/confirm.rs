@@ -89,3 +89,59 @@ impl Confirmer for StdinConfirmer {
         }
     }
 }
+
+/// Whether to run a command the observer refused — an unknown program, or a
+/// git option dexily cannot vet. The answer is a person's, typed at a terminal
+/// after seeing why: a deliberate "I know what this does, run it anyway".
+///
+/// Unlike [`Confirmer`] this never assumes yes. `--yes` does not reach it, and
+/// a pipe, a script or a redirected stream cannot consent — they get
+/// [`Gate::Unavailable`] and the refusal stands. The allowlist is what keeps
+/// dexily from being a way to run arbitrary programs; only a human at their own
+/// keyboard may set it aside, and only for the one command in front of them.
+pub trait UnsafeGate {
+    /// Shows `reason`, asks, and reports what the person chose.
+    fn allow(&self, reason: &str) -> anyhow::Result<Gate>;
+}
+
+/// What a person said to running a refused command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Gate {
+    /// They saw the reason and chose to run it anyway.
+    Allowed,
+    /// They saw the reason and declined.
+    Declined,
+    /// There was nobody to ask — not a terminal, or `--json`. The refusal
+    /// stands and its reason is the error, exactly as when there was no gate.
+    Unavailable,
+}
+
+/// The shell's gate: ask on stderr and read the answer from stdin, but only
+/// when both are a terminal.
+pub struct TerminalGate;
+
+impl UnsafeGate for TerminalGate {
+    fn allow(&self, reason: &str) -> anyhow::Result<Gate> {
+        // Only a person at a terminal is asked. A pipe or a script cannot see
+        // the reason to weigh it, and reading its input as consent would be
+        // worse than refusing.
+        if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
+            return Ok(Gate::Unavailable);
+        }
+        eprintln!("dexily: {reason}");
+        eprint!("        run it anyway? [y/N] ");
+        std::io::stderr().flush()?;
+        let mut answer = String::new();
+        // End of input (Ctrl+D) is not a yes: nothing was typed at all.
+        if std::io::stdin().lock().read_line(&mut answer)? == 0 {
+            eprintln!();
+            return Ok(Gate::Declined);
+        }
+        // A dangerous command takes an explicit yes, never a bare Enter or a
+        // slip of the finger: anything but yes is no.
+        Ok(match answer.trim().to_ascii_lowercase().as_str() {
+            "y" | "yes" => Gate::Allowed,
+            _ => Gate::Declined,
+        })
+    }
+}

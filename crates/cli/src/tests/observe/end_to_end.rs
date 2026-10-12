@@ -12,7 +12,7 @@ use indexer_core::domain::sorting::SortOptions;
 use indexer_core::{GroupService, Project, ProjectService, UpdateProject};
 
 use crate::commands::Failure;
-use crate::confirm::{Confirmer, Track};
+use crate::confirm::{Confirmer, Gate, Track, UnsafeGate};
 use crate::observe::{observe, Options};
 use crate::tests::commands::support::{context, never_asked, Scripted};
 use crate::{Cli, Invocation};
@@ -41,6 +41,26 @@ impl Confirmer for MustNotAsk {
 
     fn track(&self, prompt: &str) -> anyhow::Result<Option<Track>> {
         panic!("asked \"{prompt}\", but flags or --json mean no question")
+    }
+}
+
+/// No terminal to ask at — every refusal stands, as in any non-interactive
+/// run (which is every test, and every pipe, script or redirect in the wild).
+struct NoTerminal;
+
+impl UnsafeGate for NoTerminal {
+    fn allow(&self, _reason: &str) -> anyhow::Result<Gate> {
+        Ok(Gate::Unavailable)
+    }
+}
+
+/// A person's answer to "run the refused command anyway?", for the override
+/// path. Asserts it was only consulted on a command that was actually refused.
+struct Answered(Gate);
+
+impl UnsafeGate for Answered {
+    fn allow(&self, _reason: &str) -> anyhow::Result<Gate> {
+        Ok(self.0)
     }
 }
 
@@ -106,6 +126,7 @@ impl Run {
             &command,
             cwd,
             options,
+            &NoTerminal,
             move || {
                 opened.set(true);
                 Ok(ctx)
@@ -333,6 +354,7 @@ fn a_command_without_a_recognizer_never_runs() {
         &words,
         run.root.path(),
         Options::default(),
+        &NoTerminal,
         || panic!("the database is not opened for a refused command"),
         &mut err,
     );
@@ -374,6 +396,7 @@ fn a_recording_failure_keeps_exit_0_and_says_how_to_retry() {
         &words,
         run.root.path(),
         quiet,
+        &NoTerminal,
         || anyhow::bail!("database is locked"),
         &mut err,
     );
@@ -586,6 +609,7 @@ fn git_commands_that_make_no_project_never_run() {
             &command,
             run.root.path(),
             Options::default(),
+            &NoTerminal,
             || panic!("the database is not opened for a refused command"),
             &mut err,
         );
@@ -617,6 +641,122 @@ fn a_git_option_that_runs_another_program_is_refused_before_git_starts() {
     assert!(is_usage(&result));
     assert!(!run.folder("copy").exists());
     assert!(!run.folder("pwned").exists());
+}
+
+// The override: a person at a terminal running a refused command anyway.
+
+#[test]
+fn a_person_can_override_a_refusal_and_the_command_runs_but_is_not_tracked() {
+    // `git status` is not a command dexily observes. A person at the terminal
+    // says to run it anyway: it runs, its exit code is returned, and — dexily
+    // having no recognizer for it — nothing is tracked and the database is
+    // never opened.
+    let run = Run::new();
+    let words: Vec<OsString> = ["git", "status"].iter().map(OsString::from).collect();
+    let mut err = Vec::new();
+    let result = observe(
+        &words,
+        run.root.path(),
+        Options::default(),
+        &Answered(Gate::Allowed),
+        || panic!("an overridden command tracks nothing, so the database stays shut"),
+        &mut err,
+    );
+    assert!(result.is_ok(), "the command ran: {result:?}");
+    assert!(run.tracked().is_empty());
+    let said = String::from_utf8(err).unwrap();
+    assert!(
+        said.contains("running `git status` as you asked")
+            && said.contains("nothing it makes will be tracked"),
+        "{said}"
+    );
+}
+
+#[test]
+fn declining_the_override_leaves_the_refused_command_unrun() {
+    let run = Run::new();
+    let words: Vec<OsString> = [
+        "git",
+        "clone",
+        "--upload-pack=touch pwned",
+        "source",
+        "copy",
+    ]
+    .iter()
+    .map(OsString::from)
+    .collect();
+    let mut err = Vec::new();
+    let result = observe(
+        &words,
+        run.root.path(),
+        Options::default(),
+        &Answered(Gate::Declined),
+        || panic!("a refused command opens no database"),
+        &mut err,
+    );
+    assert!(is_usage(&result));
+    assert!(!run.folder("pwned").exists(), "declined, so it never ran");
+    assert!(!run.folder("copy").exists());
+}
+
+#[test]
+fn json_never_offers_the_override_even_with_a_yes_waiting() {
+    // A machine's channel has nobody to weigh the reason, so a refused command
+    // stays refused under --json whatever a gate would say.
+    let run = Run::new();
+    let words: Vec<OsString> = [
+        "git",
+        "clone",
+        "--upload-pack=touch pwned",
+        "source",
+        "copy",
+    ]
+    .iter()
+    .map(OsString::from)
+    .collect();
+    let mut err = Vec::new();
+    let options = Options {
+        json: true,
+        ..Options::default()
+    };
+    let result = observe(
+        &words,
+        run.root.path(),
+        options,
+        &Answered(Gate::Allowed),
+        || panic!("a refused command opens no database"),
+        &mut err,
+    );
+    assert!(is_usage(&result));
+    assert!(
+        !run.folder("pwned").exists(),
+        "--json must not run a refused command"
+    );
+}
+
+#[test]
+fn an_overridden_command_ignores_the_project_flags() {
+    let run = Run::new();
+    let cli = Cli::try_parse_from(["dexily", "--add-tag", "rust", "git", "status"]).unwrap();
+    let Some(Invocation::Observe(command)) = cli.invocation else {
+        panic!("expected an observed command");
+    };
+    let options = Options {
+        flags: cli.observe,
+        ..Options::default()
+    };
+    let mut err = Vec::new();
+    let result = observe(
+        &command,
+        run.root.path(),
+        options,
+        &Answered(Gate::Allowed),
+        || panic!("tracks nothing, so the database stays shut"),
+        &mut err,
+    );
+    assert!(result.is_ok(), "{result:?}");
+    let said = String::from_utf8(err).unwrap();
+    assert!(said.contains("ignoring the project flags"), "{said}");
 }
 
 #[test]
