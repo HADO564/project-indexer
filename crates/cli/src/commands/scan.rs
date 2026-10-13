@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use anyhow::{bail, Context as _};
 use clap::Args;
 use indexer_core::application::ImportSelection;
 use indexer_core::domain::scan::{ScanMode, ScanReport, ScanRequest};
@@ -35,6 +36,16 @@ pub struct ScanArgs {
 }
 
 pub fn run(args: ScanArgs, ctx: &Context) -> anyhow::Result<Outcome> {
+    // A root that is not there, or is a file, is a typo — not a folder with no
+    // projects in it. Say so, rather than returning "0 found" as if the scan
+    // succeeded. Only the root is checked here: an unreadable *sub*directory
+    // met mid-walk is skipped, not fatal.
+    let meta = std::fs::metadata(&args.directory)
+        .with_context(|| format!("cannot scan {}", args.directory.display()))?;
+    if !meta.is_dir() {
+        bail!("{} is not a directory", args.directory.display());
+    }
+
     let request = ScanRequest {
         scan_root: args.directory.to_string_lossy().into_owned(),
         mode: mode(args.depth),
