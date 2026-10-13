@@ -12,8 +12,11 @@
 //! changes nothing.
 
 use clap::{ArgGroup, Args};
-use indexer_core::domain::normalize::normalize_tag;
-use indexer_core::domain::UpdateProject;
+use indexer_core::domain::normalize::{
+    normalize_directory, normalize_tag, normalize_tags, remove_spaces,
+};
+use indexer_core::domain::project::normalize_properties;
+use indexer_core::domain::{Project, UpdateProject};
 use std::collections::BTreeMap;
 
 use super::{find_one, Outcome, TrackerKind};
@@ -156,9 +159,11 @@ pub fn run(args: EditArgs, ctx: &Context) -> anyhow::Result<Outcome> {
         }
     };
 
-    // A form saved untouched sends every field `None`. Writing that would
-    // still move `updated_at` and report an edit that never happened.
-    if update.is_empty() {
+    // An edit that changes nothing writes nothing: a form saved untouched
+    // sends every field `None`, and a field flag may set a field to the value
+    // it already holds. Either way, writing would still move `updated_at` and
+    // report an edit that never happened.
+    if changes_nothing(&update, &project) {
         return Ok(Outcome::Unchanged {
             project: Box::new(project),
         });
@@ -189,6 +194,65 @@ fn has_field_flag(args: &EditArgs) -> bool {
         || args.ungroup
         || args.color.is_some()
         || args.icon.is_some()
+}
+
+/// Whether writing `update` would leave `project` exactly as it is — every
+/// field it sets already equal to what core would store. `edit` then returns
+/// the project unchanged rather than moving `updated_at` for a write that
+/// changes nothing, the no-op contract `docs/cli/agents.md` promises.
+///
+/// Each value is compared after core's own normalization, apples to apples
+/// with the stored one: a name with its spaces turned to underscores
+/// (`remove_spaces`), a directory with its slashes and trailing separator
+/// settled (`normalize_directory`), tags title-cased and deduped
+/// (`normalize_tags`), property names trimmed (`normalize_properties`). None
+/// of these touch case, so a case-only rename (`alpha` → `ALPHA`) still differs
+/// and still writes. A property map that would fail to normalize is counted as
+/// a change, so the write runs and core returns the error rather than this
+/// swallowing it as a no-op.
+fn changes_nothing(update: &UpdateProject, project: &Project) -> bool {
+    // Destructured rather than read field by field, so a field added to the
+    // struct is a compile error here until it is compared too — the reason
+    // `UpdateProject::is_empty` destructures as well.
+    let UpdateProject {
+        name,
+        directory,
+        description,
+        tags,
+        favorite,
+        open_with,
+        notes,
+        properties,
+        group_id,
+        color,
+        icon,
+    } = update;
+    // A field left `None` is "leave alone", so it changes nothing. A `Some`
+    // field changes nothing only when its stored-shape value already matches.
+    name.as_ref()
+        .is_none_or(|name| remove_spaces(name) == project.name)
+        && directory
+            .as_ref()
+            .is_none_or(|dir| normalize_directory(dir) == project.directory)
+        && description
+            .as_ref()
+            .is_none_or(|text| *text == project.description)
+        && tags
+            .as_ref()
+            .is_none_or(|tags| normalize_tags(tags.clone()) == project.tags)
+        && favorite.as_ref().is_none_or(|fav| *fav == project.favorite)
+        && open_with
+            .as_ref()
+            .is_none_or(|value| *value == project.open_with)
+        && notes.as_ref().is_none_or(|value| *value == project.notes)
+        && properties.as_ref().is_none_or(|map| {
+            normalize_properties(map.clone()).is_ok_and(|map| map == project.properties)
+        })
+        && group_id
+            .as_ref()
+            .is_none_or(|value| *value == project.group_id)
+        && color.as_ref().is_none_or(|value| *value == project.color)
+        && icon.as_ref().is_none_or(|value| *value == project.icon)
 }
 
 /// A box in a box, as `UpdateProject.notes` takes it: the outer one says
