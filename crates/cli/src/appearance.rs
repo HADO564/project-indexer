@@ -12,6 +12,7 @@ use indexer_core::domain::palette::{is_valid_color, SWATCHES};
 use indexer_core::IconStore;
 use serde::{Deserialize, Serialize};
 
+use crate::output::color::Color;
 use crate::paths;
 
 /// The GUI's bundled icons, by name: `ICON_NAMES` in `src/lib/icons.ts`.
@@ -58,8 +59,20 @@ pub fn color(typed: &str) -> anyhow::Result<Option<String>> {
         return Ok(None);
     }
     if !is_valid_color(&color) {
+        // The terminal palette (`config folder-color`) is a separate, larger
+        // set, so `red` is a colour there but not here. Say which, rather than
+        // leaving someone who just used it puzzled.
+        let hint = if Color::from_str(&color, true).is_ok() {
+            format!(
+                " (\"{}\" is a terminal colour for `dexily config folder-color`, \
+                 not a project colour)",
+                typed.trim()
+            )
+        } else {
+            String::new()
+        };
         bail!(
-            "not a colour: \"{}\". Use one of {}, or #rrggbb",
+            "not a colour: \"{}\". Use one of {}, or #rrggbb{hint}",
             typed.trim(),
             SWATCHES.join(", ")
         );
