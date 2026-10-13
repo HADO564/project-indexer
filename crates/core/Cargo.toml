@@ -20,6 +20,7 @@ serde_json = "1"
 chrono = { version = "0.4.45", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "2"
+log = "0.4"
 git2 = "0.21.0"
 rusqlite = { version = "0.32", features = ["bundled"] }
 quick-xml = "0.37"

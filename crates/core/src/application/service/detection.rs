@@ -42,7 +42,7 @@ impl ProjectService {
     pub fn preview_detection(&self, directory: &str) -> Vec<Tracker> {
         let detection = self.detectors.detect_project(Path::new(directory));
         for error in detection.errors() {
-            eprintln!("Detector error previewing '{directory}': {error}");
+            log::warn!("detector error previewing '{directory}': {error}");
         }
         detection.trackers()
     }
