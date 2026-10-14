@@ -8,5 +8,5 @@ mod group;
 mod list;
 mod project_args;
 mod scan;
-mod support;
+pub(crate) mod support;
 mod tracker;

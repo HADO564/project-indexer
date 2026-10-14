@@ -12,7 +12,7 @@ use indexer_core::{
 use serde_json::json;
 
 use crate::commands::{self, Outcome};
-use crate::confirm::Confirmer;
+use crate::confirm::{Confirmer, Track};
 use crate::context::Context;
 use crate::editor::{FormKind, ProjectEditor};
 use crate::launcher::SystemLauncher;
@@ -25,6 +25,10 @@ pub struct Answer(pub bool);
 impl Confirmer for Answer {
     fn confirm(&self, _prompt: &str) -> anyhow::Result<bool> {
         Ok(self.0)
+    }
+
+    fn track(&self, _prompt: &str) -> anyhow::Result<Option<Track>> {
+        Ok(Some(if self.0 { Track::Yes } else { Track::No }))
     }
 }
 

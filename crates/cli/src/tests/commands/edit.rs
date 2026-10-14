@@ -255,6 +255,55 @@ fn an_editor_saved_untouched_writes_nothing() {
     );
 }
 
+// A no-op edit: a field flag set to the value already stored writes nothing
+// and says so, rather than moving `updated_at` for a change that never was.
+
+#[test]
+fn a_field_flag_set_to_the_current_value_writes_nothing() {
+    let ctx = context(true, Scripted(never_asked));
+    // Give it a colour, then ask for the very same one — in another case, to
+    // show the stored-shape comparison: `appearance::color` lowercases both.
+    run(&ctx, &["dexily", "edit", "app", "--color", "violet"]).unwrap();
+    let before = saved(&ctx).updated_at;
+    let Outcome::Unchanged { project } =
+        run(&ctx, &["dexily", "edit", "app", "--color", "Violet"]).unwrap()
+    else {
+        panic!("expected `Unchanged`: the colour is already violet");
+    };
+    assert_eq!(project.color.as_deref(), Some("violet"));
+    assert_eq!(
+        saved(&ctx).updated_at,
+        before,
+        "no write, so `updated_at` does not move"
+    );
+}
+
+#[test]
+fn a_case_only_rename_still_writes() {
+    // Case is a real difference — none of the normalizers touch it — so this
+    // is a genuine edit, not a no-op.
+    let ctx = context(true, Scripted(never_asked));
+    let Outcome::Edited { project } =
+        run(&ctx, &["dexily", "edit", "app", "--name", "APP"]).unwrap()
+    else {
+        panic!("expected `Edited`: a case change is a real rename");
+    };
+    assert_eq!(project.name, "APP");
+    assert_eq!(saved(&ctx).name, "APP");
+}
+
+#[test]
+fn a_genuinely_new_value_still_writes() {
+    let ctx = context(true, Scripted(never_asked));
+    let Outcome::Edited { project } =
+        run(&ctx, &["dexily", "edit", "app", "--notes", "remember"]).unwrap()
+    else {
+        panic!("expected `Edited`: the notes changed");
+    };
+    assert_eq!(project.notes.as_deref(), Some("remember"));
+    assert_eq!(saved(&ctx).notes.as_deref(), Some("remember"));
+}
+
 // `--full` chooses the form, and nothing else.
 
 #[test]

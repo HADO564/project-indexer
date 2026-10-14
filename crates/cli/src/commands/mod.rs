@@ -113,8 +113,9 @@ pub enum Outcome {
     /// view, and an edit can change several fields at once, so the message
     /// names the project rather than any one change.
     Edited { project: Box<Project> },
-    /// An `edit` with nothing to save — a form saved untouched — so nothing
-    /// was written and `updated_at` did not move. The project as it is.
+    /// An `edit` with nothing to save — a form saved untouched, or a field
+    /// flag set to the value the project already holds — so nothing was written
+    /// and `updated_at` did not move. The project as it is.
     Unchanged { project: Box<Project> },
     /// A project brought back from the bin, as saved. Its directory is still
     /// wherever it was when it was binned — usually gone.

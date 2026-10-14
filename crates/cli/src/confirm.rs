@@ -8,6 +8,26 @@ use anyhow::bail;
 pub trait Confirmer {
     /// Whether the user agreed to `prompt`.
     fn confirm(&self, prompt: &str) -> anyhow::Result<bool>;
+
+    /// What to do with a folder an observed command just made: the answer to
+    /// `prompt`, which ends in `[Y/n/e]`. Unlike [`Confirmer::confirm`] the
+    /// default is yes — the `dexily` prefix already said "track this" — so
+    /// this is less a question than a chance to say no, or to add details.
+    ///
+    /// `None` when there is nobody to ask — `--yes`, a pipe, a script — and
+    /// nothing was shown: the caller tracks, and says so itself.
+    fn track(&self, prompt: &str) -> anyhow::Result<Option<Track>>;
+}
+
+/// An answer to "track this folder?".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Track {
+    /// Track it.
+    Yes,
+    /// Leave it an ordinary folder.
+    No,
+    /// Track it, then open the edit form on it.
+    Edit,
 }
 
 /// The shell's confirmer: `--yes` agrees to everything, otherwise ask on
@@ -40,5 +60,88 @@ impl Confirmer for StdinConfirmer {
             answer.trim().to_ascii_lowercase().as_str(),
             "y" | "yes"
         ))
+    }
+
+    fn track(&self, prompt: &str) -> anyhow::Result<Option<Track>> {
+        // Nobody to ask — `--yes`, a pipe, a script: the prefix is the
+        // answer. Unlike `confirm`, refusing here would lose a folder the
+        // command has already made.
+        if self.assume_yes || !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
+            return Ok(None);
+        }
+        loop {
+            eprint!("{prompt} [Y/n/e] ");
+            std::io::stderr().flush()?;
+            let mut answer = String::new();
+            // End of input (Ctrl+D) is not a yes: nothing was typed at all.
+            if std::io::stdin().lock().read_line(&mut answer)? == 0 {
+                eprintln!();
+                return Ok(Some(Track::No));
+            }
+            match answer.trim().to_ascii_lowercase().as_str() {
+                "" | "y" | "yes" => return Ok(Some(Track::Yes)),
+                "n" | "no" => return Ok(Some(Track::No)),
+                "e" | "edit" => return Ok(Some(Track::Edit)),
+                // Anything else is a slip of the finger: ask again rather
+                // than guess which way it was meant.
+                _ => eprintln!("dexily: y to track, n to skip, e to track and edit"),
+            }
+        }
+    }
+}
+
+/// Whether to run a command the observer refused — an unknown program, or a
+/// git option dexily cannot vet. The answer is a person's, typed at a terminal
+/// after seeing why: a deliberate "I know what this does, run it anyway".
+///
+/// Unlike [`Confirmer`] this never assumes yes. `--yes` does not reach it, and
+/// a pipe, a script or a redirected stream cannot consent — they get
+/// [`Gate::Unavailable`] and the refusal stands. The allowlist is what keeps
+/// dexily from being a way to run arbitrary programs; only a human at their own
+/// keyboard may set it aside, and only for the one command in front of them.
+pub trait UnsafeGate {
+    /// Shows `reason`, asks, and reports what the person chose.
+    fn allow(&self, reason: &str) -> anyhow::Result<Gate>;
+}
+
+/// What a person said to running a refused command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Gate {
+    /// They saw the reason and chose to run it anyway.
+    Allowed,
+    /// They saw the reason and declined.
+    Declined,
+    /// There was nobody to ask — not a terminal, or `--json`. The refusal
+    /// stands and its reason is the error, exactly as when there was no gate.
+    Unavailable,
+}
+
+/// The shell's gate: ask on stderr and read the answer from stdin, but only
+/// when both are a terminal.
+pub struct TerminalGate;
+
+impl UnsafeGate for TerminalGate {
+    fn allow(&self, reason: &str) -> anyhow::Result<Gate> {
+        // Only a person at a terminal is asked. A pipe or a script cannot see
+        // the reason to weigh it, and reading its input as consent would be
+        // worse than refusing.
+        if !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal() {
+            return Ok(Gate::Unavailable);
+        }
+        eprintln!("dexily: {reason}");
+        eprint!("        run it anyway? [y/N] ");
+        std::io::stderr().flush()?;
+        let mut answer = String::new();
+        // End of input (Ctrl+D) is not a yes: nothing was typed at all.
+        if std::io::stdin().lock().read_line(&mut answer)? == 0 {
+            eprintln!();
+            return Ok(Gate::Declined);
+        }
+        // A dangerous command takes an explicit yes, never a bare Enter or a
+        // slip of the finger: anything but yes is no.
+        Ok(match answer.trim().to_ascii_lowercase().as_str() {
+            "y" | "yes" => Gate::Allowed,
+            _ => Gate::Declined,
+        })
     }
 }

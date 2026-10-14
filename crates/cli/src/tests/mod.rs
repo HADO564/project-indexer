@@ -4,6 +4,7 @@
 mod appearance;
 mod commands;
 mod editor;
+mod observe;
 mod output;
 mod paths;
 mod settings;
