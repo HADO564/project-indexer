@@ -11,7 +11,7 @@ step with no pairing — and it works without the app installed.
 `config` all run against the app's database, and a bare `edit` in a terminal
 opens a full-screen form (`edit --full` for every field). `group` lists,
 creates, changes and deletes groups; a project joins one with `edit --group`.
-**The observer works for `mkdir`, `git init`/`clone`, `cargo new`/`init`, `go mod init`, `gh repo create`, and `init` for the package/project managers (`npm`, `pnpm`, `yarn`, `poetry`, `uv`)**:
+**The observer works for `mkdir`, `git`, `cargo`, `go`, `gh repo create`, and the package/project managers' `init`** — the full list is in [Supported commands and programs](../../docs/cli/SUPPORTED-COMMANDS-AND-PROGRAMS.md):
 `dexily mkdir thing` makes the folder and tracks it, and
 `dexily git clone <repo>` does the same for a repository. The TUI still returns "not implemented". The command is `dexily`.
 
@@ -47,15 +47,13 @@ dexily <anything> --json        {"schema": 1, "data": …} on stdout, or {"schem
 
 Put `dexily` in front of a command and it runs the real one — same output, same
 prompts, same exit code — then tracks what the command created. **Only commands
-dexily has a recognizer for run at all**; today that is `mkdir` (`md` too on
-Windows), `git init`/`clone`, `cargo new`/`init`, `go mod init`, `gh repo create`
-(with `--clone`, tracks the repo it clones), and `init` for the package/project
-managers: `npm`/`pnpm`/`yarn`/`poetry` **bare** (which only write a manifest),
-and `uv init [path]` (whose positional is a folder, like `cargo init`'s).
-Anything else is refused before it starts — `npm init <initializer>`, which
-downloads and runs a package (`npm init vite` is `npx create-vite`), and every
-other subcommand — so a script or an agent given dexily can never use it to run
-arbitrary programs:
+dexily has a recognizer for run at all** — the
+[supported commands](../../docs/cli/SUPPORTED-COMMANDS-AND-PROGRAMS.md): `mkdir`,
+`git init`/`clone`, `cargo new`/`init`, `go mod init`, `gh repo create`, and the
+package/project managers' bare `init` (`npm`, `pnpm`, `yarn`, `poetry`, `uv`,
+`flutter create`, `deno init`, `zig init`). Anything else is refused before it
+starts — a script or an agent given dexily can never use it to run arbitrary
+programs:
 
 ```
 $ dexily mkdir friction
@@ -120,13 +118,11 @@ dexily: `--upload-pack` makes git run another program, so it is not passed on. R
   (`dexily: "app" was already tracked; detected its trackers again`). Flags
   still apply to it, and add to its tags and properties, never replace them.
 - **Trackers are detected, not set**, so a folder's kind is found from its
-  files however it was made — no recognizer needed. Alongside **git** and
-  **Unreal** (`.uproject`), a tracked folder is recognised as **Node**
-  (`package.json`), **Python** (`pyproject.toml`/`setup.py`), **Go** (`go.mod`),
-  **Godot** (`project.godot`), **Unity** (`ProjectSettings/ProjectVersion.txt`)
-  or **Rust** (`Cargo.toml`). Detection runs wherever a folder is tracked, so
-  `dexily git clone` of an Unreal or Godot project comes out with both its git
-  and its engine tracker.
+  files however it was made — no recognizer needed. git, Unreal, Node, Python,
+  Go, Godot, Unity and Rust are detected today (the markers are listed in
+  [Supported commands and programs](../../docs/cli/SUPPORTED-COMMANDS-AND-PROGRAMS.md)).
+  Detection runs wherever a folder is tracked, so `dexily git clone` of an
+  Unreal or Godot project comes out with both its git and its engine tracker.
 - **A git line runs only if dexily knows every word of it.** Only the options
   dexily lists are passed on, each in full and one at a time; anything else is
   refused before git starts, exit 2 — an abbreviation (`--dep 1`), short
