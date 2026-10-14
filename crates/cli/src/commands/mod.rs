@@ -235,6 +235,16 @@ pub enum TrackerKind {
     Godot,
     Unity,
     Rust,
+    Cmake,
+    Maven,
+    Gradle,
+    Docker,
+    Php,
+    Ruby,
+    Dart,
+    Swift,
+    Elixir,
+    Dotnet,
 }
 
 impl TrackerKind {
@@ -250,6 +260,16 @@ impl TrackerKind {
             TrackerKind::Godot => "godot",
             TrackerKind::Unity => "unity",
             TrackerKind::Rust => "rust",
+            TrackerKind::Cmake => "cmake",
+            TrackerKind::Maven => "maven",
+            TrackerKind::Gradle => "gradle",
+            TrackerKind::Docker => "docker",
+            TrackerKind::Php => "php",
+            TrackerKind::Ruby => "ruby",
+            TrackerKind::Dart => "dart",
+            TrackerKind::Swift => "swift",
+            TrackerKind::Elixir => "elixir",
+            TrackerKind::Dotnet => "dotnet",
         }
     }
 }

@@ -351,6 +351,16 @@ fn kind_headers(kind: TrackerKind) -> Vec<&'static str> {
         TrackerKind::Godot => vec!["PROJECT"],
         TrackerKind::Unity => vec!["EDITOR"],
         TrackerKind::Rust => vec!["CRATE"],
+        TrackerKind::Cmake => vec!["PROJECT"],
+        TrackerKind::Maven => vec!["ARTIFACT", "VERSION"],
+        TrackerKind::Gradle => vec!["BUILD"],
+        TrackerKind::Docker => vec!["FILE"],
+        TrackerKind::Php => vec!["PACKAGE"],
+        TrackerKind::Ruby => vec!["RUBY"],
+        TrackerKind::Dart => vec!["PACKAGE", "VERSION"],
+        TrackerKind::Swift => vec!["PACKAGE"],
+        TrackerKind::Elixir => vec!["APP"],
+        TrackerKind::Dotnet => vec!["FILE"],
     }
 }
 
@@ -394,7 +404,17 @@ fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             });
             match info {
                 Some(info) => {
@@ -418,7 +438,17 @@ fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             });
             match info {
                 Some(info) => vec![or_dash(&info.engine_association)],
@@ -434,7 +464,17 @@ fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             });
             match info {
                 Some(info) => vec![or_dash(&info.name), or_dash(&info.version)],
@@ -450,7 +490,17 @@ fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             });
             match info {
                 Some(info) => vec![or_dash(&info.name)],
@@ -466,7 +516,17 @@ fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
                 | Tracker::Python(_)
                 | Tracker::Godot(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             });
             match info {
                 Some(info) => vec![or_dash(&info.module)],
@@ -482,7 +542,17 @@ fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
                 | Tracker::Python(_)
                 | Tracker::Go(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             });
             match info {
                 Some(info) => vec![or_dash(&info.project_name)],
@@ -498,7 +568,17 @@ fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
                 | Tracker::Python(_)
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             });
             match info {
                 Some(info) => vec![or_dash(&info.editor_version)],
@@ -514,10 +594,280 @@ fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
                 | Tracker::Python(_)
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
-                | Tracker::Unity(_) => None,
+                | Tracker::Unity(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             });
             match info {
                 Some(info) => vec![or_dash(&info.name)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Cmake => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Cmake(cmake) => Some(cmake),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.project_name)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Maven => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Maven(maven) => Some(maven),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.artifact_id), or_dash(&info.version)],
+                None => vec![dash(), dash()],
+            }
+        }
+        TrackerKind::Gradle => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Gradle(gradle) => Some(gradle),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            });
+            match info {
+                Some(info) => vec![info.marker.clone()],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Docker => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Docker(docker) => Some(docker),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            });
+            match info {
+                Some(info) => vec![info.marker.clone()],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Php => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Php(php) => Some(php),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.name)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Ruby => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Ruby(ruby) => Some(ruby),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.ruby_version)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Dart => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Dart(dart) => Some(dart),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.name), or_dash(&info.version)],
+                None => vec![dash(), dash()],
+            }
+        }
+        TrackerKind::Swift => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Swift(swift) => Some(swift),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.name)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Elixir => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Elixir(elixir) => Some(elixir),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Dotnet(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.app)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Dotnet => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Dotnet(dotnet) => Some(dotnet),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_) => None,
+            });
+            match info {
+                Some(info) => vec![info.marker.clone()],
                 None => vec![dash()],
             }
         }
@@ -546,7 +896,17 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             }) else {
                 return Vec::new();
             };
@@ -576,7 +936,17 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             }) else {
                 return Vec::new();
             };
@@ -598,7 +968,17 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             }) else {
                 return Vec::new();
             };
@@ -617,7 +997,17 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             }) else {
                 return Vec::new();
             };
@@ -639,7 +1029,17 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
                 | Tracker::Python(_)
                 | Tracker::Godot(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             }) else {
                 return Vec::new();
             };
@@ -654,7 +1054,17 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
                 | Tracker::Python(_)
                 | Tracker::Go(_)
                 | Tracker::Unity(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             }) else {
                 return Vec::new();
             };
@@ -669,7 +1079,17 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
                 | Tracker::Python(_)
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
-                | Tracker::Rust(_) => None,
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             }) else {
                 return Vec::new();
             };
@@ -684,11 +1104,279 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
                 | Tracker::Python(_)
                 | Tracker::Go(_)
                 | Tracker::Godot(_)
-                | Tracker::Unity(_) => None,
+                | Tracker::Unity(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
             }) else {
                 return Vec::new();
             };
             vec![("crate", or_dash(&info.name))]
+        }
+        TrackerKind::Cmake => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Cmake(cmake) => Some(cmake),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("project", or_dash(&info.project_name))]
+        }
+        TrackerKind::Maven => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Maven(maven) => Some(maven),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            let mut details = vec![("artifact", or_dash(&info.artifact_id))];
+            if let Some(version) = info.version.clone() {
+                details.push(("version", version));
+            }
+            details
+        }
+        TrackerKind::Gradle => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Gradle(gradle) => Some(gradle),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("build", info.marker.clone())]
+        }
+        TrackerKind::Docker => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Docker(docker) => Some(docker),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("file", info.marker.clone())]
+        }
+        TrackerKind::Php => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Php(php) => Some(php),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("package", or_dash(&info.name))]
+        }
+        TrackerKind::Ruby => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Ruby(ruby) => Some(ruby),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("version", or_dash(&info.ruby_version))]
+        }
+        TrackerKind::Dart => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Dart(dart) => Some(dart),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            let mut details = vec![("package", or_dash(&info.name))];
+            if let Some(version) = info.version.clone() {
+                details.push(("version", version));
+            }
+            details
+        }
+        TrackerKind::Swift => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Swift(swift) => Some(swift),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Elixir(_)
+                | Tracker::Dotnet(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("package", or_dash(&info.name))]
+        }
+        TrackerKind::Elixir => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Elixir(elixir) => Some(elixir),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Dotnet(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("app", or_dash(&info.app))]
+        }
+        TrackerKind::Dotnet => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Dotnet(dotnet) => Some(dotnet),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_)
+                | Tracker::Cmake(_)
+                | Tracker::Maven(_)
+                | Tracker::Gradle(_)
+                | Tracker::Docker(_)
+                | Tracker::Php(_)
+                | Tracker::Ruby(_)
+                | Tracker::Dart(_)
+                | Tracker::Swift(_)
+                | Tracker::Elixir(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("file", info.marker.clone())]
         }
     }
 }

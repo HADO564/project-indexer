@@ -1,11 +1,21 @@
 use serde::{Deserialize, Serialize};
 
+use crate::detectors::cmake::CmakeInfo;
+use crate::detectors::dart::DartInfo;
+use crate::detectors::docker::DockerInfo;
+use crate::detectors::dotnet::DotnetInfo;
+use crate::detectors::elixir::ElixirInfo;
 use crate::detectors::git::GitInfo;
 use crate::detectors::go::GoInfo;
 use crate::detectors::godot::GodotInfo;
+use crate::detectors::gradle::GradleInfo;
+use crate::detectors::maven::MavenInfo;
 use crate::detectors::node::NodeInfo;
+use crate::detectors::php::PhpInfo;
 use crate::detectors::python::PythonInfo;
+use crate::detectors::ruby::RubyInfo;
 use crate::detectors::rust::RustInfo;
+use crate::detectors::swift::SwiftInfo;
 use crate::detectors::unity::UnityInfo;
 use crate::detectors::unreal::UnrealInfo;
 
@@ -40,6 +50,16 @@ pub enum Tracker {
     Godot(GodotInfo),
     Unity(UnityInfo),
     Rust(RustInfo),
+    Cmake(CmakeInfo),
+    Maven(MavenInfo),
+    Gradle(GradleInfo),
+    Docker(DockerInfo),
+    Php(PhpInfo),
+    Ruby(RubyInfo),
+    Dart(DartInfo),
+    Swift(SwiftInfo),
+    Elixir(ElixirInfo),
+    Dotnet(DotnetInfo),
 }
 
 impl Tracker {
@@ -59,6 +79,16 @@ impl Tracker {
             Tracker::Godot(_) => "Godot",
             Tracker::Unity(_) => "Unity",
             Tracker::Rust(_) => "Rust",
+            Tracker::Cmake(_) => "Cmake",
+            Tracker::Maven(_) => "Maven",
+            Tracker::Gradle(_) => "Gradle",
+            Tracker::Docker(_) => "Docker",
+            Tracker::Php(_) => "Php",
+            Tracker::Ruby(_) => "Ruby",
+            Tracker::Dart(_) => "Dart",
+            Tracker::Swift(_) => "Swift",
+            Tracker::Elixir(_) => "Elixir",
+            Tracker::Dotnet(_) => "Dotnet",
         }
     }
 

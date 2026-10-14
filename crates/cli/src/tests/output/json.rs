@@ -115,6 +115,56 @@ fn the_new_marker_kinds_serialise_with_their_kind_and_fields() {
             "2021",
         ),
         (json!({ "Rust": { "name": "r" }}), "rust", "name", "r"),
+        (
+            json!({ "Cmake": { "project_name": "MyApp" }}),
+            "cmake",
+            "project_name",
+            "MyApp",
+        ),
+        (
+            json!({ "Maven": { "artifact_id": "a", "version": "1" }}),
+            "maven",
+            "artifact_id",
+            "a",
+        ),
+        (
+            json!({ "Gradle": { "marker": "build.gradle" }}),
+            "gradle",
+            "marker",
+            "build.gradle",
+        ),
+        (
+            json!({ "Docker": { "marker": "Dockerfile" }}),
+            "docker",
+            "marker",
+            "Dockerfile",
+        ),
+        (
+            json!({ "Php": { "name": "vendor/pkg" }}),
+            "php",
+            "name",
+            "vendor/pkg",
+        ),
+        (
+            json!({ "Ruby": { "ruby_version": "3.2.0" }}),
+            "ruby",
+            "ruby_version",
+            "3.2.0",
+        ),
+        (
+            json!({ "Dart": { "name": "a", "version": "1" }}),
+            "dart",
+            "name",
+            "a",
+        ),
+        (json!({ "Swift": { "name": "L" }}), "swift", "name", "L"),
+        (json!({ "Elixir": { "app": "a" }}), "elixir", "app", "a"),
+        (
+            json!({ "Dotnet": { "marker": "A.sln" }}),
+            "dotnet",
+            "marker",
+            "A.sln",
+        ),
     ];
 
     for (tracker, kind, field, value) in cases {
