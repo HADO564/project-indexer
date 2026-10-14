@@ -254,6 +254,16 @@ fn detail_in_group(
     String::from_utf8(out).unwrap()
 }
 
+/// A detail line `  <label>   <value>`, matched without pinning the padding,
+/// so a change to the column width is not a change to every test.
+fn has_row(rendered: &str, label: &str, value: &str) -> bool {
+    rendered.lines().any(|line| {
+        line.trim_start()
+            .strip_prefix(label)
+            .is_some_and(|rest| rest.trim_start() == value)
+    })
+}
+
 #[test]
 fn a_kind_adds_a_section_to_the_detail_view() {
     let rendered = detail(two_projects().remove(0), vec![TrackerKind::Git]);
@@ -264,11 +274,16 @@ fn a_kind_adds_a_section_to_the_detail_view() {
 }
 
 #[test]
-fn no_kind_leaves_the_detail_view_as_it_was() {
+fn no_kind_leaves_the_detail_view_without_a_tracker_section() {
     let rendered = detail(two_projects().remove(0), Vec::new());
 
-    assert!(!rendered.contains("git"), "{rendered}");
-    assert_eq!(rendered.lines().count(), 3, "{rendered}");
+    // No kind requested, so no tracker section — the identity and the dates
+    // (always shown) are all that is left.
+    assert!(!rendered.contains("\n  git\n"), "{rendered}");
+    assert!(
+        has_row(&rendered, "last opened", "2026-09-14"),
+        "{rendered}"
+    );
 }
 
 #[test]
@@ -276,8 +291,8 @@ fn a_kind_the_project_lacks_prints_no_section() {
     // The second project carries no trackers at all.
     let rendered = detail(two_projects().remove(1), vec![TrackerKind::Unreal]);
 
-    assert!(!rendered.contains("unreal"), "{rendered}");
-    assert_eq!(rendered.lines().count(), 3, "{rendered}");
+    assert!(!rendered.contains("\n  unreal\n"), "{rendered}");
+    assert!(has_row(&rendered, "last opened", "never"), "{rendered}");
 }
 
 fn candidate(directory: &str, name: &str, tracked: bool, renamed: bool) -> Candidate {
@@ -369,7 +384,7 @@ fn a_grouped_project_shows_its_group_name() {
         }),
     );
 
-    assert!(rendered.contains("group      Client work"), "{rendered}");
+    assert!(has_row(&rendered, "group", "Client work"), "{rendered}");
     // The name only, for now: colour and icon are carried but not rendered
     // until `Color::from_swatch` and the icon setting exist.
     assert!(!rendered.contains("violet"), "{rendered}");
@@ -386,6 +401,53 @@ fn an_ungrouped_project_shows_no_group_line() {
     );
 
     assert!(!rendered.contains("group"), "{rendered}");
+}
+
+#[test]
+fn the_detail_view_shows_a_projects_own_fields() {
+    let mut p = project(
+        "app",
+        "/home/me/work/app",
+        json!([]),
+        Some("2026-09-14T10:00:00Z"),
+    );
+    p.description = "the gateway".into();
+    p.tags = vec!["Rust".into(), "Web".into()];
+    p.properties = [("client", "Acme"), ("env", "prod")]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    p.notes = Some("remember the thing".into());
+    p.open_with = Some("code".into());
+    p.favorite = true;
+    let rendered = detail(p, Vec::new());
+
+    assert!(
+        has_row(&rendered, "description", "the gateway"),
+        "{rendered}"
+    );
+    assert!(has_row(&rendered, "tags", "Rust, Web"), "{rendered}");
+    assert!(
+        rendered
+            .lines()
+            .any(|l| l.trim_start().starts_with("properties")),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("client = Acme") && rendered.contains("env = prod"),
+        "{rendered}"
+    );
+    assert!(
+        has_row(&rendered, "notes", "remember the thing"),
+        "{rendered}"
+    );
+    assert!(has_row(&rendered, "open with", "code"), "{rendered}");
+    assert!(has_row(&rendered, "favourite", "yes"), "{rendered}");
+    assert!(has_row(&rendered, "created", "2026-01-01"), "{rendered}");
+    assert!(
+        has_row(&rendered, "last opened", "2026-09-14"),
+        "{rendered}"
+    );
 }
 
 // Icons and marks: a project's or a group's icon before its name, and the name
@@ -522,7 +584,7 @@ fn show_through_a_pipe_has_no_glyphs_but_names_the_colour_and_icon() {
     // and no glyph, so a script reading the first line gets the name.
     let rendered = String::from_utf8(out).unwrap();
     assert!(rendered.starts_with("app\n"), "{rendered}");
-    assert!(rendered.contains("  group      Work\n"), "{rendered}");
-    assert!(rendered.contains("  color      violet\n"), "{rendered}");
-    assert!(rendered.contains("  icon       rocket\n"), "{rendered}");
+    assert!(has_row(&rendered, "group", "Work"), "{rendered}");
+    assert!(has_row(&rendered, "color", "violet"), "{rendered}");
+    assert!(has_row(&rendered, "icon", "rocket"), "{rendered}");
 }

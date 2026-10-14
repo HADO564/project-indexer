@@ -230,6 +230,219 @@ records inferred facts through core.
   for which directory is the project, and what the human path prints — nothing,
   or one line on stderr.
 
+**Decided 2026-10-08, at the start of the observer milestone** (`feat/observer`):
+
+- **Sequential, in three phases; no threads.** The wrapped command is already a
+  separate process, so dexily only waits while it runs. Running the recording
+  alongside it was considered and rejected: what to record — whether a project
+  exists, and where — is only known once the command has finished (a failed
+  `git clone`, a Ctrl+C halfway), recording is milliseconds against the
+  command's seconds, and reading the command's output would mean piping it,
+  which costs it its colours, progress bars, prompts and clean Ctrl+C.
+  1. **Before** — read argv and the disk and form an *expectation*, held in
+     memory only: which kind of command this is, which folder should hold the
+     project, and whether that folder exists yet. Nothing is written.
+  2. **Run** — the command, with inherited stdio, untouched; its exit status.
+  3. **After** — check the evidence: the exit code, that the expected folder
+     now exists (and was not there before, where that matters), what is inside
+     it. Only if the signs agree does dexily call `ensure_project`, the one
+     write. A failed command leaves nothing behind: no phantom projects.
+- **dexily sees the outcome, not the output.** The command's text goes straight
+  to the terminal and is never read; the exit code and the filesystem are the
+  evidence, and are steadier than text that changes between tool versions.
+- **Details come from the folder, not the command line.** Core's detectors fill
+  in the kind, branch, remote and name when `ensure_project` runs, exactly as
+  for the GUI's Add, so the two can never describe one repo differently. The
+  command line's job is narrower: which folder, and whether this command makes
+  projects at all — plus anything only it knows (`git clone --branch dev`).
+- **A before/after snapshot** of the folder is a recognizer technique worth
+  having: what is new after the command is what it created, which covers a
+  custom target folder or a tool whose output is hard to guess from its
+  arguments. A live filesystem watcher is not needed.
+- **Ctrl+C:** dexily ignores it while the command runs and lets the command
+  decide, so it still reports the command's real exit code; on Unix a command
+  killed by a signal has no exit code, which dexily has to map to one.
+- **dexily's own flags set the new project up in the same breath:**
+  `dexily --add-tag rust --group Work --notes "demo" git clone <url>`.
+  - **They go before the command, never after.** Everything from the command's
+    name on belongs to it untouched — many commands share flag names with
+    dexily (`--name`, `--color`, `--set`, `-t`), so dexily never guesses whose
+    a flag is. clap already hands the rest over as-is.
+  - **They are `edit`'s flags,** with the same names, rules and checks
+    (`--name`, `--description`, `--add-tag`, `--set`, `--notes`, `--group`,
+    `--color`, `--icon`, `--open-with`), applied after `ensure_project` as one
+    `UpdateProject` built the way `edit` builds one. Not `--directory` or
+    `--ungroup`, which mean nothing for a new project. Trackers are detected,
+    never set, so there is no flag for them.
+  - **They are checked in phase 1, before the command runs.** A group that
+    does not exist or a bad colour stops everything with exit 2 and the
+    command never runs — all or nothing, rather than a clone left behind with
+    a half-recorded project. Likewise flags on a command no recognizer knows
+    (`dexily --add-tag rust ls`): nothing to apply them to, so it says so and
+    does not run.
+  - **Still to decide in the plan:** whether they apply when the folder was
+    already tracked (leaning yes — they were asked for; only the create is
+    skipped), and what dexily says when the command failed and they were
+    dropped.
+- **The first recognizers are system commands, starting with `mkdir`;**
+  tracker-based ones (`git init`, `git clone`, Unreal) come after. The `dexily`
+  prefix is the signal: a folder made with `dexily mkdir` is a project, with no
+  "is this really a project?" guessing. The rule: every folder named in the
+  command that mkdir actually created — not `-p`'s parents, not an option's
+  value (`-m 755`) — and only folders absent before and present after.
+  `mkdir` is a shell built-in on Windows, not a program; how to run it there is
+  still to choose (`cmd /C`, dexily making the folder itself, or Unix-only for
+  now). Later system commands: `mv` (update a tracked project's directory),
+  `rm -rf` (a tracked folder gone), `cp -r` (a copy as a new project).
+- **One prompt confirms and opens the form** (decided 2026-10-08), in phase 3
+  once the command has succeeded: `dexily: track "friction" at
+  ~/code/friction? [Y/n/e]`. Enter or `y` tracks; `n` leaves an ordinary folder,
+  nothing to clean up; `e` tracks, then opens the edit form (`TerminalEditor`,
+  as `edit --full`) on the new project — Esc there keeps the project and skips
+  the details. The default is yes, so the common case is one keystroke and the
+  prefix's intent is not second-guessed. dexily's own flags apply before the
+  form, so it opens showing them. No prompt and no form when piped, in a
+  script or under `--json` — it tracks, as the prefix says — or with `--yes`.
+  The confirmer needs a third answer for `e`. **Still to decide:** a `config`
+  setting to turn the prompt off.
+- **Settled 2026-10-08, one question at a time:**
+  1. **Windows:** built-ins run through `cmd /C` (`cmd /C mkdir thing`), so
+     dexily still runs the real command everywhere. The program is looked up
+     first (the `which` crate); a known `cmd` built-in (`mkdir`/`md`, `move`,
+     `copy`, `del`, …) goes through `cmd /C`, which also covers `npm.cmd`-style
+     scripts. cmd's `mkdir` makes parents itself and has no `-p` or `-m`, so the
+     folder rule has a Windows variant. Folder names with spaces need
+     `CommandExt::raw_arg` and a test of their own.
+  2. **Several folders** (`mkdir a b c`): one `[Y/n/e]` prompt per folder, so
+     each answer, `e` included, is about one project. dexily's flags apply to
+     every folder said yes to.
+  3. **Flags given:** no prompt. Flags mean the user has already decided and
+     described the project; dexily tracks and applies them. The prompt is for
+     the bare `dexily mkdir thing`.
+  4. **Output:** one line on stderr when no prompt was shown —
+     `dexily: tracking "thing" at ~/code/thing` — and nothing more after a
+     prompt the user just answered. A failed command:
+     `dexily: mkdir failed (exit 1), nothing tracked`. `--quiet` hides dexily's
+     own lines, never the command's output and never a warning. `--json`: the
+     command keeps stdout, so dexily's document goes to **stderr**, as one line,
+     printed last, after the command has finished — the command's own errors
+     share stderr, and a script reads the final line. A `--json-file <path>` is
+     the upgrade if that proves awkward.
+  5. **Recording fails** after the command succeeded: the command's exit code
+     stands, and a warning says why and how to retry —
+     `dexily: could not track "thing": database is locked` then
+     ``run `dexily add ~/code/thing` to try again`` — shown even with `--quiet`.
+  6. **Tests, four layers:** recognizer rules on argv alone (no processes);
+     evidence checks with temp folders and made-up exit codes; `spawn` running
+     tiny real commands (`true`, `false`, `cmd /C exit 3`) for exit-code
+     passthrough, a missing program, and a signal as 128 + n on Unix; and end
+     to end with an in-memory database and a stand-in prompt — a flag that does
+     not check out stops the command before it runs, a failed command records
+     nothing, a recording failure keeps exit 0.
+- **Comes back with `git init`:** whether dexily's flags apply to a folder that
+  was already tracked. `mkdir` cannot meet it — its folders are always new.
+  **Decided 2026-10-12: yes.** They were asked for; only the create is
+  skipped, and they add to the project's tags and properties rather than
+  replace them.
+- **Security (decided 2026-10-08).** dexily runs a command as the user, with
+  the user's rights and no more, so passing a command through adds no power on
+  its own; these rules keep it from adding risk.
+  1. **An allowlist: dexily runs only commands it has a recognizer for.**
+     Anything else is refused before it runs, exit 2:
+     ``dexily: `ls` isn't a command dexily observes (it knows: mkdir). Run it
+     directly.`` An unrecognised command gains nothing from dexily; refusing it
+     means an AI agent or script given dexily cannot use it to run arbitrary
+     programs, and no command "works" while recording nothing. The allowlist
+     *is* the list of recognizers, so the two cannot drift; for a command with
+     subcommands only the recognised ones pass (`git init`, `git clone` — not
+     `git push`). **One exception, for a person only:** at a real terminal a
+     refusal can be overridden by answering `run it anyway? [y/N]` (default no,
+     `--yes` ignored), which runs the command untouched and tracks nothing. A
+     pipe, a script, a redirect and `--json` are never asked and always get the
+     refusal, so the "no arbitrary programs" guarantee holds for every
+     non-interactive caller — the AI agent or script above included.
+  2. **Never a text line, never a shell.** `Command::new(program).args(list)`
+     hands each argument over separately with no shell, so
+     `dexily mkdir 'x; rm -rf ~'` makes one oddly named folder. Arguments are
+     never joined into a string.
+  3. **Windows `cmd /C` is a shell, so it is guarded:** an argument containing
+     any of cmd's special characters (`&`, `|`, `<`, `>`, `^`, `%`, `"`) is
+     refused before anything runs — `dexily mkdir "a & calc"` would otherwise
+     make `a` and then start Calculator. Tests of its own.
+  4. **The right program:** looked up on `PATH` only, never in the current
+     folder, where a planted `mkdir.exe` could be picked first; `cmd.exe` is run
+     by its full system path (`%SystemRoot%\System32\cmd.exe`), never looked up.
+  5. **The recorded folder is resolved** to its real absolute path before it
+     is tracked, as `add` does, so a symlink or `..` cannot point dexily at an
+     unexpected place.
+
+  Phase 1 therefore opens with a gatekeeper, before anything runs: is the
+  command on the allowlist; do dexily's flags check out; on the `cmd /C` path,
+  are the arguments free of special characters — any "no" is exit 2 with the
+  command not run. Only then is the expectation formed.
+
+**As built 2026-10-12** (`feat/observer`) — where the build differs from the
+notes above, or goes past them:
+
+- **No `which` crate.** A program is found by Rust's own lookup, which does not
+  search the current folder first. On Windows a `cmd` built-in runs as
+  `cmd.exe /D /V:OFF /C <built-in> …`, `cmd.exe` by its full path under
+  `%SystemRoot%`; `/V:OFF` keeps `!name!` from expanding where the registry
+  turns that on.
+- **Evidence is per expected folder, with a *proof*,** not a snapshot of the
+  whole directory: `NewFolder` — absent before, a folder now — for `mkdir`, and
+  `Holds(".git")` for git, which may have held before the command ran. Whether
+  each proof already held is taken before the command runs
+  (`Expectation::before`). A whole-folder snapshot waits for a command whose
+  target cannot be worked out from its arguments.
+- **`ensure_project` runs the detectors itself,** so `refresh_trackers` is
+  called only for a folder that was already tracked — which is not asked about
+  or created again, and prints
+  `dexily: "name" was already tracked; detected its trackers again`.
+- **Git was added the same day, at the user's request,** ahead of the "later"
+  it had been given: `git init [dir]` (the working folder or the one named;
+  `-C` moves it) and `git clone <repo> [dir]` (the folder named, or as git names
+  it from the address); `--bare` and `--mirror` run and track nothing; any
+  other subcommand is unknown and never runs. Unreal needs no recognizer — its
+  projects are made in the editor, and the detectors find a `.uproject` in
+  whichever folder is tracked. The project's name is core's: the remote's
+  repository if there is one, else the folder, parent-qualified when taken.
+- **Git options fail closed: a git line runs only if dexily knows every word
+  of it.** The first build refused a list of options that run another program
+  and passed everything else. A second review ran another program past it
+  three ways: a global option dexily did not know that takes the next word as
+  its value (`git --shallow-file init -c alias.x=… x` — `init` is a file name
+  there, and the real subcommand whatever follows, so any git command ran); an
+  abbreviation (`--upl=…` is `--upload-pack`, and the refusal compared exact
+  names); and `-u` inside a run of short options (`-qu`). Git takes more
+  spellings than a list of bad ones can hold, so the rule is now the command
+  allowlist's: tables in `recognizers.rs` of the options passed on — before
+  the subcommand `-C`, `--no-pager`, `--version`, `--help`; one per subcommand,
+  each option exactly as spelled with what it takes — and anything not in them
+  is refused before git starts, exit 2. The options that run a program (`-c` /
+  `--config`, `--config-env`, `--exec-path`, `-u` / `--upload-pack`,
+  `--template`) are simply in no table and keep the message that says why;
+  `ext::` / `fd::` addresses are refused, bare clone or not. Every option's
+  arity is known, so a value is never read as the repository or the folder.
+  No longer passed on, having only ever been allowed by not being listed:
+  `--git-dir`, `--work-tree`, `--namespace`, an init `--template`,
+  `--bundle-uri`, `--server-option`, a bare `--exec-path`.
+- **The database handle is a `LazyCell`:** opened by whoever first asks — a
+  flag that needs it before the command, else phase 3 — with no predicate to
+  keep in step and nothing that can panic after the command has run.
+- **From review:** Ctrl+C is left to the command only while it runs, and ends
+  dexily (130) at the prompt; a failure after a folder is tracked is
+  `tracked "x", but could not save its details: …` with `dexily edit "x"`, not
+  "could not track", and the project stays in `--json`'s `tracked`; `--set`
+  names match ignoring case, as `edit --set`; a folder named twice is one; an
+  exit code above 255 is 1, not its low byte; core's rules are dry-run only
+  when a flag was given.
+- **Two lines the notes did not have:**
+  `dexily: <command> made nothing new, nothing tracked` (exit 0, but no proof
+  holds), and `--group ""` before an observed command is a usage error.
+- **Still later:** the `config` setting to turn the prompt off, `--json-file`,
+  `mv` / `rm -rf` / `cp -r`, `cargo new`, `gh repo create`.
+
 ### Output
 
 - **The `--json` contract is settled** in

@@ -68,19 +68,65 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
             );
             let title = marked(&project.name, project.icon.as_deref(), icons);
             writeln!(out, "{}", paint_rgb(color.then_some(rgb).flatten(), &title))?;
-            writeln!(out, "  directory  {}", project.directory)?;
-            writeln!(out, "  id         {}", project.id)?;
+            // One field per line, its label padded to a common width (wide
+            // enough for the longest, `description` / `last opened`). A field
+            // the project does not have is skipped rather than shown empty —
+            // only the directory and the dates are always there. The whole
+            // project, every field, is what `--json` is for; this is the view
+            // for a person reading it.
+            writeln!(out, "  {:<13}{}", "directory", project.directory)?;
+            writeln!(out, "  {:<13}{}", "id", project.id)?;
+            if !project.description.is_empty() {
+                writeln!(out, "  {:<13}{}", "description", project.description)?;
+            }
             if let Some(group) = group {
                 let name = marked(&group.name, Some(&group.icon), icons);
                 let rgb = color.then(|| appearance::rgb(&group.color)).flatten();
-                writeln!(out, "  group      {}", paint_rgb(rgb, &name))?;
+                writeln!(out, "  {:<13}{}", "group", paint_rgb(rgb, &name))?;
+            }
+            if !project.tags.is_empty() {
+                writeln!(out, "  {:<13}{}", "tags", project.tags.join(", "))?;
+            }
+            // The label on the first property, the rest aligned under its value.
+            let mut properties = project.properties.iter();
+            if let Some((key, value)) = properties.next() {
+                writeln!(out, "  {:<13}{key} = {value}", "properties")?;
+                for (key, value) in properties {
+                    writeln!(out, "  {:<13}{key} = {value}", "")?;
+                }
+            }
+            if let Some(notes) = &project.notes {
+                writeln!(out, "  {:<13}{}", "notes", notes)?;
+            }
+            if let Some(open_with) = &project.open_with {
+                writeln!(out, "  {:<13}{}", "open with", open_with)?;
             }
             if let Some(project_color) = &project.color {
-                writeln!(out, "  color      {project_color}")?;
+                writeln!(out, "  {:<13}{}", "color", project_color)?;
             }
             if let Some(icon) = &project.icon {
-                writeln!(out, "  icon       {icon}")?;
+                writeln!(out, "  {:<13}{}", "icon", icon)?;
             }
+            if project.favorite {
+                writeln!(out, "  {:<13}yes", "favourite")?;
+            }
+            writeln!(
+                out,
+                "  {:<13}{}",
+                "created",
+                project.created_at.format("%Y-%m-%d")
+            )?;
+            writeln!(
+                out,
+                "  {:<13}{}",
+                "updated",
+                project.updated_at.format("%Y-%m-%d")
+            )?;
+            let last_opened = match project.last_opened_at {
+                Some(date) => date.format("%Y-%m-%d").to_string(),
+                None => "never".to_string(),
+            };
+            writeln!(out, "  {:<13}{}", "last opened", last_opened)?;
             for kind in tracker {
                 let details = kind_details(project, *kind);
                 if details.is_empty() {

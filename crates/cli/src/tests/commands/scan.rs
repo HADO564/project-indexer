@@ -3,8 +3,9 @@
 use clap::Parser;
 use indexer_core::domain::scan::{Candidate, ScanMode, ScanReport};
 
-use crate::commands::scan::{detectors, mode, selections, ScanArgs};
+use crate::commands::scan::{detectors, mode, run, selections, ScanArgs};
 use crate::commands::{Command, TrackerKind};
+use crate::tests::commands::support::{context, never_asked, Scripted};
 use crate::{Cli, Invocation};
 
 /// The kinds a build with both detectors reports, in their own spelling.
@@ -29,6 +30,15 @@ fn parsed(argv: &[&str]) -> ScanArgs {
         Some(Invocation::Command(Command::Scan(args))) => args,
         other => panic!("expected `scan`, got {other:?}"),
     }
+}
+
+#[test]
+fn a_root_that_does_not_exist_is_an_error_not_an_empty_result() {
+    // A typo'd scan root should say so, not return "0 found" as if the folder
+    // held no projects. The check runs before the database is touched.
+    let ctx = context(true, Scripted(never_asked));
+    let args = parsed(&["dexily", "scan", "/no/such/directory/for/dexily/to/scan"]);
+    assert!(run(args, &ctx).is_err());
 }
 
 #[test]

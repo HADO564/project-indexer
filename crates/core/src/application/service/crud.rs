@@ -30,7 +30,7 @@ impl ProjectService {
         let detection = self.detectors.detect_project(Path::new(&project.directory));
         project.trackers = detection.trackers();
         for error in detection.errors() {
-            eprintln!("Detector error for '{}': {}", project.directory, error);
+            log::warn!("detector error for '{}': {}", project.directory, error);
         }
         self.repo.save(&project)?;
         Ok(project)
@@ -85,7 +85,7 @@ impl ProjectService {
             let detection = self.detectors.detect_project(Path::new(&project.directory));
             project.trackers = detection.trackers();
             for error in detection.errors() {
-                eprintln!("Detector error for '{}': {}", project.directory, error);
+                log::warn!("detector error for '{}': {}", project.directory, error);
             }
         }
 

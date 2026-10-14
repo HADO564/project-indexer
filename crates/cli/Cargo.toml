@@ -43,6 +43,9 @@ terminal_size = "0.4"
 # How many columns a character takes on screen, so a table lines up around an
 # emoji, an icon or a CJK name. Already in the tree through ratatui.
 unicode-width = "0.2"
+# Lets the observer ignore Ctrl+C while the wrapped command runs, so the
+# command decides what Ctrl+C means and dexily lives to report its exit code.
+ctrlc = "3"
 
 [dev-dependencies]
 tempfile = "3"

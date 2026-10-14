@@ -9,10 +9,11 @@ step with no pairing — and it works without the app installed.
 **Status: every plain subcommand works.** `list`, `show`, `add`, `open`,
 `untrack`, `favorite`, `unfavorite`, `edit`, `restore`, `purge`, `scan` and
 `config` all run against the app's database, and a bare `edit` in a terminal
-opens a full-screen form (`edit --full` for every field); the observer and
-the TUI still return "not implemented". `group` lists, creates, changes and
-deletes groups; a project joins one with `edit --group`. The command is
-`dexily`.
+opens a full-screen form (`edit --full` for every field). `group` lists,
+creates, changes and deletes groups; a project joins one with `edit --group`.
+**The observer works for `mkdir`, `git init` and `git clone`**:
+`dexily mkdir thing` makes the folder and tracks it, and
+`dexily git clone <repo>` does the same for a repository. The TUI still returns "not implemented". The command is `dexily`.
 
 ```
 dexily list                     every project, as a table (--view, -s name|last-opened, -r to flip)
@@ -35,19 +36,115 @@ dexily group edit <group>       rename it (--name) or change its --color or --ic
 dexily group delete <group>     delete a group, keeping its projects ungrouped (asks first; --yes)
 dexily config form-wrap on|off  whether Tab wraps around at the ends of edit's form
 dexily config icons nerd|emoji|off   icons before names in tables (off by default)
+dexily mkdir <folders…>         run the real mkdir, then track each folder it made (asks [Y/n/e])
+dexily git init [dir]           run the real git init, then track the repository
+dexily git clone <repo> [dir]   run the real git clone, then track the repository it made
+dexily --add-tag rust --group Work mkdir <folder>   the same, set up in one go — flags go before the command
 dexily <anything> --json        {"schema": 1, "data": …} on stdout, or {"schema": 1, "error": …} on stderr
 ```
+
+### Observing
+
+Put `dexily` in front of a command and it runs the real one — same output, same
+prompts, same exit code — then tracks what the command created. **Only commands
+dexily has a recognizer for run at all**; today that is `mkdir` (`md` too on
+Windows), `git init` and `git clone`. Anything else — any other git command
+included — is refused before it starts, so a script or an agent given dexily can
+never use it to run arbitrary programs:
+
+```
+$ dexily mkdir friction
+dexily: track "friction" at /Users/me/code/friction? [Y/n/e]
+
+# Set the new project up in the same breath — project flags go *before* the command:
+$ dexily --add-tag rust --group Work --notes "client demo" git clone https://github.com/you/thing
+dexily: track "thing" at /Users/me/code/thing? [Y/n/e]
+
+# A command dexily doesn't recognise, or a git option it can't vet, is refused:
+$ dexily git push
+dexily: `git push` isn't a command dexily observes (it knows: mkdir, git init, git clone). Run it directly.
+
+# …but at a terminal you can override: you see the reason, then confirm (and nothing is tracked):
+$ dexily git clone --upload-pack=/opt/my-upload-pack https://host/repo
+dexily: `--upload-pack` makes git run another program, so it is not passed on. Run git directly.
+        run it anyway? [y/N] y
+```
+
+- **Overriding a refusal, at a terminal.** The refusal protects scripts and
+  agents; a person who typed the command and can see why it was refused may run
+  it anyway. dexily prints the reason, then asks `run it anyway? [y/N]` — a
+  deliberate `y` runs the command untouched, knowing dexily cannot vet it and
+  will **track nothing** it makes. The default is no, `--yes` never reaches this
+  prompt, and only a real terminal is ever asked: a pipe, a script, a redirect
+  and `--json` cannot answer it and get the refusal as before. So the "no
+  arbitrary programs" guarantee holds for everything but your own keyboard.
+- **The prompt**, once per folder the command made: Enter or `y` tracks it, `n`
+  leaves an ordinary folder, `e` tracks it and opens the full edit form. There
+  is no prompt with `--yes`, `--json`, project flags, or when stdin or stderr is
+  not a terminal — then dexily tracks and says
+  `dexily: tracking "friction" at …` on stderr. `--quiet` (`-q`) hides that
+  line, never a warning. Ctrl+C belongs to the command while it runs, and at
+  the prompt it ends dexily (130).
+- **Project flags go before the command** — `--name`, `--description`,
+  `--add-tag`, `--set k=v`, `--notes`, `--open-with`, `--group`, `--color`,
+  `--icon`, with `edit`'s rules — and are checked before it runs: a group that
+  does not exist stops everything, exit 2, and the command never starts.
+  Everything after the command's name is the command's own. `--set` names
+  match ignoring case, as `edit --set`.
+- **What is tracked**, and only if the command exited 0. For `mkdir`: each
+  named folder it really created — not `-p`'s parents, not `-m`'s value, not
+  one that was already there; a folder named twice is one. For `git init`: the
+  working folder, or the one named (`-C <path>` moves the folder git works
+  in). For `git clone`: the folder named, or the one git names from the
+  address. Git's proof is a `.git` in the folder, which may have been there
+  already; `--bare` and `--mirror` run but track nothing. A failed command
+  says `dexily: git clone failed (exit 128), nothing tracked`, and one that
+  exits 0 without leaving a project says
+  `dexily: mkdir made nothing new, nothing tracked`.
+- **The name** is the one the app would give: a git project with a remote is
+  named after the remote's repository, otherwise after its folder; a name
+  already taken is qualified with its parent folder. `--name` overrides it.
+- **A folder already tracked** is not asked about or created again:
+  `dexily mkdir app`, then `dexily git init` inside it, is one project whose
+  trackers are detected again
+  (`dexily: "app" was already tracked; detected its trackers again`). Flags
+  still apply to it, and add to its tags and properties, never replace them.
+- **Trackers are detected, not set**, so there is no recognizer for Unreal —
+  its projects are made in the editor. Any tracked folder holding a
+  `.uproject` gets the Unreal tracker: `dexily git clone` of an Unreal project
+  comes out with both.
+- **A git line runs only if dexily knows every word of it.** Only the options
+  dexily lists are passed on, each in full and one at a time; anything else is
+  refused before git starts, exit 2 — an abbreviation (`--dep 1`), short
+  options run together (`-qb main`), a global option it does not know
+  (`--git-dir`, `--shallow-file`), or one git adds later. Git takes more
+  spellings than a list of bad options can hold, and each of those once ran
+  another program. The options that do run one (`-c`/`--config`,
+  `--config-env`, `--exec-path`, `-u`/`--upload-pack`, `--template`) and
+  `ext::` / `fd::` addresses say so:
+  `` `--upload-pack` makes git run another program, so it is not passed on.
+  Run git directly. `` The full list of options passed on is in
+  [`docs/cli/agents.md`](../../docs/cli/agents.md).
+- **The command's exit code always wins.** If the folder could not be recorded
+  at all, the code stays 0 and dexily prints why, with the
+  `dexily add <folder>` that retries it. If it was tracked but its details —
+  the flags, the form — could not be saved, dexily says
+  `tracked "thing", but could not save its details: <why>`, with the
+  `dexily edit "thing"` that sets them. An exit code above 255 (Windows) is
+  reported as 1.
+- **`--json`** prints one line on **stderr**, last — the command owns stdout.
+  See [`agents.md`](../../docs/cli/agents.md#observed-commands).
 
 ```
 src/
   main.rs        no arguments → TUI; a known command → run it; anything else → observe it
   paths.rs       the shared projects.db (pinned by src/tests/paths.rs)
   context.rs     opens the database and builds the core services
-  confirm.rs     confirmation for destructive commands (--yes in a shell)
+  confirm.rs     confirmation for destructive commands (--yes in a shell), and the observer's [Y/n/e]
   launcher.rs    AppLauncher over the system opener, Tauri-free
   commands/      one module per command: clap Args + run() -> Outcome
   output/        human rendering, and the --json envelope
-  observe/       the observer
+  observe/       the observer: recognizers (before and after), spawn (the command itself), flags
   settings.rs    cli-settings.json beside the database: the CLI's own colours
   tui/           the TUI — keys and a `:` line over the same commands
   tests/         unit tests, mirroring the source tree

@@ -15,6 +15,7 @@ use serde::ser::{Error as _, SerializeMap};
 use serde::{Serialize, Serializer};
 
 use crate::commands::{Failure, Outcome};
+use crate::observe::Failed;
 
 /// Bumped only for a change that breaks a reader.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -281,6 +282,47 @@ pub fn write_error(out: &mut impl Write, error: &anyhow::Error) -> anyhow::Resul
         error,
     };
     serde_json::to_writer_pretty(&mut *out, &envelope)?;
+    writeln!(out)?;
+    Ok(())
+}
+
+/// What an observed command left dexily with, for `--json`: the command's
+/// exit code, the projects now tracked, and the folders that could not be.
+///
+/// **One line, not pretty-printed**, and written last: it goes to stderr,
+/// because the wrapped command owns stdout, and the command's own errors land
+/// on stderr too — so a script reads the final line and gets the whole
+/// document.
+pub fn write_observed(
+    out: &mut dyn Write,
+    exit_code: i32,
+    tracked: &[Project],
+    failed: &[Failed],
+) -> anyhow::Result<()> {
+    #[derive(Serialize)]
+    struct Observed<'a> {
+        exit_code: i32,
+        tracked: Vec<ProjectJson<'a>>,
+        failed: Vec<FailedJson<'a>>,
+    }
+    #[derive(Serialize)]
+    struct FailedJson<'a> {
+        directory: &'a str,
+        message: &'a str,
+    }
+    let data = Observed {
+        exit_code,
+        tracked: tracked.iter().map(ProjectJson::from).collect(),
+        failed: failed
+            .iter()
+            .map(|Failed { directory, message }| FailedJson { directory, message })
+            .collect(),
+    };
+    let envelope = Envelope {
+        schema: SCHEMA_VERSION,
+        data: &data,
+    };
+    serde_json::to_writer(&mut *out, &envelope)?;
     writeln!(out)?;
     Ok(())
 }

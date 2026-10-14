@@ -32,11 +32,34 @@ The backend seams already exist: `ensure_project` and `find_by_directory` have n
 GUI caller and were added purely for this, and `projects.directory_normalized` is
 indexed so directory lookup is not a table scan.
 
-Still open: which commands are recognised first, and how each recognizer derives
-the project directory from its arguments and the working directory. Two things
-are settled: a name collision is resolved by `domain::naming::disambiguate`, the
-function the scanner already shares with `ensure_project`; and plain subcommands
-ship before the observer (below).
+**Built for `mkdir`, `git init` and `git clone`** (2026-10-12, `feat/observer`). The shape, settled in the
+CLI design spec's *The observer*: three phases and no threads — *before*, the
+command is matched to a recognizer and dexily's own flags are checked; *run*,
+the command, untouched; *after*, a folder is tracked only if the command
+succeeded and its proof holds — a folder that is new, for `mkdir`; a `.git` in
+it, for git, which may have been there already. dexily reads the outcome,
+never the output. Only a command with a recognizer runs at all — the recognizer
+list is an allowlist — and after a successful command one `[Y/n/e]` prompt per
+folder confirms it and can open the edit form. A name collision is resolved by
+`domain::naming::disambiguate`, the function the scanner already shares with
+`ensure_project`.
+
+A folder that was already tracked — `dexily mkdir app`, then `dexily git init`
+inside it — is not created again: its trackers are detected again, and
+dexily's flags still apply, adding to its tags and properties. Unreal has no
+recognizer and needs none: its projects are made in the editor, and the
+detectors find a `.uproject` in whichever folder is tracked. A git line runs
+only if dexily knows every word of it: only the options in its tables are
+passed on, spelled in full and one at a time, so nothing git accepts under
+another spelling — an abbreviation, bundled short options, an option that runs
+another program (`-c`, `--upload-pack`, `--template`, an `ext::` address…) —
+gets through, and the allowlist stays one. The tables are in
+[`agents.md`](agents.md).
+
+Next: more commands that create a project (`cargo new`, `gh repo create` are
+the candidates), and the system commands that change a project rather than
+create one — `mv` (a tracked project's directory), `rm -rf` (a tracked folder
+gone), `cp -r` (a copy as a new project).
 
 The full briefing, including the open questions, is in
 [`docs/handoffs/2026-09-04-observer-cli.md`](../handoffs/2026-09-04-observer-cli.md).

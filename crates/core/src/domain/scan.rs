@@ -123,10 +123,7 @@ fn child_directories(path: &Path, include_ignored: bool) -> Vec<PathBuf> {
         // An unreadable directory is skipped, never fatal. A permissions error
         // partway through `C:\Users` must not discard what has been found.
         Err(e) => {
-            eprintln!(
-                "Scan: skipping unreadable directory '{}': {e}",
-                path.display()
-            );
+            log::warn!("skipping unreadable directory '{}': {e}", path.display());
             return Vec::new();
         }
     };
@@ -188,7 +185,7 @@ pub fn walk_limited(
 
         let detection = detectors.inspect_kinds(&path, Some(&ticked));
         for error in detection.errors() {
-            eprintln!("Scan: detector error at '{}': {error}", path.display());
+            log::warn!("detector error at '{}': {error}", path.display());
         }
         let matched_kinds: Vec<String> = detection
             .outcomes

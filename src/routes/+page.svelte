@@ -334,7 +334,7 @@
 <div class="mx-auto max-w-6xl px-4 py-8">
   <div class="mb-6 flex items-center justify-between gap-2 border-b border-line pb-3">
     <h1 class="text-2xl tracking-wide text-phos">
-      <span class="text-accent">&#9612;</span> PROJECT INDEXER
+      <span class="text-accent">&#9612;</span> DEXILY
     </h1>
     <div class="flex items-center gap-2">
       <button
