@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Called by `release-checks.yml`, so a `dexily-v*` tag is checked by exactly
+  # these jobs before anything is built or published.
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.ref }}

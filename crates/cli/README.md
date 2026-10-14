@@ -177,17 +177,37 @@ tags by [cargo-dist](https://opensource.axo.dev/cargo-dist/)
 `release.yml` and its `v*` tags are separate and unaffected.
 
 1. Bump `version` in `crates/cli/Cargo.toml` and move the CHANGELOG's
-   Unreleased entries under that version.
+   Unreleased entries under that version. If `crates/core` changed since it
+   was last published, bump its version too, and the `dexily-core` version
+   `crates/cli/Cargo.toml` asks for.
 2. Merge to `main`.
-3. Publish to crates.io: `cargo publish -p dexily-core -p dexily` — leave out
-   `dexily-core` when its version has not changed since it was last
-   published. Needs `cargo login` once.
-4. Tag and push: `git tag dexily-v<version> && git push origin dexily-v<version>`.
-5. dist builds every target — macOS (Apple silicon and Intel), static Linux
-   (x86_64 and arm64), Windows x86_64 — and publishes the GitHub release with
-   archives, checksums and the installers. `restore-latest.yml` then marks the
-   newest app release "Latest" again, so the releases page keeps pointing app
-   users at the app.
+3. Tag and push: `git tag dexily-v<version> && git push origin dexily-v<version>`.
+
+The tag does the rest, in this order, and stops at the first step that fails:
+
+1. **The checks** — the same jobs as CI (`release-checks.yml` calls `ci.yml`),
+   on the tagged commit, and that the crates.io token is set.
+2. **The builds** — macOS (Apple silicon and Intel), static Linux (x86_64 and
+   arm64), Windows x86_64, with checksums and the installers, uploaded to a
+   draft release.
+3. **The crates** — `publish-crates.yml` publishes `dexily-core` and `dexily`
+   to crates.io together, the core first; one whose version is already there
+   is left out, so the core goes up only when it changed and a release can be
+   re-run. If this fails the release stays a draft.
+4. **The release** is published, and `restore-latest.yml` marks the newest app
+   release "Latest" again, so the releases page keeps pointing app users at the
+   app.
+
+So the archives, the installers and `cargo install dexily` are always the same
+code, and none of them can come from a commit that fails the checks.
+
+**Once, before the first release from CI:** the repository needs a crates.io
+API token as the `CARGO_REGISTRY_TOKEN` secret, with the *publish-update*
+scope for `dexily` and `dexily-core`:
+
+```sh
+gh secret set CARGO_REGISTRY_TOKEN   # paste the token when asked
+```
 
 Users install it with any of:
 

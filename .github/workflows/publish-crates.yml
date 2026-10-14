@@ -1,0 +1,57 @@
+# Run by dist once every binary of a `dexily-v*` release has been built and
+# uploaded, and before the release is announced (`publish-jobs` in
+# dist-workspace.toml): publishes `dexily-core` and `dexily` to crates.io,
+# together, so `cargo install dexily` and the release's archives are always the
+# same code.
+#
+# Together and in order: `dexily` depends on `dexily-core`, so cargo publishes
+# the core first and waits for it. A crate whose version is already on
+# crates.io is left out — the core is versioned with the app, and a CLI
+# release often does not change it — so re-running a release is safe.
+name: Publish crates
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Which crates are not on crates.io yet
+        id: crates
+        run: |
+          packages=""
+          for crate in dexily-core dexily; do
+            version=$(cargo metadata --no-deps --format-version 1 \
+              | jq -r --arg name "$crate" '.packages[] | select(.name == $name) | .version')
+            if [ -z "$version" ]; then
+              echo "::error::No crate named $crate in this workspace"
+              exit 1
+            fi
+            # 200 when that exact version exists, 404 when it does not.
+            status=$(curl -s -o /dev/null -w '%{http_code}' \
+              -A "dexily release workflow (github.com/${{ github.repository }})" \
+              "https://crates.io/api/v1/crates/$crate/$version")
+            case "$status" in
+              200) echo "$crate $version is already published" ;;
+              404) echo "$crate $version will be published"; packages="$packages -p $crate" ;;
+              *)   echo "::error::crates.io answered $status for $crate $version"; exit 1 ;;
+            esac
+          done
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        if: ${{ steps.crates.outputs.packages != '' }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish ${{ steps.crates.outputs.packages }}
