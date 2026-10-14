@@ -1092,6 +1092,57 @@ fn uv_init_fails_closed_and_other_uv_commands_are_unknown() {
     }
 }
 
+// flutter create <dir> scaffolds a Flutter app (a pubspec.yaml); deno init and
+// zig init scaffold their own projects. Each positional is a folder, never a
+// downloaded package; options fail closed.
+
+#[test]
+fn flutter_create_expects_the_folder_it_names() {
+    assert_eq!(
+        expects(&["flutter", "create", "app"]),
+        holds_at("app", "pubspec.yaml")
+    );
+    assert_eq!(
+        expects(&["flutter", "create", "-t", "plugin", "app"]),
+        holds_at("app", "pubspec.yaml"),
+        "the template value is not the folder"
+    );
+    // No directory: flutter only prints usage, so nothing is tracked.
+    assert_eq!(expects(&["flutter", "create"]), Ok(Vec::new()));
+    assert!(matches!(
+        expects(&["flutter", "create", "--badflag", "app"]),
+        Err(Refusal::Refused(..))
+    ));
+    assert_eq!(expects(&["flutter", "run"]), Err(Refusal::Unknown));
+}
+
+#[test]
+fn deno_init_expects_the_folder_it_names_or_the_working_one() {
+    assert_eq!(expects(&["deno", "init"]), holds_at("", "deno.json"));
+    assert_eq!(
+        expects(&["deno", "init", "app"]),
+        holds_at("app", "deno.json")
+    );
+    assert!(
+        matches!(
+            expects(&["deno", "init", "--npm"]),
+            Err(Refusal::Refused(..))
+        ),
+        "an unmodeled flag is refused, fail-closed"
+    );
+    assert_eq!(expects(&["deno", "run", "main.ts"]), Err(Refusal::Unknown));
+}
+
+#[test]
+fn zig_init_expects_the_working_folder() {
+    assert_eq!(expects(&["zig", "init"]), holds_at("", "build.zig"));
+    assert!(
+        matches!(expects(&["zig", "init", "-x"]), Err(Refusal::Refused(..))),
+        "a flag is refused"
+    );
+    assert_eq!(expects(&["zig", "build"]), Err(Refusal::Unknown));
+}
+
 #[test]
 fn any_other_go_command_is_not_known() {
     for words in [

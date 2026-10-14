@@ -26,6 +26,9 @@ pub const KNOWN: &[&str] = &[
     "yarn init",
     "poetry init",
     "uv init",
+    "flutter create",
+    "deno init",
+    "zig init",
 ];
 
 /// What a command should leave behind, worked out before it runs.
@@ -164,8 +167,12 @@ pub fn label(argv: &[OsString]) -> String {
     if program == "gh" {
         return with_subcommand(&program, &argv[1..], 2);
     }
-    // A package manager names one: `npm init`, `poetry init`, `npm install`.
-    if matches!(program.as_str(), "npm" | "pnpm" | "yarn" | "poetry" | "uv") {
+    // A package/project manager or scaffolder names one subcommand word:
+    // `npm init`, `poetry init`, `flutter create`, `npm install`.
+    if matches!(
+        program.as_str(),
+        "npm" | "pnpm" | "yarn" | "poetry" | "uv" | "flutter" | "deno" | "zig"
+    ) {
         return with_subcommand(&program, &argv[1..], 1);
     }
     program
@@ -229,6 +236,9 @@ pub fn expect_on(argv: &[OsString], cwd: &Path, windows: bool) -> Result<Expecta
         "npm" | "pnpm" | "yarn" => package_manager_init(&name, rest, cwd)?,
         "poetry" => poetry_init(rest, cwd)?,
         "uv" => uv(rest, cwd)?,
+        "flutter" => flutter(rest, cwd)?,
+        "deno" => deno(rest, cwd)?,
+        "zig" => zig(rest, cwd)?,
         _ => return Err(Refusal::Unknown),
     };
     // A folder named twice (`mkdir -p a a`) is one folder: one question, one
@@ -1118,6 +1128,100 @@ fn uv(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
     Ok(vec![Expected {
         folder,
         proof: Proof::Holds("pyproject.toml"),
+    }])
+}
+
+/// The options dexily models for `flutter create` — a bounded set (a template
+/// kind, an org, a name, the platforms, a sample). `-t`/`--template` names one
+/// of flutter's built-in kinds, not a downloaded one; the command fetches Dart
+/// packages with `pub get` but runs none of them, so it is safe to pass on. An
+/// unknown flag is refused.
+const FLUTTER_CREATE_OPTIONS: &[(&str, Takes)] = &[
+    ("-e", Takes::Nothing),
+    ("--empty", Takes::Nothing),
+    ("--pub", Takes::Nothing),
+    ("--no-pub", Takes::Nothing),
+    ("--overwrite", Takes::Nothing),
+    ("--no-overwrite", Takes::Nothing),
+    ("--offline", Takes::Nothing),
+    ("-t", Takes::Value),
+    ("--template", Takes::Value),
+    ("--org", Takes::Value),
+    ("--project-name", Takes::Value),
+    ("--description", Takes::Value),
+    ("--platforms", Takes::Value),
+    ("-s", Takes::Value),
+    ("--sample", Takes::Value),
+    ("-a", Takes::Value),
+    ("--android-language", Takes::Value),
+    ("-i", Takes::Value),
+    ("--ios-language", Takes::Value),
+    ("-h", Takes::Nothing),
+    ("--help", Takes::Nothing),
+];
+
+/// `flutter`: only `flutter create <dir>` makes a project — it scaffolds a
+/// Flutter app into the folder it names, proven by a `pubspec.yaml`. The
+/// positional is that folder (not a downloaded package); with none, flutter
+/// only prints usage, so there is nothing to track. `flutter run`, `pub`, etc.
+/// are unknown. Options fail closed.
+fn flutter(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
+    if args.first().map(|a| a.to_string_lossy()).as_deref() != Some("create") {
+        return Err(Refusal::Unknown);
+    }
+    let positionals = scaffold_args("flutter create", FLUTTER_CREATE_OPTIONS, &args[1..])?;
+    Ok(positionals
+        .first()
+        .map(|path| Expected {
+            folder: cwd.join(path),
+            proof: Proof::Holds("pubspec.yaml"),
+        })
+        .into_iter()
+        .collect())
+}
+
+/// The options dexily models for `deno init` — a few safe switches. An unknown
+/// flag is refused, which keeps any fetch-and-run variant (e.g. a `--npm`
+/// initializer, were deno to add one) out, fail-closed.
+const DENO_INIT_OPTIONS: &[(&str, Takes)] = &[
+    ("--lib", Takes::Nothing),
+    ("--serve", Takes::Nothing),
+    ("-h", Takes::Nothing),
+    ("--help", Takes::Nothing),
+];
+
+/// `deno`: only `deno init [dir]` makes a project — it writes a `deno.json` (and
+/// a `main.ts`) in the folder it names, or the working one. The positional is
+/// that folder. `deno run`, `deno add`, etc. are unknown. Options fail closed.
+fn deno(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
+    if args.first().map(|a| a.to_string_lossy()).as_deref() != Some("init") {
+        return Err(Refusal::Unknown);
+    }
+    let positionals = scaffold_args("deno init", DENO_INIT_OPTIONS, &args[1..])?;
+    let folder = match positionals.first() {
+        Some(path) => cwd.join(path),
+        None => cwd.to_path_buf(),
+    };
+    Ok(vec![Expected {
+        folder,
+        proof: Proof::Holds("deno.json"),
+    }])
+}
+
+/// `zig init` takes no options of its own and writes a `build.zig` in the
+/// working folder; a flag is refused, like `go mod init`.
+const ZIG_INIT_OPTIONS: &[(&str, Takes)] = &[];
+
+/// `zig`: only `zig init` makes a project — it writes a `build.zig` in the
+/// working folder. Any other `zig` line is unknown.
+fn zig(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
+    if args.first().map(|a| a.to_string_lossy()).as_deref() != Some("init") {
+        return Err(Refusal::Unknown);
+    }
+    scaffold_args("zig init", ZIG_INIT_OPTIONS, &args[1..])?;
+    Ok(vec![Expected {
+        folder: cwd.to_path_buf(),
+        proof: Proof::Holds("build.zig"),
     }])
 }
 
