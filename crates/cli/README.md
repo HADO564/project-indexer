@@ -55,10 +55,19 @@ never use it to run arbitrary programs:
 ```
 $ dexily mkdir friction
 dexily: track "friction" at /Users/me/code/friction? [Y/n/e]
-$ dexily git clone https://github.com/you/thing
+
+# Set the new project up in the same breath — project flags go *before* the command:
+$ dexily --add-tag rust --group Work --notes "client demo" git clone https://github.com/you/thing
 dexily: track "thing" at /Users/me/code/thing? [Y/n/e]
+
+# A command dexily doesn't recognise, or a git option it can't vet, is refused:
 $ dexily git push
 dexily: `git push` isn't a command dexily observes (it knows: mkdir, git init, git clone). Run it directly.
+
+# …but at a terminal you can override: you see the reason, then confirm (and nothing is tracked):
+$ dexily git clone --upload-pack=/opt/my-upload-pack https://host/repo
+dexily: `--upload-pack` makes git run another program, so it is not passed on. Run git directly.
+        run it anyway? [y/N] y
 ```
 
 - **Overriding a refusal, at a terminal.** The refusal protects scripts and

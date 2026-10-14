@@ -10,6 +10,13 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+### Changed
+
+- **The app is now named Dexily.** The window title, the packaged product name
+  and the built app bundle read "Dexily", matching the `dexily` command-line
+  tool. Nothing moves on disk: the bundle identifier is unchanged, so the shared
+  database and settings stay exactly where they were.
+
 ### Fixed
 
 - **Changing a project's directory to another project's folder is refused.**

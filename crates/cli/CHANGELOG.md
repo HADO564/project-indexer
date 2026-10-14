@@ -21,6 +21,17 @@ The CLI is released independently of the desktop app, under tags of the form
 - If a folder was made but could not be recorded, the command's exit code stands and dexily prints `could not track "thing": <why>` with the `dexily add <folder>` that retries it — even under `--quiet`. If it was tracked but its details — the flags, the form — could not be saved, the message says so instead (`tracked "thing", but could not save its details: <why>`, with the `dexily edit "thing"` that sets them), and under `--json` the project stays in `tracked`.
 - `--json` with an observed command prints one line on **stderr**, last, since the command owns stdout: `{"schema":1,"data":{"exit_code":0,"tracked":[…],"failed":[…]}}`. No prompt and no prose.
 - On Windows, `mkdir` and `md` are built into `cmd`, so they run through `cmd.exe /D /V:OFF /C`, with `cmd.exe` taken by its full path; an argument containing a character `cmd` would act on (`& | < > ^ % "`) is refused before anything runs.
+- **`dexily show <project>` lists the project's own fields.** Beyond name, directory, id, group, colour and icon, the detail view now shows description, tags, properties (one per line, aligned), notes, open-with, favourite, and the created / updated / last-opened dates — each only when the project has it. `--json` still carries every field.
+
+### Changed
+
+- `edit --color` now points at the right palette when the value typed is a *terminal* colour (one of `config folder-color`'s larger set, such as `red`) rather than a project colour, instead of refusing it with no hint. A genuine typo still gets the plain error.
+
+### Fixed
+
+- A no-op `edit` — a field flag set to the value the project already holds — writes nothing and reports `nothing changed`, as a form saved untouched already did, instead of moving `updated_at` for a change that never happened.
+- `dexily scan <dir>` on a path that does not exist, or is a file, is now an error (exit 1), as `add` is for a missing directory, rather than reporting `0 found` with exit 0 as if the folder held no projects. An unreadable *sub*directory met mid-walk is still skipped, never fatal.
+- Scan and detector diagnostics (an unreadable directory, a detector that errored) no longer print prose to stderr during a run; they go through the logging facade, so a `--json` run's stderr stays clean. (These messages came from `dexily-core`.)
 
 ### Security
 
