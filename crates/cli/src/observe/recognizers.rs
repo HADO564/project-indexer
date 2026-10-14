@@ -20,6 +20,7 @@ pub const KNOWN: &[&str] = &[
     "cargo new",
     "cargo init",
     "go mod init",
+    "gh repo create",
 ];
 
 /// What a command should leave behind, worked out before it runs.
@@ -154,6 +155,10 @@ pub fn label(argv: &[OsString]) -> String {
     if program == "go" {
         return with_subcommand(&program, &argv[1..], 2);
     }
+    // gh names two subcommand words: `gh repo create`, `gh pr list`.
+    if program == "gh" {
+        return with_subcommand(&program, &argv[1..], 2);
+    }
     program
 }
 
@@ -211,6 +216,7 @@ pub fn expect_on(argv: &[OsString], cwd: &Path, windows: bool) -> Result<Expecta
         },
         "cargo" => cargo(rest, cwd)?,
         "go" => go(rest, cwd)?,
+        "gh" => gh(rest, cwd)?,
         _ => return Err(Refusal::Unknown),
     };
     // A folder named twice (`mkdir -p a a`) is one folder: one question, one
@@ -863,6 +869,98 @@ fn go(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
     Ok(vec![Expected {
         folder: cwd.to_path_buf(),
         proof: Proof::Holds("go.mod"),
+    }])
+}
+
+/// The options dexily models for `gh repo create` — the long forms and the
+/// short forms gh gives them. Each is a safe switch or a plain value (a
+/// description, a `.gitignore` or licence template, a GitHub template repo, a
+/// team, a homepage, a remote or source name). None runs a local program —
+/// gh's `--template` names a GitHub template *repository*, not git's local
+/// hook-running one — so recognising `gh repo create` does not reopen the
+/// allowlist. Anything not here is refused, fail-closed, as git's and cargo's.
+const GH_REPO_CREATE_OPTIONS: &[(&str, Takes)] = &[
+    ("--private", Takes::Nothing),
+    ("--public", Takes::Nothing),
+    ("--internal", Takes::Nothing),
+    ("-c", Takes::Nothing),
+    ("--clone", Takes::Nothing),
+    ("--push", Takes::Nothing),
+    ("--add-readme", Takes::Nothing),
+    ("--disable-issues", Takes::Nothing),
+    ("--disable-wiki", Takes::Nothing),
+    ("--include-all-branches", Takes::Nothing),
+    ("--help", Takes::Nothing),
+    ("-d", Takes::Value),
+    ("--description", Takes::Value),
+    ("-g", Takes::Value),
+    ("--gitignore", Takes::Value),
+    ("-l", Takes::Value),
+    ("--license", Takes::Value),
+    ("--homepage", Takes::Value),
+    ("-r", Takes::Value),
+    ("--remote", Takes::Value),
+    ("-s", Takes::Value),
+    ("--source", Takes::Value),
+    ("-t", Takes::Value),
+    ("--team", Takes::Value),
+    ("-p", Takes::Value),
+    ("--template", Takes::Value),
+];
+
+/// `gh repo create`'s words, read once like [`scaffold_args`], but also noting
+/// whether `--clone` was asked for — a copy lands on disk only then. An unknown
+/// option is refused, a `Value` option's value skipped so it is never read as
+/// the repository name, and `--` ends the options.
+fn gh_repo_create_args(args: &[OsString]) -> Result<(Vec<&OsString>, bool), Refusal> {
+    let mut positionals = Vec::new();
+    let mut clone = false;
+    let mut options_done = false;
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        let text = arg.to_string_lossy();
+        if options_done || !text.starts_with('-') || text == "-" {
+            positionals.push(arg);
+            continue;
+        }
+        if text == "--" {
+            options_done = true;
+            continue;
+        }
+        let (name, takes, attached) = modelled(&text, GH_REPO_CREATE_OPTIONS, "gh repo create")?;
+        if name == "--clone" || name == "-c" {
+            clone = true;
+        }
+        if takes == Takes::Value && !attached {
+            args.next();
+        }
+    }
+    Ok((positionals, clone))
+}
+
+/// gh: the one shape dexily knows is `gh repo create`. With `--clone` gh clones
+/// the new repository into a folder named after it — the name without any
+/// `owner/` prefix — proven by a `.git`, as `git clone` is. Without `--clone`
+/// nothing lands locally, so there is nothing to track; and gh needs a name to
+/// clone, so a line that gives none tracks nothing either. Any other `gh` line
+/// is not a project command. Fail-closed on options, like git and cargo.
+fn gh(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
+    let word = |at: usize| args.get(at).map(|a| a.to_string_lossy());
+    if word(0).as_deref() != Some("repo") || word(1).as_deref() != Some("create") {
+        return Err(Refusal::Unknown);
+    }
+    let (positionals, clone) = gh_repo_create_args(&args[2..])?;
+    if !clone {
+        return Ok(Vec::new());
+    }
+    let Some(name) = positionals.first() else {
+        return Ok(Vec::new());
+    };
+    let name = name.to_string_lossy();
+    let folder = name.rsplit('/').next().unwrap_or(&name);
+    Ok(vec![Expected {
+        folder: cwd.join(folder),
+        proof: Proof::Holds(".git"),
     }])
 }
 

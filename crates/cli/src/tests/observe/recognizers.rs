@@ -915,6 +915,77 @@ fn go_mod_init_takes_no_options() {
     }
 }
 
+// gh: the one shape is `gh repo create`. With `--clone` it clones the new repo
+// into a folder named after it (proven by a `.git`, like `git clone`); without
+// `--clone` nothing lands on disk, so nothing is tracked.
+
+#[test]
+fn gh_repo_create_with_clone_expects_the_folder_named_after_the_repo() {
+    assert_eq!(
+        expects(&["gh", "repo", "create", "loc", "--private", "--clone"]),
+        holds_at("loc", ".git")
+    );
+    assert_eq!(
+        expects(&["gh", "repo", "create", "me/loc", "-c"]),
+        holds_at("loc", ".git"),
+        "the owner/ prefix is not part of the local folder"
+    );
+    assert_eq!(
+        expects(&[
+            "gh",
+            "repo",
+            "create",
+            "--description",
+            "a repo",
+            "loc",
+            "--clone"
+        ]),
+        holds_at("loc", ".git"),
+        "a value is skipped, never read as the repository name"
+    );
+}
+
+#[test]
+fn gh_repo_create_without_clone_tracks_nothing() {
+    // Made on GitHub, but nothing lands on disk.
+    assert_eq!(
+        expects(&["gh", "repo", "create", "loc", "--private"]),
+        Ok(Vec::new())
+    );
+    // `--clone` but no name: gh cannot clone, so there is nothing to track.
+    assert_eq!(
+        expects(&["gh", "repo", "create", "--clone"]),
+        Ok(Vec::new())
+    );
+}
+
+#[test]
+fn gh_repo_create_options_fail_closed() {
+    for words in [
+        &["gh", "repo", "create", "loc", "--secret"][..],
+        &["gh", "repo", "create", "loc", "--clo"],
+        &["gh", "repo", "create", "loc", "--private=yes"],
+    ] {
+        assert!(
+            matches!(expects(words), Err(Refusal::Refused(..))),
+            "{words:?}: {:?}",
+            expects(words)
+        );
+    }
+}
+
+#[test]
+fn any_other_gh_command_is_not_known() {
+    for words in [
+        &["gh", "repo", "clone", "me/thing"][..],
+        &["gh", "pr", "list"],
+        &["gh", "repo"],
+        &["gh"],
+    ] {
+        assert_eq!(expects(words), Err(Refusal::Unknown), "{words:?}");
+    }
+}
+
 #[test]
 fn any_other_go_command_is_not_known() {
     for words in [
