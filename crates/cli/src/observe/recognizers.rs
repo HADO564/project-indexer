@@ -86,7 +86,23 @@ pub enum Refusal {
     /// option it does not know, or one that would make the command run some
     /// other program — which would make the allowlist mean nothing. The text
     /// is the message.
-    Refused(String),
+    ///
+    /// The expectation rides along: a recognized git line, where dexily can
+    /// still place the repo it would make despite the refused word. It is
+    /// never read to decide whether the command runs — only after a person at
+    /// a terminal has overridden the refusal — so it takes nothing away from
+    /// failing closed. `None` when there is no placing it (an abbreviation or
+    /// short-option run that might eat the folder, or a `mkdir` with no
+    /// recognizer for the word at all).
+    Refused(String, Option<Expectation>),
+}
+
+impl Refusal {
+    /// A refusal as the low-level parse makes one: a reason, and no expectation
+    /// yet. [`expect_on`] is where a git line's expectation, if any, is added.
+    fn refused(why: String) -> Self {
+        Refusal::Refused(why, None)
+    }
 }
 
 /// The program's name as the recognizers match it: as typed, except that on
@@ -145,7 +161,18 @@ pub fn expect_on(argv: &[OsString], cwd: &Path, windows: bool) -> Result<Expecta
         "mkdir" if !windows => new_folders(mkdir(rest), cwd),
         // `md` is cmd's other name for it.
         "mkdir" | "md" if windows => new_folders(cmd_mkdir(rest), cwd),
-        "git" => git(rest, cwd)?,
+        // A refused git line (a known subcommand with a word dexily will not
+        // pass on) still knows the repo it would make, when the refused word
+        // is not one that could eat the folder: carry that expectation so a
+        // terminal override tracks it. A line that is not `init` or `clone` is
+        // `Unknown` and carries nothing — there is no telling what it leaves.
+        "git" => match git(rest, cwd) {
+            Ok(folders) => folders,
+            Err(Refusal::Refused(why, _)) => {
+                return Err(Refusal::Refused(why, git_expectation(rest, cwd)))
+            }
+            Err(unknown) => return Err(unknown),
+        },
         _ => return Err(Refusal::Unknown),
     };
     // A folder named twice (`mkdir -p a a`) is one folder: one question, one
@@ -242,17 +269,27 @@ const GIT_GLOBALS: &[(&str, Takes)] = &[
 /// (`core.sshCommand`, `core.fsmonitor`, an alias), `--exec-path` swaps git's
 /// own, `--upload-pack` names one outright, and a template's hooks run on a
 /// clone's checkout and on every commit after an `init`. They are in no table
-/// of options passed on, so they are refused like any other; this only gives
-/// them the message that says why.
-const RUNS_A_PROGRAM: &[&str] = &[
-    "-c",
-    "--config",
-    "--config-env",
-    "--exec-path",
-    "-u",
-    "--upload-pack",
-    "--template",
+/// of options passed on, so they are refused like any other; this gives them
+/// the message that says why, and — so a lenient walk past a refusal can step
+/// over the value — what each one takes, the same arity git reads them with.
+const RUNS_A_PROGRAM: &[(&str, Takes)] = &[
+    ("-c", Takes::Value),
+    ("--config", Takes::Value),
+    ("--config-env", Takes::Value),
+    ("--exec-path", Takes::Optional),
+    ("-u", Takes::Value),
+    ("--upload-pack", Takes::Value),
+    ("--template", Takes::Value),
 ];
+
+/// An option word split into its name and whether a value came attached with
+/// `=` — `--depth=1` is `("--depth", true)`, `--depth` is `("--depth", false)`.
+fn split_option(text: &str) -> (&str, bool) {
+    match text.split_once('=') {
+        Some((name, _)) => (name, true),
+        None => (text, false),
+    }
+}
 
 /// One option word looked up in `table`: its name, what it takes, and whether
 /// the value came attached with `=`. Refused unless it is there exactly as
@@ -263,24 +300,37 @@ fn passed_on<'a>(
     table: &[(&'static str, Takes)],
     to: &str,
 ) -> Result<(&'a str, Takes, bool), Refusal> {
-    let (name, attached) = match text.split_once('=') {
-        Some((name, _)) => (name, true),
-        None => (text, false),
-    };
+    let (name, attached) = split_option(text);
     let known = table.iter().find(|(known, _)| *known == name);
     match known {
-        Some((_, Takes::Nothing)) if attached => Err(Refusal::Refused(format!(
+        Some((_, Takes::Nothing)) if attached => Err(Refusal::refused(format!(
             "`{name}` takes no value, so `{text}` is not passed on to {to}. Run git directly."
         ))),
         Some((_, takes)) => Ok((name, *takes, attached)),
-        None if RUNS_A_PROGRAM.contains(&name) => Err(Refusal::Refused(format!(
-            "`{name}` makes git run another program, so it is not passed on. Run git directly."
-        ))),
-        None => Err(Refusal::Refused(format!(
+        None if RUNS_A_PROGRAM.iter().any(|(known, _)| *known == name) => {
+            Err(Refusal::refused(format!(
+                "`{name}` makes git run another program, so it is not passed on. Run git directly."
+            )))
+        }
+        None => Err(Refusal::refused(format!(
             "`{name}` is not an option dexily passes on to {to}: options go in full and one at \
              a time (`--depth 1 -q`, not `--dep 1` or `-q1`). Run git directly for anything else."
         ))),
     }
+}
+
+/// What an option takes, found across the tables that could name it: the ones
+/// passed on to this part of the line, and the ones refused for running a
+/// program, which git reads a value for all the same. `None` when no table
+/// knows it — an abbreviation, a run of short options, or an option git grew
+/// since — any of which might swallow the next word, so a lenient walk cannot
+/// know where the folder is and offers no expectation at all.
+fn option_arity(name: &str, passed: &[(&'static str, Takes)]) -> Option<Takes> {
+    passed
+        .iter()
+        .chain(RUNS_A_PROGRAM)
+        .find(|(known, _)| *known == name)
+        .map(|&(_, takes)| takes)
 }
 
 /// Git's line before the subcommand's own arguments.
@@ -481,6 +531,76 @@ fn git(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
         .collect())
 }
 
+/// The repo a refused git line would still make, worked out while ignoring
+/// every reason it was refused — the same two steps as [`git`], but stepping
+/// over each option by its known arity ([`option_arity`]) instead of refusing
+/// it. `None` the moment a word cannot be placed: not `init` or `clone`, or an
+/// option no table knows, where the folder after it is a guess, so an override
+/// tracks nothing rather than the wrong thing.
+///
+/// This is read only after a person at a terminal has overridden the refusal,
+/// never to decide whether the command runs: it cannot let a refused line
+/// through the gate, only say what to look for once a human has let it run.
+fn git_expectation(args: &[OsString], cwd: &Path) -> Option<Expectation> {
+    // The line before the subcommand: step over each global, following `-C`,
+    // until the first non-option word names the subcommand.
+    let mut base = PathBuf::new();
+    let mut at = 0;
+    let subcommand = loop {
+        let text = args.get(at)?.to_string_lossy();
+        at += 1;
+        if !text.starts_with('-') {
+            break text.into_owned();
+        }
+        let (name, attached) = split_option(&text);
+        if option_arity(name, GIT_GLOBALS)? == Takes::Value && !attached {
+            if name == "-C" {
+                if let Some(path) = args.get(at) {
+                    base = base.join(path);
+                }
+            }
+            at += 1;
+        }
+    };
+    let command = GitCommand::parse(Some(&subcommand))?;
+
+    // The subcommand's own words: the same step-over, collecting the
+    // positionals and whether it is a bare repository nobody works in.
+    let mut parsed = GitArgs {
+        positionals: Vec::new(),
+        bare: false,
+    };
+    let mut options_done = false;
+    let mut rest = args[at..].iter();
+    while let Some(arg) = rest.next() {
+        let text = arg.to_string_lossy();
+        if options_done || !text.starts_with('-') || text == "-" {
+            parsed.positionals.push(arg);
+            continue;
+        }
+        if text == "--" {
+            options_done = true;
+            continue;
+        }
+        let (name, attached) = split_option(&text);
+        if matches!(name, "--bare" | "--mirror") {
+            parsed.bare = true;
+        }
+        if option_arity(name, command.options())? == Takes::Value && !attached {
+            rest.next();
+        }
+    }
+    parsed.positionals.truncate(command.positionals());
+
+    let folder = git_folder(command, &cwd.join(&base), &parsed)?;
+    Some(Expectation {
+        folders: vec![Expected {
+            folder,
+            proof: Proof::Holds(".git"),
+        }],
+    })
+}
+
 /// A clone's address can itself be a command line (`ext::`) or an open file
 /// handle (`fd::`): refused, bare clone or not.
 fn refuse_address(command: GitCommand, parsed: &GitArgs) -> Result<(), Refusal> {
@@ -488,7 +608,7 @@ fn refuse_address(command: GitCommand, parsed: &GitArgs) -> Result<(), Refusal> 
         if let Some(repository) = parsed.positionals.first() {
             let repository = repository.to_string_lossy();
             if repository.starts_with("ext::") || repository.starts_with("fd::") {
-                return Err(Refusal::Refused(format!(
+                return Err(Refusal::refused(format!(
                     "`{repository}` makes git run another program, so it is not passed on. Run git directly."
                 )));
             }

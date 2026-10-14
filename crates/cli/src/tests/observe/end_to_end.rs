@@ -109,6 +109,20 @@ impl Run {
         confirmer: impl Confirmer + 'static,
         editor: fn(&Project) -> Option<UpdateProject>,
     ) -> (anyhow::Result<i32>, String) {
+        self.go_with(cwd, words, &NoTerminal, confirmer, editor)
+    }
+
+    /// [`Run::go_in`] with a gate of its own — a person at the terminal
+    /// answering the "run it anyway?" prompt, for the override path, rather
+    /// than the no-terminal gate every ordinary run uses.
+    fn go_with(
+        &self,
+        cwd: &Path,
+        words: &[&str],
+        gate: &dyn UnsafeGate,
+        confirmer: impl Confirmer + 'static,
+        editor: fn(&Project) -> Option<UpdateProject>,
+    ) -> (anyhow::Result<i32>, String) {
         let mut argv = vec!["dexily"];
         argv.extend_from_slice(words);
         let cli = Cli::try_parse_from(argv).expect("arguments should parse");
@@ -132,7 +146,7 @@ impl Run {
             &command,
             cwd,
             options,
-            &NoTerminal,
+            gate,
             move || {
                 opened.set(true);
                 Ok(ctx)
@@ -713,6 +727,75 @@ fn a_person_can_override_a_refusal_and_the_command_runs_but_is_not_tracked() {
         said.contains("running `git status` as you asked")
             && said.contains("nothing it makes will be tracked"),
         "{said}"
+    );
+}
+
+#[test]
+fn overriding_a_refused_git_line_tracks_the_repo_with_its_git_tracker() {
+    // `--template` is an option dexily refuses, but a recognized git line all
+    // the same: dexily still knows the repo it would make. A person at the
+    // terminal says to run it anyway, and it is tracked through the ordinary
+    // flow — the `.git` proves it, the track prompt is answered. A harmless
+    // refused option, because with Gate::Allowed the command really runs, so
+    // the empty template folder is all it is handed.
+    let run = Run::new();
+    std::fs::create_dir(run.folder("tmpl")).unwrap();
+    let (result, said) = run.go_with(
+        run.root.path(),
+        &["git", "init", "--template", "tmpl", "repo"],
+        &Answered(Gate::Allowed),
+        Says(Some(Track::Yes)),
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(tracked[0].name, "repo");
+    assert_eq!(
+        Path::new(&tracked[0].directory),
+        std::fs::canonicalize(run.folder("repo")).unwrap()
+    );
+    assert!(has_git_tracker(&tracked[0]), "{:?}", tracked[0].trackers);
+    assert!(
+        said.contains("running `git init` as you asked")
+            && said.contains("tracking the repo it makes"),
+        "{said}"
+    );
+}
+
+#[test]
+fn an_overridden_git_line_applies_the_project_flags() {
+    // Unlike an unknown command's override, here the flags describe a repo
+    // dexily can track, so they are applied, not ignored — and with them set,
+    // no prompt: the ordinary flags flow, reached past the refusal.
+    let run = Run::new();
+    std::fs::create_dir(run.folder("tmpl")).unwrap();
+    let (result, said) = run.go_with(
+        run.root.path(),
+        &[
+            "--name",
+            "friction",
+            "--add-tag",
+            "rust",
+            "git",
+            "init",
+            "--template",
+            "tmpl",
+            "repo",
+        ],
+        &Answered(Gate::Allowed),
+        MustNotAsk,
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(tracked[0].name, "friction");
+    assert_eq!(tracked[0].tags, ["Rust"]);
+    assert!(has_git_tracker(&tracked[0]), "{:?}", tracked[0].trackers);
+    assert!(
+        !said.contains("ignoring the project flags"),
+        "the flags describe a repo dexily tracks, so they are applied: {said}"
     );
 }
 

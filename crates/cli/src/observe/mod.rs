@@ -197,12 +197,19 @@ pub(crate) fn observe(
     let expectation = match recognizers::expect(argv, cwd) {
         Ok(expectation) => expectation,
         Err(refusal) => {
-            let reason = match refusal {
-                Refusal::Unknown => format!(
-                    "`{command}` isn't a command dexily observes (it knows: {}). Run it directly.",
-                    recognizers::KNOWN.join(", ")
+            // The reason to show, and — for a recognized git line refused only
+            // for an option — the repo it would still make, so an override can
+            // track it through the ordinary flow. An unknown command carries
+            // none: no recognizer knows what it leaves behind.
+            let (reason, overridden) = match refusal {
+                Refusal::Unknown => (
+                    format!(
+                        "`{command}` isn't a command dexily observes (it knows: {}). Run it directly.",
+                        recognizers::KNOWN.join(", ")
+                    ),
+                    None,
                 ),
-                Refusal::Refused(why) => why,
+                Refusal::Refused(why, expectation) => (why, expectation),
             };
             // `--json` is a machine's channel, with nobody to prompt; anything
             // else offers the gate, which itself declines when there is no
@@ -213,26 +220,43 @@ pub(crate) fn observe(
                 gate.allow(&reason)?
             };
             match verdict {
-                // A person said to run it. dexily has no recognizer for a
-                // refused command, so it runs untouched and nothing is tracked
-                // — the flags, which describe a project, have none to describe.
-                Gate::Allowed => {
-                    if !options.flags.is_empty() {
+                Gate::Allowed => match overridden {
+                    // A recognized git line the person chose to run anyway.
+                    // dexily still knows the repo it makes, so it falls through
+                    // to the ordinary flow — flags checked and applied, run,
+                    // confirm, track — exactly as a line it never refused. The
+                    // vetting it skipped was the human's to skip, at their own
+                    // terminal, where the guarantee was theirs to waive.
+                    Some(expectation) => {
                         voice.warn(
                             err,
                             format_args!(
-                                "dexily: ignoring the project flags — a command dexily cannot vet makes nothing it can track"
+                                "dexily: running `{command}` as you asked; tracking the repo it makes"
                             ),
                         );
+                        expectation
                     }
-                    voice.warn(
-                        err,
-                        format_args!(
-                            "dexily: running `{command}` as you asked; nothing it makes will be tracked"
-                        ),
-                    );
-                    return spawn::run(argv, cwd);
-                }
+                    // No recognizer for what it makes, so it runs untouched and
+                    // nothing is tracked — the flags, which describe a project,
+                    // have none to describe.
+                    None => {
+                        if !options.flags.is_empty() {
+                            voice.warn(
+                                err,
+                                format_args!(
+                                    "dexily: ignoring the project flags — a command dexily cannot vet makes nothing it can track"
+                                ),
+                            );
+                        }
+                        voice.warn(
+                            err,
+                            format_args!(
+                                "dexily: running `{command}` as you asked; nothing it makes will be tracked"
+                            ),
+                        );
+                        return spawn::run(argv, cwd);
+                    }
+                },
                 // The reason was shown as the prompt, so the error adds nothing:
                 // an empty message exits 2 in silence.
                 Gate::Declined => return Err(usage(String::new())),

@@ -360,7 +360,7 @@ fn an_option_that_makes_git_run_another_program_is_refused() {
         &["git", "clone", "--bare", "--upload-pack=evil", "host:thing"],
     ] {
         assert!(
-            matches!(git_expects(words), Err(Refusal::Refused(_))),
+            matches!(git_expects(words), Err(Refusal::Refused(_, _))),
             "{words:?}: {:?}",
             git_expects(words)
         );
@@ -369,7 +369,7 @@ fn an_option_that_makes_git_run_another_program_is_refused() {
 
 #[test]
 fn a_refusal_names_the_option_and_says_to_run_git_directly() {
-    let Err(Refusal::Refused(why)) = git_expects(&["git", "clone", "--upload-pack=evil", "x"])
+    let Err(Refusal::Refused(why, _)) = git_expects(&["git", "clone", "--upload-pack=evil", "x"])
     else {
         panic!("refused");
     };
@@ -377,6 +377,59 @@ fn a_refusal_names_the_option_and_says_to_run_git_directly() {
         why,
         "`--upload-pack` makes git run another program, so it is not passed on. Run git directly."
     );
+}
+
+#[test]
+fn a_recognized_git_line_refused_for_an_option_still_knows_the_repo_it_would_make() {
+    // Refused for an option, yet dexily can place the repo all the same: the
+    // expectation rides on the refusal, for a terminal override to track. The
+    // refused word's own value is stepped over, so `repo` is the folder, not
+    // the template path.
+    for (words, folder) in [
+        (&["git", "init", "--template", "hooks", "repo"][..], "repo"),
+        (&["git", "init", "--template=hooks"][..], ""),
+        (
+            &[
+                "git",
+                "-C",
+                "sub",
+                "clone",
+                "--upload-pack",
+                "evil",
+                "host:thing",
+            ][..],
+            "sub/thing",
+        ),
+    ] {
+        let Err(Refusal::Refused(_, Some(expectation))) = expect(&argv(words), cwd()) else {
+            panic!("{words:?} should carry its expectation");
+        };
+        assert_eq!(
+            expectation.folders,
+            vec![Expected {
+                folder: cwd().join(folder),
+                proof: Proof::Holds(".git"),
+            }],
+            "{words:?}"
+        );
+    }
+}
+
+#[test]
+fn a_refused_git_line_whose_folder_cannot_be_placed_carries_no_expectation() {
+    // The refused word is an abbreviation or a run of short options: it might
+    // eat the next word, so where the repo lands is a guess. Rather than track
+    // the wrong folder, dexily offers nothing, and an override tracks nothing.
+    for words in [
+        &["git", "clone", "--upl", "x", "host:thing"][..],
+        &["git", "clone", "-qu", "evil", "host:thing"],
+        &["git", "--shallow-file", "init", "app"],
+    ] {
+        let Err(Refusal::Refused(_, overridden)) = expect(&argv(words), cwd()) else {
+            panic!("{words:?} should be refused");
+        };
+        assert_eq!(overridden, None, "{words:?}");
+    }
 }
 
 #[test]
@@ -508,7 +561,7 @@ fn on_windows_git_may_be_named_with_its_exe_and_in_any_case() {
 
 fn refusal(words: &[&str]) -> String {
     match git_expects(words) {
-        Err(Refusal::Refused(why)) => why,
+        Err(Refusal::Refused(why, _)) => why,
         other => panic!("{words:?} should be refused, but: {other:?}"),
     }
 }
