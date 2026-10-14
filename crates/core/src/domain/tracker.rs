@@ -1,6 +1,12 @@
 use serde::{Deserialize, Serialize};
 
 use crate::detectors::git::GitInfo;
+use crate::detectors::go::GoInfo;
+use crate::detectors::godot::GodotInfo;
+use crate::detectors::node::NodeInfo;
+use crate::detectors::python::PythonInfo;
+use crate::detectors::rust::RustInfo;
+use crate::detectors::unity::UnityInfo;
 use crate::detectors::unreal::UnrealInfo;
 
 /// A project type detected on a directory, carrying whatever detail that
@@ -28,6 +34,12 @@ use crate::detectors::unreal::UnrealInfo;
 pub enum Tracker {
     Git(GitInfo),
     Unreal(UnrealInfo),
+    Node(NodeInfo),
+    Python(PythonInfo),
+    Go(GoInfo),
+    Godot(GodotInfo),
+    Unity(UnityInfo),
+    Rust(RustInfo),
 }
 
 impl Tracker {
@@ -41,6 +53,12 @@ impl Tracker {
         match self {
             Tracker::Git(_) => "Git",
             Tracker::Unreal(_) => "Unreal",
+            Tracker::Node(_) => "Node",
+            Tracker::Python(_) => "Python",
+            Tracker::Go(_) => "Go",
+            Tracker::Godot(_) => "Godot",
+            Tracker::Unity(_) => "Unity",
+            Tracker::Rust(_) => "Rust",
         }
     }
 

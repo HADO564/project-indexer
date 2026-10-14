@@ -85,6 +85,51 @@ fn a_tracker_carries_its_kind_under_one_key_beside_its_fields() {
 }
 
 #[test]
+fn the_new_marker_kinds_serialise_with_their_kind_and_fields() {
+    // Each kind is carried generically by `TrackerJson`: its kind under the one
+    // `kind` key, and its own fields flattened beside it — no per-kind code.
+    let cases = [
+        (
+            json!({ "Node": { "manifest_path": "/p", "name": "a", "version": "1" }}),
+            "node",
+            "name",
+            "a",
+        ),
+        (json!({ "Go": { "module": "m" }}), "go", "module", "m"),
+        (
+            json!({ "Godot": { "project_name": "g" }}),
+            "godot",
+            "project_name",
+            "g",
+        ),
+        (
+            json!({ "Python": { "marker": "pyproject.toml", "name": "p" }}),
+            "python",
+            "marker",
+            "pyproject.toml",
+        ),
+        (
+            json!({ "Unity": { "editor_version": "2021" }}),
+            "unity",
+            "editor_version",
+            "2021",
+        ),
+        (json!({ "Rust": { "name": "r" }}), "rust", "name", "r"),
+    ];
+
+    for (tracker, kind, field, value) in cases {
+        let doc = render(&Outcome::Project {
+            project: Box::new(project("app", json!([tracker]))),
+            tracker: Vec::new(),
+            group: None,
+        });
+        let t = &doc["data"]["trackers"][0];
+        assert_eq!(t["kind"], kind, "wrong kind for {kind}: {t}");
+        assert_eq!(t[field], value, "wrong {field} for {kind}: {t}");
+    }
+}
+
+#[test]
 fn a_query_matching_nothing_is_a_not_found_error() {
     let doc = render_error(
         Failure::NotFound {

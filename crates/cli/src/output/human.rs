@@ -342,6 +342,12 @@ fn kind_headers(kind: TrackerKind) -> Vec<&'static str> {
     match kind {
         TrackerKind::Git => vec!["BRANCH", "CHANGES"],
         TrackerKind::Unreal => vec!["ENGINE"],
+        TrackerKind::Node => vec!["PACKAGE", "VERSION"],
+        TrackerKind::Python => vec!["PACKAGE"],
+        TrackerKind::Go => vec!["MODULE"],
+        TrackerKind::Godot => vec!["PROJECT"],
+        TrackerKind::Unity => vec!["EDITOR"],
+        TrackerKind::Rust => vec!["CRATE"],
     }
 }
 
@@ -371,36 +377,145 @@ fn middle_cells(project: &Project, trackers: &[TrackerKind]) -> Vec<String> {
 /// filled. The `match` over `Tracker` names every variant, so a new detector
 /// fails the build here until someone decides what it shows.
 fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
+    // A field that is present but empty shows as `-`, the same placeholder a
+    // project missing the whole tracker gets in these columns.
+    let dash = || "-".to_string();
+    let or_dash = |value: &Option<String>| value.clone().unwrap_or_else(dash);
     match kind {
         TrackerKind::Git => {
             let info = project.trackers.iter().find_map(|t| match t {
                 Tracker::Git(git) => Some(git),
-                Tracker::Unreal(_) => None,
+                Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
             });
             match info {
                 Some(info) => {
                     let branch = if info.detached_head {
                         "detached".to_string()
                     } else {
-                        info.curr_branch.clone().unwrap_or_else(|| "-".to_string())
+                        info.curr_branch.clone().unwrap_or_else(dash)
                     };
                     let changes = if info.dirty { "dirty" } else { "clean" };
                     vec![branch, changes.to_string()]
                 }
-                None => vec!["-".to_string(), "-".to_string()],
+                None => vec![dash(), dash()],
             }
         }
         TrackerKind::Unreal => {
             let info = project.trackers.iter().find_map(|t| match t {
                 Tracker::Unreal(unreal) => Some(unreal),
-                Tracker::Git(_) => None,
+                Tracker::Git(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
             });
             match info {
-                Some(info) => vec![info
-                    .engine_association
-                    .clone()
-                    .unwrap_or_else(|| "-".to_string())],
-                None => vec!["-".to_string()],
+                Some(info) => vec![or_dash(&info.engine_association)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Node => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Node(node) => Some(node),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.name), or_dash(&info.version)],
+                None => vec![dash(), dash()],
+            }
+        }
+        TrackerKind::Python => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Python(python) => Some(python),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.name)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Go => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Go(go) => Some(go),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.module)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Godot => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Godot(godot) => Some(godot),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.project_name)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Unity => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Unity(unity) => Some(unity),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Rust(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.editor_version)],
+                None => vec![dash()],
+            }
+        }
+        TrackerKind::Rust => {
+            let info = project.trackers.iter().find_map(|t| match t {
+                Tracker::Rust(rust) => Some(rust),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_) => None,
+            });
+            match info {
+                Some(info) => vec![or_dash(&info.name)],
+                None => vec![dash()],
             }
         }
     }
@@ -413,11 +528,22 @@ fn kind_cells(project: &Project, kind: TrackerKind) -> Vec<String> {
 /// section for it rather than a heading with nothing under it. The `match`
 /// names every `Tracker` variant, as [`kind_cells`] does.
 fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, String)> {
+    // A detected tracker always shows at least one row, so `show` prints its
+    // section rather than a heading with nothing under it — an empty parsed
+    // field reads as `-`, as in the table columns.
+    let dash = || "-".to_string();
+    let or_dash = |value: &Option<String>| value.clone().unwrap_or_else(dash);
     match kind {
         TrackerKind::Git => {
             let Some(info) = project.trackers.iter().find_map(|t| match t {
                 Tracker::Git(git) => Some(git),
-                Tracker::Unreal(_) => None,
+                Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
             }) else {
                 return Vec::new();
             };
@@ -426,7 +552,7 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
                 if info.detached_head {
                     "detached".to_string()
                 } else {
-                    info.curr_branch.clone().unwrap_or_else(|| "-".to_string())
+                    info.curr_branch.clone().unwrap_or_else(dash)
                 },
             )];
             details.push((
@@ -441,7 +567,13 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
         TrackerKind::Unreal => {
             let Some(info) = project.trackers.iter().find_map(|t| match t {
                 Tracker::Unreal(unreal) => Some(unreal),
-                Tracker::Git(_) => None,
+                Tracker::Git(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
             }) else {
                 return Vec::new();
             };
@@ -453,6 +585,107 @@ fn kind_details(project: &Project, kind: TrackerKind) -> Vec<(&'static str, Stri
                 details.push(("vcs", vcs));
             }
             details
+        }
+        TrackerKind::Node => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Node(node) => Some(node),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            let mut details = vec![("package", or_dash(&info.name))];
+            if let Some(version) = info.version.clone() {
+                details.push(("version", version));
+            }
+            details
+        }
+        TrackerKind::Python => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Python(python) => Some(python),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            let mut details = Vec::new();
+            if let Some(name) = info.name.clone() {
+                details.push(("package", name));
+            }
+            // The marker is always present, so it anchors the section even when
+            // the project declares no name.
+            details.push(("marker", info.marker.clone()));
+            details
+        }
+        TrackerKind::Go => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Go(go) => Some(go),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("module", or_dash(&info.module))]
+        }
+        TrackerKind::Godot => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Godot(godot) => Some(godot),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Unity(_)
+                | Tracker::Rust(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("project", or_dash(&info.project_name))]
+        }
+        TrackerKind::Unity => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Unity(unity) => Some(unity),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Rust(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("editor", or_dash(&info.editor_version))]
+        }
+        TrackerKind::Rust => {
+            let Some(info) = project.trackers.iter().find_map(|t| match t {
+                Tracker::Rust(rust) => Some(rust),
+                Tracker::Git(_)
+                | Tracker::Unreal(_)
+                | Tracker::Node(_)
+                | Tracker::Python(_)
+                | Tracker::Go(_)
+                | Tracker::Godot(_)
+                | Tracker::Unity(_) => None,
+            }) else {
+                return Vec::new();
+            };
+            vec![("crate", or_dash(&info.name))]
         }
     }
 }

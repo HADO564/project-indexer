@@ -216,8 +216,8 @@ impl std::fmt::Display for View {
     }
 }
 
-/// The tracker kinds `--tracker` accepts, as `git` and `unreal` on the
-/// command line.
+/// The tracker kinds `--tracker` accepts — one per detector the build ships,
+/// spelled lowercase on the command line (`git`, `node`, `godot`, ...).
 ///
 /// One flag taking a value, rather than a `--git` and a `--unreal` flag, so a
 /// new detector adds a variant here instead of a flag and the rules for
@@ -226,6 +226,12 @@ impl std::fmt::Display for View {
 pub enum TrackerKind {
     Git,
     Unreal,
+    Node,
+    Python,
+    Go,
+    Godot,
+    Unity,
+    Rust,
 }
 
 impl TrackerKind {
@@ -235,6 +241,12 @@ impl TrackerKind {
         match self {
             TrackerKind::Git => "git",
             TrackerKind::Unreal => "unreal",
+            TrackerKind::Node => "node",
+            TrackerKind::Python => "python",
+            TrackerKind::Go => "go",
+            TrackerKind::Godot => "godot",
+            TrackerKind::Unity => "unity",
+            TrackerKind::Rust => "rust",
         }
     }
 }

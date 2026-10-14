@@ -132,7 +132,8 @@ fn several_kinds_come_from_a_comma_list_or_a_repeated_flag() {
 
 #[test]
 fn a_kind_no_detector_reports_is_rejected() {
-    let parsed = Cli::try_parse_from(["dexily", "list", "--tracker", "godot"]);
+    // `matlab` has no detector, so `--tracker` must refuse it at parse time.
+    let parsed = Cli::try_parse_from(["dexily", "list", "--tracker", "matlab"]);
 
     assert!(parsed.is_err(), "an unknown kind should not parse");
 }

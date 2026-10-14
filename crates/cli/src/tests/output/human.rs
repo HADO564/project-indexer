@@ -560,6 +560,108 @@ fn the_group_table_shows_each_group_with_its_count() {
     );
 }
 
+// The marker-file trackers: each gets its own column in `list` and its own
+// section in `show`, carrying whatever its detector parsed.
+
+fn node() -> serde_json::Value {
+    json!({ "Node": { "manifest_path": "/app/package.json", "name": "my-app", "version": "1.2.3" }})
+}
+fn go() -> serde_json::Value {
+    json!({ "Go": { "module": "github.com/me/thing" }})
+}
+fn godot() -> serde_json::Value {
+    json!({ "Godot": { "project_name": "My Game" }})
+}
+fn python() -> serde_json::Value {
+    json!({ "Python": { "marker": "pyproject.toml", "name": "mypkg" }})
+}
+fn unity() -> serde_json::Value {
+    json!({ "Unity": { "editor_version": "2021.3.0f1" }})
+}
+fn rust() -> serde_json::Value {
+    json!({ "Rust": { "name": "dexily" }})
+}
+
+#[test]
+fn the_node_kind_shows_a_package_and_a_version_column() {
+    let rendered = table(
+        &[project("app", "/home/me/work/app", json!([node()]), None)],
+        TableStyle {
+            tracker: vec![TrackerKind::Node],
+            ..Default::default()
+        },
+    );
+
+    assert!(rendered.contains("PACKAGE"), "{rendered}");
+    assert!(rendered.contains("VERSION"), "{rendered}");
+    assert!(rendered.contains("my-app"), "{rendered}");
+    assert!(rendered.contains("1.2.3"), "{rendered}");
+}
+
+#[test]
+fn each_new_kind_fills_its_column_and_adds_a_detail_section() {
+    let cases = [
+        (TrackerKind::Node, node(), "node", "my-app"),
+        (TrackerKind::Go, go(), "go", "github.com/me/thing"),
+        (TrackerKind::Godot, godot(), "godot", "My Game"),
+        (TrackerKind::Python, python(), "python", "mypkg"),
+        (TrackerKind::Unity, unity(), "unity", "2021.3.0f1"),
+        (TrackerKind::Rust, rust(), "rust", "dexily"),
+    ];
+
+    for (kind, tracker, section, value) in cases {
+        // `list`: the kind's column carries the parsed value.
+        let listed = table(
+            &[project(
+                "thing",
+                "/home/me/work/thing",
+                json!([tracker.clone()]),
+                None,
+            )],
+            TableStyle {
+                tracker: vec![kind],
+                ..Default::default()
+            },
+        );
+        assert!(
+            listed.contains(value),
+            "list column missing {value}: {listed}"
+        );
+
+        // `show`: a section headed by the kind, carrying the value.
+        let shown = detail(
+            project("thing", "/home/me/work/thing", json!([tracker]), None),
+            vec![kind],
+        );
+        assert!(
+            shown.contains(&format!("\n  {section}\n")),
+            "no {section} section: {shown}"
+        );
+        assert!(
+            shown.contains(value),
+            "show section missing {value}: {shown}"
+        );
+    }
+}
+
+#[test]
+fn a_detected_kind_with_empty_fields_still_shows_its_section() {
+    // A Go module with no `module` directive: the section still appears, with
+    // a `-` where the value would be, rather than vanishing.
+    let shown = detail(
+        project(
+            "thing",
+            "/home/me/work/thing",
+            json!([json!({ "Go": { "module": null }})]),
+            None,
+        ),
+        vec![TrackerKind::Go],
+    );
+
+    assert!(shown.contains("\n  go\n"), "{shown}");
+    assert!(has_row(&shown, "module", "-"), "{shown}");
+}
+
 #[test]
 fn show_through_a_pipe_has_no_glyphs_but_names_the_colour_and_icon() {
     let mut project = with_look(Some("violet"), Some("rocket"), Some("g-work"));

@@ -12,6 +12,12 @@ mod tests;
 
 pub use application::{GroupService, ProjectInspection, ProjectService, ScanService};
 pub use detectors::git::{GitError, GitInfo};
+pub use detectors::go::GoInfo;
+pub use detectors::godot::GodotInfo;
+pub use detectors::node::NodeInfo;
+pub use detectors::python::PythonInfo;
+pub use detectors::rust::RustInfo;
+pub use detectors::unity::UnityInfo;
 pub use detectors::unreal::{UnrealError, UnrealInfo};
 pub use detectors::{Detection, DetectorOutcome, DetectorRunner};
 pub use domain::{Group, InstalledApp, Project, Tracker, UpdateGroup, UpdateProject};
