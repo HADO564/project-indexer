@@ -17,6 +17,7 @@ fn saved_settings_load_back() {
         folder_color: Some(Color::HotPink),
         header_color: Some(Color::Gold),
         form_wrap: Some(false),
+        track_prompt: Some(false),
         icons: Some(IconStyle::Emoji),
     };
     save_to(&path, &saved).unwrap();
@@ -59,4 +60,35 @@ fn an_unset_form_wrap_is_not_written() {
     save_to(&path, &Settings::default()).unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(!text.contains("form_wrap"), "{text}");
+}
+
+#[test]
+fn a_file_from_before_track_prompt_loads_with_it_unset() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cli-settings.json");
+    std::fs::write(&path, r#"{"folder_color": "teal"}"#).unwrap();
+    assert_eq!(load_from(&path).unwrap().track_prompt, None);
+}
+
+#[test]
+fn an_unset_track_prompt_is_not_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cli-settings.json");
+    save_to(&path, &Settings::default()).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(!text.contains("track_prompt"), "{text}");
+}
+
+#[test]
+fn a_set_track_prompt_round_trips() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cli-settings.json");
+    for value in [true, false] {
+        let saved = Settings {
+            track_prompt: Some(value),
+            ..Settings::default()
+        };
+        save_to(&path, &saved).unwrap();
+        assert_eq!(load_from(&path).unwrap().track_prompt, Some(value));
+    }
 }

@@ -11,7 +11,7 @@ step with no pairing — and it works without the app installed.
 `config` all run against the app's database, and a bare `edit` in a terminal
 opens a full-screen form (`edit --full` for every field). `group` lists,
 creates, changes and deletes groups; a project joins one with `edit --group`.
-**The observer works for `mkdir`, `git init` and `git clone`**:
+**The observer works for `mkdir`, `git`, `cargo`, `go`, `gh repo create`, and the package/project managers' `init`** — the full list is in [Supported commands and programs](../../docs/cli/SUPPORTED-COMMANDS-AND-PROGRAMS.md):
 `dexily mkdir thing` makes the folder and tracks it, and
 `dexily git clone <repo>` does the same for a repository. The TUI still returns "not implemented". The command is `dexily`.
 
@@ -47,10 +47,13 @@ dexily <anything> --json        {"schema": 1, "data": …} on stdout, or {"schem
 
 Put `dexily` in front of a command and it runs the real one — same output, same
 prompts, same exit code — then tracks what the command created. **Only commands
-dexily has a recognizer for run at all**; today that is `mkdir` (`md` too on
-Windows), `git init` and `git clone`. Anything else — any other git command
-included — is refused before it starts, so a script or an agent given dexily can
-never use it to run arbitrary programs:
+dexily has a recognizer for run at all** — the
+[supported commands](../../docs/cli/SUPPORTED-COMMANDS-AND-PROGRAMS.md): `mkdir`,
+`git init`/`clone`, `cargo new`/`init`, `go mod init`, `gh repo create`, and the
+package/project managers' bare `init` (`npm`, `pnpm`, `yarn`, `poetry`, `uv`,
+`flutter create`, `deno init`, `zig init`). Anything else is refused before it
+starts — a script or an agent given dexily can never use it to run arbitrary
+programs:
 
 ```
 $ dexily mkdir friction
@@ -73,8 +76,10 @@ dexily: `--upload-pack` makes git run another program, so it is not passed on. R
 - **Overriding a refusal, at a terminal.** The refusal protects scripts and
   agents; a person who typed the command and can see why it was refused may run
   it anyway. dexily prints the reason, then asks `run it anyway? [y/N]` — a
-  deliberate `y` runs the command untouched, knowing dexily cannot vet it and
-  will **track nothing** it makes. The default is no, `--yes` never reaches this
+  deliberate `y` runs the command untouched. A refused `git init` / `git clone`
+  whose repo dexily already parsed is tracked, with the project flags applied;
+  anything else **tracks nothing**, dexily having no recognizer for what it made.
+  The default is no, `--yes` never reaches this
   prompt, and only a real terminal is ever asked: a pipe, a script, a redirect
   and `--json` cannot answer it and get the refusal as before. So the "no
   arbitrary programs" guarantee holds for everything but your own keyboard.
@@ -83,8 +88,9 @@ dexily: `--upload-pack` makes git run another program, so it is not passed on. R
   is no prompt with `--yes`, `--json`, project flags, or when stdin or stderr is
   not a terminal — then dexily tracks and says
   `dexily: tracking "friction" at …` on stderr. `--quiet` (`-q`) hides that
-  line, never a warning. Ctrl+C belongs to the command while it runs, and at
-  the prompt it ends dexily (130).
+  line, never a warning. `dexily config track-prompt off` silences the prompt
+  for good — every make then auto-tracks, as `--yes` does. Ctrl+C belongs to
+  the command while it runs, and at the prompt it ends dexily (130).
 - **Project flags go before the command** — `--name`, `--description`,
   `--add-tag`, `--set k=v`, `--notes`, `--open-with`, `--group`, `--color`,
   `--icon`, with `edit`'s rules — and are checked before it runs: a group that
@@ -97,7 +103,9 @@ dexily: `--upload-pack` makes git run another program, so it is not passed on. R
   working folder, or the one named (`-C <path>` moves the folder git works
   in). For `git clone`: the folder named, or the one git names from the
   address. Git's proof is a `.git` in the folder, which may have been there
-  already; `--bare` and `--mirror` run but track nothing. A failed command
+  already; `--bare` and `--mirror` run but track nothing. For `cargo new`: the
+  new folder; for `cargo init` and `go mod init`: the folder that gains a
+  `Cargo.toml` or `go.mod`. A failed command
   says `dexily: git clone failed (exit 128), nothing tracked`, and one that
   exits 0 without leaving a project says
   `dexily: mkdir made nothing new, nothing tracked`.
@@ -109,10 +117,12 @@ dexily: `--upload-pack` makes git run another program, so it is not passed on. R
   trackers are detected again
   (`dexily: "app" was already tracked; detected its trackers again`). Flags
   still apply to it, and add to its tags and properties, never replace them.
-- **Trackers are detected, not set**, so there is no recognizer for Unreal —
-  its projects are made in the editor. Any tracked folder holding a
-  `.uproject` gets the Unreal tracker: `dexily git clone` of an Unreal project
-  comes out with both.
+- **Trackers are detected, not set**, so a folder's kind is found from its
+  files however it was made — no recognizer needed. git, Unreal, Node, Python,
+  Go, Godot, Unity and Rust are detected today (the markers are listed in
+  [Supported commands and programs](../../docs/cli/SUPPORTED-COMMANDS-AND-PROGRAMS.md)).
+  Detection runs wherever a folder is tracked, so `dexily git clone` of an
+  Unreal or Godot project comes out with both its git and its engine tracker.
 - **A git line runs only if dexily knows every word of it.** Only the options
   dexily lists are passed on, each in full and one at a time; anything else is
   refused before git starts, exit 2 — an abbreviation (`--dep 1`), short

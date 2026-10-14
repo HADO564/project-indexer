@@ -40,13 +40,14 @@ use crate::confirm::{Gate, StdinConfirmer, TerminalGate, Track, UnsafeGate};
 use crate::context::Context;
 use crate::editor::{FormKind, TerminalEditor};
 use crate::output::json;
+use crate::settings;
 
 use flags::{Fields, ObserveFlags};
 use recognizers::Refusal;
 
 /// How an observed command was asked for: dexily's global flags, and its own
 /// flags for the project the command creates.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Options {
     /// `--yes`: track without asking.
     pub yes: bool,
@@ -54,11 +55,39 @@ pub struct Options {
     pub json: bool,
     /// `--quiet`: none of dexily's own lines, though never a warning.
     pub quiet: bool,
+    /// Whether to ask before tracking a folder the command made — the
+    /// `[Y/n/e]` prompt. Off (from `config track-prompt off`) auto-tracks, as
+    /// `--yes` does. [`run`] fills it from `cli-settings.json`; a test sets it.
+    pub track_prompt: bool,
     pub flags: ObserveFlags,
 }
 
-pub fn run(argv: &[OsString], options: Options) -> anyhow::Result<ExitCode> {
+impl Default for Options {
+    fn default() -> Self {
+        // Everything off except the track prompt, which is on by default — a
+        // fresh install asks, and `Options::default()` keeps that behaviour.
+        Self {
+            yes: false,
+            json: false,
+            quiet: false,
+            track_prompt: true,
+            flags: ObserveFlags::default(),
+        }
+    }
+}
+
+pub fn run(argv: &[OsString], mut options: Options) -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
+    // The one place the observer reads `cli-settings.json`: whether the track
+    // prompt is on. A broken or missing file must never stop the command, so
+    // any error falls back to prompting (the built-in default), as
+    // `resolve_look` does for the colours. Silently, unlike `resolve_look`: the
+    // observer's own `--json` document goes to stderr, so a warning here would
+    // corrupt it.
+    options.track_prompt = settings::load()
+        .ok()
+        .and_then(|saved| saved.track_prompt)
+        .unwrap_or(true);
     let (yes, json) = (options.yes, options.json);
     let code = observe(
         argv,
@@ -168,12 +197,19 @@ pub(crate) fn observe(
     let expectation = match recognizers::expect(argv, cwd) {
         Ok(expectation) => expectation,
         Err(refusal) => {
-            let reason = match refusal {
-                Refusal::Unknown => format!(
-                    "`{command}` isn't a command dexily observes (it knows: {}). Run it directly.",
-                    recognizers::KNOWN.join(", ")
+            // The reason to show, and — for a recognized git line refused only
+            // for an option — the repo it would still make, so an override can
+            // track it through the ordinary flow. An unknown command carries
+            // none: no recognizer knows what it leaves behind.
+            let (reason, overridden) = match refusal {
+                Refusal::Unknown => (
+                    format!(
+                        "`{command}` isn't a command dexily observes (it knows: {}). Run it directly.",
+                        recognizers::KNOWN.join(", ")
+                    ),
+                    None,
                 ),
-                Refusal::Refused(why) => why,
+                Refusal::Refused(why, expectation) => (why, expectation),
             };
             // `--json` is a machine's channel, with nobody to prompt; anything
             // else offers the gate, which itself declines when there is no
@@ -184,26 +220,43 @@ pub(crate) fn observe(
                 gate.allow(&reason)?
             };
             match verdict {
-                // A person said to run it. dexily has no recognizer for a
-                // refused command, so it runs untouched and nothing is tracked
-                // — the flags, which describe a project, have none to describe.
-                Gate::Allowed => {
-                    if !options.flags.is_empty() {
+                Gate::Allowed => match overridden {
+                    // A recognized git line the person chose to run anyway.
+                    // dexily still knows the repo it makes, so it falls through
+                    // to the ordinary flow — flags checked and applied, run,
+                    // confirm, track — exactly as a line it never refused. The
+                    // vetting it skipped was the human's to skip, at their own
+                    // terminal, where the guarantee was theirs to waive.
+                    Some(expectation) => {
                         voice.warn(
                             err,
                             format_args!(
-                                "dexily: ignoring the project flags — a command dexily cannot vet makes nothing it can track"
+                                "dexily: running `{command}` as you asked; tracking the repo it makes"
                             ),
                         );
+                        expectation
                     }
-                    voice.warn(
-                        err,
-                        format_args!(
-                            "dexily: running `{command}` as you asked; nothing it makes will be tracked"
-                        ),
-                    );
-                    return spawn::run(argv, cwd);
-                }
+                    // No recognizer for what it makes, so it runs untouched and
+                    // nothing is tracked — the flags, which describe a project,
+                    // have none to describe.
+                    None => {
+                        if !options.flags.is_empty() {
+                            voice.warn(
+                                err,
+                                format_args!(
+                                    "dexily: ignoring the project flags — a command dexily cannot vet makes nothing it can track"
+                                ),
+                            );
+                        }
+                        voice.warn(
+                            err,
+                            format_args!(
+                                "dexily: running `{command}` as you asked; nothing it makes will be tracked"
+                            ),
+                        );
+                        return spawn::run(argv, cwd);
+                    }
+                },
                 // The reason was shown as the prompt, so the error adds nothing:
                 // an empty message exits 2 in silence.
                 Gate::Declined => return Err(usage(String::new())),
@@ -216,9 +269,11 @@ pub(crate) fn observe(
     // dexily's own flags, checked before the command runs: a group that does
     // not exist must stop everything now, not after a folder has been made.
     // Flags also mean the user has already decided and described the project,
-    // and `--json` has nobody to ask: either way, no question.
+    // and `--json` has nobody to ask: either way, no question. The track prompt
+    // being off (`config track-prompt off`) is the user deciding once, for
+    // every run, to be asked nothing — the folder is tracked as under `--yes`.
     let database = Database::new(open);
-    let ask = options.flags.is_empty() && voice != Voice::Json;
+    let ask = options.flags.is_empty() && voice != Voice::Json && options.track_prompt;
     let fields = options
         .flags
         .check(&database, cwd, expectation.folders.len())

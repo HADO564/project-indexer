@@ -6,5 +6,11 @@
 //! reach the public API, which would mean widening it to suit tests.
 
 mod git;
+mod go;
+mod godot;
+mod node;
+mod python;
 mod runner;
+mod rust;
+mod unity;
 mod unreal;

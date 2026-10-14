@@ -53,3 +53,53 @@ fn form_wrap_rejects_anything_but_on_or_off() {
 fn form_wrap_reset_cannot_be_given_a_value_too() {
     assert!(Cli::try_parse_from(["dexily", "config", "form-wrap", "off", "--reset"]).is_err());
 }
+
+#[test]
+fn track_prompt_takes_on_or_off() {
+    assert!(matches!(
+        setting(&["dexily", "config", "track-prompt", "on"]),
+        Setting::TrackPrompt {
+            value: Some(Switch::On),
+            reset: false
+        }
+    ));
+    assert!(matches!(
+        setting(&["dexily", "config", "track-prompt", "off"]),
+        Setting::TrackPrompt {
+            value: Some(Switch::Off),
+            reset: false
+        }
+    ));
+}
+
+#[test]
+fn track_prompt_alone_shows_the_current_value() {
+    assert!(matches!(
+        setting(&["dexily", "config", "track-prompt"]),
+        Setting::TrackPrompt {
+            value: None,
+            reset: false
+        }
+    ));
+}
+
+#[test]
+fn track_prompt_takes_reset() {
+    assert!(matches!(
+        setting(&["dexily", "config", "track-prompt", "--reset"]),
+        Setting::TrackPrompt {
+            value: None,
+            reset: true
+        }
+    ));
+}
+
+#[test]
+fn track_prompt_rejects_anything_but_on_or_off() {
+    assert!(Cli::try_parse_from(["dexily", "config", "track-prompt", "sometimes"]).is_err());
+}
+
+#[test]
+fn track_prompt_reset_cannot_be_given_a_value_too() {
+    assert!(Cli::try_parse_from(["dexily", "config", "track-prompt", "off", "--reset"]).is_err());
+}

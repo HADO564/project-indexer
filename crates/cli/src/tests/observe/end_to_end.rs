@@ -71,6 +71,10 @@ struct Run {
     groups: Arc<GroupService>,
     /// Whether the database was opened at all.
     opened: Rc<Cell<bool>>,
+    /// Stands in for the `track_prompt` setting on disk: production reads it
+    /// from `cli-settings.json`, but a test here sets it before a run and the
+    /// harness threads it into `Options`. On by default, as a fresh install is.
+    track_prompt: Cell<bool>,
 }
 
 impl Run {
@@ -81,6 +85,7 @@ impl Run {
             projects: ctx.projects.clone(),
             groups: ctx.groups.clone(),
             opened: Rc::new(Cell::new(false)),
+            track_prompt: Cell::new(true),
         }
     }
 
@@ -104,6 +109,20 @@ impl Run {
         confirmer: impl Confirmer + 'static,
         editor: fn(&Project) -> Option<UpdateProject>,
     ) -> (anyhow::Result<i32>, String) {
+        self.go_with(cwd, words, &NoTerminal, confirmer, editor)
+    }
+
+    /// [`Run::go_in`] with a gate of its own — a person at the terminal
+    /// answering the "run it anyway?" prompt, for the override path, rather
+    /// than the no-terminal gate every ordinary run uses.
+    fn go_with(
+        &self,
+        cwd: &Path,
+        words: &[&str],
+        gate: &dyn UnsafeGate,
+        confirmer: impl Confirmer + 'static,
+        editor: fn(&Project) -> Option<UpdateProject>,
+    ) -> (anyhow::Result<i32>, String) {
         let mut argv = vec!["dexily"];
         argv.extend_from_slice(words);
         let cli = Cli::try_parse_from(argv).expect("arguments should parse");
@@ -114,6 +133,7 @@ impl Run {
             yes: cli.yes,
             json: cli.json,
             quiet: cli.quiet,
+            track_prompt: self.track_prompt.get(),
             flags: cli.observe,
         };
         let mut ctx = context(true, Scripted(editor));
@@ -126,7 +146,7 @@ impl Run {
             &command,
             cwd,
             options,
-            &NoTerminal,
+            gate,
             move || {
                 opened.set(true);
                 Ok(ctx)
@@ -189,6 +209,44 @@ fn with_nobody_to_ask_it_tracks_and_says_so() {
     assert_eq!(result.unwrap(), 0);
     assert_eq!(run.tracked().len(), 1);
     assert!(said.starts_with("dexily: tracking \"thing\" at "), "{said}");
+}
+
+#[test]
+fn with_the_track_prompt_off_it_tracks_without_asking_and_says_so() {
+    // `config track-prompt off` on disk. The folder is tracked as under
+    // `--yes` — no prompt, so `MustNotAsk` is never consulted — and the
+    // ordinary `tracking …` line is printed.
+    let run = Run::new();
+    run.track_prompt.set(false);
+    let (result, said) = run.go(&["mkdir", "thing"], MustNotAsk, never_asked);
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(tracked[0].name, "thing");
+    assert!(said.starts_with("dexily: tracking \"thing\" at "), "{said}");
+}
+
+#[test]
+fn the_track_prompt_off_still_asks_about_nothing_for_an_already_tracked_folder() {
+    // Off means auto-track, not re-track: a folder already tracked is still
+    // only re-detected, never asked about or created again.
+    let run = Run::new();
+    run.track_prompt.set(false);
+    run.go(&["mkdir", "thing"], MustNotAsk, never_asked)
+        .0
+        .unwrap();
+    let (result, said) = run.go_in(
+        &run.folder("thing"),
+        &["git", "init", "-q"],
+        MustNotAsk,
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    assert_eq!(run.tracked().len(), 1, "the same project, not a second one");
+    assert_eq!(
+        said,
+        "dexily: \"thing\" was already tracked; detected its trackers again\n"
+    );
 }
 
 #[test]
@@ -361,7 +419,9 @@ fn a_command_without_a_recognizer_never_runs() {
     assert!(is_usage(&result));
     assert_eq!(
         result.unwrap_err().to_string(),
-        "`rm` isn't a command dexily observes (it knows: mkdir, git init, git clone). Run it directly."
+        "`rm` isn't a command dexily observes (it knows: mkdir, git init, git clone, cargo new, \
+         cargo init, go mod init, gh repo create, npm init, pnpm init, yarn init, poetry init, \
+         uv init, flutter create, deno init, zig init). Run it directly."
     );
     assert!(run.folder("thing").is_dir(), "rm never ran");
 }
@@ -673,6 +733,75 @@ fn a_person_can_override_a_refusal_and_the_command_runs_but_is_not_tracked() {
 }
 
 #[test]
+fn overriding_a_refused_git_line_tracks_the_repo_with_its_git_tracker() {
+    // `--template` is an option dexily refuses, but a recognized git line all
+    // the same: dexily still knows the repo it would make. A person at the
+    // terminal says to run it anyway, and it is tracked through the ordinary
+    // flow — the `.git` proves it, the track prompt is answered. A harmless
+    // refused option, because with Gate::Allowed the command really runs, so
+    // the empty template folder is all it is handed.
+    let run = Run::new();
+    std::fs::create_dir(run.folder("tmpl")).unwrap();
+    let (result, said) = run.go_with(
+        run.root.path(),
+        &["git", "init", "--template", "tmpl", "repo"],
+        &Answered(Gate::Allowed),
+        Says(Some(Track::Yes)),
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(tracked[0].name, "repo");
+    assert_eq!(
+        Path::new(&tracked[0].directory),
+        std::fs::canonicalize(run.folder("repo")).unwrap()
+    );
+    assert!(has_git_tracker(&tracked[0]), "{:?}", tracked[0].trackers);
+    assert!(
+        said.contains("running `git init` as you asked")
+            && said.contains("tracking the repo it makes"),
+        "{said}"
+    );
+}
+
+#[test]
+fn an_overridden_git_line_applies_the_project_flags() {
+    // Unlike an unknown command's override, here the flags describe a repo
+    // dexily can track, so they are applied, not ignored — and with them set,
+    // no prompt: the ordinary flags flow, reached past the refusal.
+    let run = Run::new();
+    std::fs::create_dir(run.folder("tmpl")).unwrap();
+    let (result, said) = run.go_with(
+        run.root.path(),
+        &[
+            "--name",
+            "friction",
+            "--add-tag",
+            "rust",
+            "git",
+            "init",
+            "--template",
+            "tmpl",
+            "repo",
+        ],
+        &Answered(Gate::Allowed),
+        MustNotAsk,
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(tracked[0].name, "friction");
+    assert_eq!(tracked[0].tags, ["Rust"]);
+    assert!(has_git_tracker(&tracked[0]), "{:?}", tracked[0].trackers);
+    assert!(
+        !said.contains("ignoring the project flags"),
+        "the flags describe a repo dexily tracks, so they are applied: {said}"
+    );
+}
+
+#[test]
 fn declining_the_override_leaves_the_refused_command_unrun() {
     let run = Run::new();
     let words: Vec<OsString> = [
@@ -798,4 +927,103 @@ fn trackers_that_cannot_be_detected_again_leave_the_project_tracked_and_its_flag
         !said.contains("could not track") && !said.contains("dexily add"),
         "{said}"
     );
+}
+
+// cargo and go, with the real tools where the runner has them. `go` may be
+// absent on a runner, so its test skips rather than flakes; a Rust runner has
+// `cargo`, but it is guarded the same way for good measure.
+
+/// Whether a tool is on `PATH`: spawning it at all means it is there, whatever
+/// it does with no arguments.
+fn on_path(tool: &str) -> bool {
+    std::process::Command::new(tool).output().is_ok()
+}
+
+#[test]
+fn cargo_new_tracks_the_folder_it_made() {
+    if !on_path("cargo") {
+        return;
+    }
+    let run = Run::new();
+    // `--vcs none` keeps the scaffold to just the folder and its `Cargo.toml`.
+    let (result, _) = run.go(
+        &["cargo", "new", "-q", "--vcs", "none", "pkg"],
+        Says(Some(Track::Yes)),
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(
+        Path::new(&tracked[0].directory),
+        std::fs::canonicalize(run.folder("pkg")).unwrap()
+    );
+    assert!(run.folder("pkg").join("Cargo.toml").is_file());
+}
+
+#[test]
+fn cargo_init_tracks_the_folder_it_wrote_cargo_toml_into() {
+    if !on_path("cargo") {
+        return;
+    }
+    let run = Run::new();
+    std::fs::create_dir(run.folder("here")).unwrap();
+    let (result, _) = run.go_in(
+        &run.folder("here"),
+        &["cargo", "init", "-q", "--vcs", "none"],
+        Says(Some(Track::Yes)),
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(
+        Path::new(&tracked[0].directory),
+        std::fs::canonicalize(run.folder("here")).unwrap()
+    );
+    assert!(run.folder("here").join("Cargo.toml").is_file());
+}
+
+#[test]
+fn go_mod_init_tracks_the_working_folder() {
+    if !on_path("go") {
+        return;
+    }
+    let run = Run::new();
+    std::fs::create_dir(run.folder("svc")).unwrap();
+    let (result, _) = run.go_in(
+        &run.folder("svc"),
+        &["go", "mod", "init", "example.com/svc"],
+        Says(Some(Track::Yes)),
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(
+        Path::new(&tracked[0].directory),
+        std::fs::canonicalize(run.folder("svc")).unwrap()
+    );
+    assert!(run.folder("svc").join("go.mod").is_file());
+}
+
+#[test]
+fn a_cargo_option_dexily_does_not_model_is_refused_before_cargo_runs() {
+    // No tool needed: the refusal happens before anything would run, so the
+    // folder is never made whatever `cargo` on the runner would do.
+    let run = Run::new();
+    let (result, _) = run.go(
+        &[
+            "cargo",
+            "new",
+            "--config",
+            "net.git-fetch-with-cli=true",
+            "pkg",
+        ],
+        MustNotAsk,
+        never_asked,
+    );
+    assert!(is_usage(&result));
+    assert!(!run.folder("pkg").exists(), "cargo must not have run");
+    assert!(run.tracked().is_empty());
 }
