@@ -118,9 +118,11 @@ dexily: `--upload-pack` makes git run another program, so it is not passed on. R
   (`dexily: "app" was already tracked; detected its trackers again`). Flags
   still apply to it, and add to its tags and properties, never replace them.
 - **Trackers are detected, not set**, so a folder's kind is found from its
-  files however it was made — no recognizer needed. git, Unreal, Node, Python,
-  Go, Godot, Unity and Rust are detected today (the markers are listed in
-  [Supported commands and programs](../../docs/cli/SUPPORTED-COMMANDS-AND-PROGRAMS.md)).
+  files however it was made — no recognizer needed. git, Unreal and the common
+  language and build ecosystems (Node, Python, Go, Rust, CMake, Maven, Gradle,
+  Docker, and more) are detected today — the full list and the files that find
+  them are in
+  [Supported commands and programs](../../docs/cli/SUPPORTED-COMMANDS-AND-PROGRAMS.md).
   Detection runs wherever a folder is tracked, so `dexily git clone` of an
   Unreal or Godot project comes out with both its git and its engine tracker.
 - **A git line runs only if dexily knows every word of it.** Only the options
