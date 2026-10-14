@@ -438,6 +438,19 @@ fn a_command_is_labelled_as_a_person_would_name_it() {
     assert_eq!(label(&argv(&["git", "clone", "u"])), "git clone");
     assert_eq!(label(&argv(&["git", "-C", "sub", "push"])), "git push");
     assert_eq!(label(&argv(&["git"])), "git");
+    // cargo and go name the subcommand, whether dexily runs the line or not.
+    assert_eq!(label(&argv(&["cargo", "new", "app"])), "cargo new");
+    assert_eq!(label(&argv(&["cargo", "init"])), "cargo init");
+    assert_eq!(
+        label(&argv(&["cargo", "build", "--release"])),
+        "cargo build"
+    );
+    assert_eq!(label(&argv(&["cargo", "--version"])), "cargo");
+    assert_eq!(label(&argv(&["cargo"])), "cargo");
+    assert_eq!(label(&argv(&["go", "mod", "init", "x"])), "go mod init");
+    assert_eq!(label(&argv(&["go", "mod", "tidy"])), "go mod tidy");
+    assert_eq!(label(&argv(&["go", "build"])), "go build");
+    assert_eq!(label(&argv(&["go"])), "go");
 }
 
 // Git's proof: the folder holds a `.git` now, whether or not it did before.
@@ -747,4 +760,171 @@ fn asking_git_about_itself_is_not_a_project_command() {
     // Known words, no subcommand: unknown rather than refused.
     assert_eq!(git_expects(&["git", "--version"]), Err(Refusal::Unknown));
     assert_eq!(git_expects(&["git", "--help"]), Err(Refusal::Unknown));
+}
+
+// cargo: `new` makes the folder it names (like `mkdir`), `init` writes a
+// `Cargo.toml` into a folder (like `git init`'s `.git`). Only these two run,
+// and only with options dexily models.
+
+fn expects(words: &[&str]) -> Result<Vec<Expected>, Refusal> {
+    expect(&argv(words), cwd()).map(|e| e.folders)
+}
+
+fn new_folder_at(path: &str) -> Result<Vec<Expected>, Refusal> {
+    Ok(vec![Expected {
+        folder: cwd().join(path),
+        proof: Proof::NewFolder,
+    }])
+}
+
+fn holds_at(path: &str, entry: &'static str) -> Result<Vec<Expected>, Refusal> {
+    Ok(vec![Expected {
+        folder: cwd().join(path),
+        proof: Proof::Holds(entry),
+    }])
+}
+
+#[test]
+fn cargo_new_expects_the_folder_it_names_as_a_new_folder() {
+    assert_eq!(expects(&["cargo", "new", "app"]), new_folder_at("app"));
+    assert_eq!(
+        expects(&["cargo", "new", "-q", "--vcs", "none", "app"]),
+        new_folder_at("app")
+    );
+    assert_eq!(
+        expects(&["cargo", "new", "--lib", "--", "-odd"]),
+        new_folder_at("-odd"),
+        "after `--` a name may start with a dash"
+    );
+}
+
+#[test]
+fn cargo_new_options_with_a_value_are_not_the_folder() {
+    for words in [
+        &["cargo", "new", "--edition", "2021", "app"][..],
+        &["cargo", "new", "--edition=2021", "app"],
+        &["cargo", "new", "--name", "mycrate", "app"],
+        &[
+            "cargo",
+            "new",
+            "--vcs",
+            "git",
+            "--registry",
+            "crates-io",
+            "app",
+        ],
+    ] {
+        assert_eq!(expects(words), new_folder_at("app"), "{words:?}");
+    }
+}
+
+#[test]
+fn cargo_new_with_no_path_names_no_folder_but_is_still_known() {
+    // It runs — cargo prints its usage, `--help` works — and there is nothing
+    // to track, exactly as `mkdir` with no name or `git clone` with no repo.
+    for words in [&["cargo", "new"][..], &["cargo", "new", "--help"]] {
+        assert_eq!(expects(words), Ok(Vec::new()), "{words:?}");
+    }
+}
+
+#[test]
+fn cargo_init_is_the_working_folder_or_the_one_it_names() {
+    assert_eq!(expects(&["cargo", "init"]), holds_at("", "Cargo.toml"));
+    assert_eq!(
+        expects(&["cargo", "init", "app"]),
+        holds_at("app", "Cargo.toml")
+    );
+    assert_eq!(
+        expects(&["cargo", "init", "-q", "--lib", "--edition=2021"]),
+        holds_at("", "Cargo.toml")
+    );
+}
+
+#[test]
+fn a_cargo_option_dexily_does_not_model_is_refused() {
+    for words in [
+        // Config injection and unstable flags: refused, not modelled.
+        &["cargo", "new", "--config", "net.offline=true", "app"][..],
+        &["cargo", "new", "-Z", "unstable-options", "app"],
+        &["cargo", "init", "--manifest-path", "x", "app"],
+        // An abbreviation is not the option: cargo takes some, dexily does not.
+        &["cargo", "new", "--edi", "2021", "app"],
+        // Short options run together, as git refuses `-qu`.
+        &["cargo", "new", "-qv", "app"],
+        // A flag given a value it does not take.
+        &["cargo", "new", "--lib=yes", "app"],
+    ] {
+        assert!(
+            matches!(expects(words), Err(Refusal::Refused(..))),
+            "{words:?}: {:?}",
+            expects(words)
+        );
+    }
+}
+
+#[test]
+fn a_refused_cargo_option_names_it_and_says_to_run_cargo_directly() {
+    let Err(Refusal::Refused(why, _)) = expects(&["cargo", "new", "--config", "x=y", "app"]) else {
+        panic!("refused");
+    };
+    assert!(
+        why.starts_with("`--config` is not an option dexily models for `cargo new`:"),
+        "{why}"
+    );
+    assert!(why.ends_with("Run `cargo new` directly."), "{why}");
+}
+
+#[test]
+fn any_other_cargo_command_is_not_known() {
+    for words in [
+        &["cargo", "build"][..],
+        &["cargo", "run"],
+        &["cargo", "test"],
+        &["cargo", "add", "serde"],
+        &["cargo"],
+    ] {
+        assert_eq!(expects(words), Err(Refusal::Unknown), "{words:?}");
+    }
+}
+
+// go: the one shape is `go mod init`, which writes a `go.mod` in the working
+// folder (like `git init`'s `.git`). The `[module]` argument is a module path,
+// never a folder.
+
+#[test]
+fn go_mod_init_expects_the_working_folder() {
+    assert_eq!(expects(&["go", "mod", "init"]), holds_at("", "go.mod"));
+    assert_eq!(
+        expects(&["go", "mod", "init", "example.com/you/thing"]),
+        holds_at("", "go.mod"),
+        "the module path is not a folder"
+    );
+}
+
+#[test]
+fn go_mod_init_takes_no_options() {
+    for words in [
+        &["go", "mod", "init", "-x"][..],
+        &["go", "mod", "init", "--anything", "example.com/x"],
+    ] {
+        assert!(
+            matches!(expects(words), Err(Refusal::Refused(..))),
+            "{words:?}: {:?}",
+            expects(words)
+        );
+    }
+}
+
+#[test]
+fn any_other_go_command_is_not_known() {
+    for words in [
+        &["go", "build"][..],
+        &["go", "run", "."],
+        &["go", "mod"],
+        &["go", "mod", "tidy"],
+        &["go", "version"],
+        &["go"],
+    ] {
+        assert_eq!(expects(words), Err(Refusal::Unknown), "{words:?}");
+    }
 }

@@ -3,16 +3,24 @@
 //! has run, whether it did.
 //!
 //! One recognizer per command, each with its project-folder rule beside it:
-//! `mkdir`, `git init`, `git clone`. A tracker with no command of its own needs
-//! none — an Unreal project is made in the editor, and core's detectors find
-//! its `.uproject` in whichever folder is tracked.
+//! `mkdir`, `git init`, `git clone`, `cargo new`, `cargo init`, `go mod init`.
+//! A tracker with no command of its own needs none — an Unreal project is made
+//! in the editor, and core's detectors find its `.uproject` in whichever folder
+//! is tracked.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 /// The commands dexily observes, for the message that refuses any other. One
 /// entry per recognizer in [`expect`].
-pub const KNOWN: &[&str] = &["mkdir", "git init", "git clone"];
+pub const KNOWN: &[&str] = &[
+    "mkdir",
+    "git init",
+    "git clone",
+    "cargo new",
+    "cargo init",
+    "go mod init",
+];
 
 /// What a command should leave behind, worked out before it runs.
 #[derive(Debug, PartialEq, Eq)]
@@ -135,7 +143,35 @@ pub fn label(argv: &[OsString]) -> String {
             return format!("git {subcommand}");
         }
     }
+    // cargo and go name the subcommand straight after the program: one word
+    // for cargo (`cargo new`, `cargo build`), two for go (`go mod init`,
+    // `go mod tidy`). The folder argument is not part of the name, so the walk
+    // stops at the first option — a line that names no subcommand is just the
+    // program.
+    if program == "cargo" {
+        return with_subcommand(&program, &argv[1..], 1);
+    }
+    if program == "go" {
+        return with_subcommand(&program, &argv[1..], 2);
+    }
     program
+}
+
+/// `program` followed by up to `depth` leading words that are not options — the
+/// command as a person would name it in dexily's own lines, whether dexily runs
+/// it or refuses it. The walk stops at the first option, since an option is
+/// never part of the name.
+fn with_subcommand(program: &str, rest: &[OsString], depth: usize) -> String {
+    let mut name = program.to_string();
+    for arg in rest.iter().take(depth) {
+        let word = arg.to_string_lossy();
+        if word.starts_with('-') {
+            break;
+        }
+        name.push(' ');
+        name.push_str(&word);
+    }
+    name
 }
 
 /// What `argv` should leave behind, or why dexily will not run it — the
@@ -173,6 +209,8 @@ pub fn expect_on(argv: &[OsString], cwd: &Path, windows: bool) -> Result<Expecta
             }
             Err(unknown) => return Err(unknown),
         },
+        "cargo" => cargo(rest, cwd)?,
+        "go" => go(rest, cwd)?,
         _ => return Err(Refusal::Unknown),
     };
     // A folder named twice (`mkdir -p a a`) is one folder: one question, one
@@ -649,6 +687,183 @@ fn humanish(repository: &str) -> Option<String> {
     let name = name.strip_suffix(".git").unwrap_or(name);
     let name = name.strip_suffix(".bundle").unwrap_or(name);
     (!name.is_empty()).then(|| name.to_string())
+}
+
+/// cargo's subcommands that make a project — the only ones that run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CargoCommand {
+    New,
+    Init,
+}
+
+impl CargoCommand {
+    fn parse(subcommand: Option<&str>) -> Option<Self> {
+        match subcommand? {
+            "new" => Some(Self::New),
+            "init" => Some(Self::Init),
+            _ => None,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::New => "cargo new",
+            Self::Init => "cargo init",
+        }
+    }
+
+    /// Its proof: `cargo new`'s folder is new — absent before, there after,
+    /// like `mkdir`; `cargo init`'s folder may have been there already (it is
+    /// usually run inside one), and is proven by the `Cargo.toml` it drops in,
+    /// like `git init`'s `.git`.
+    fn proof(self) -> Proof {
+        match self {
+            Self::New => Proof::NewFolder,
+            Self::Init => Proof::Holds("Cargo.toml"),
+        }
+    }
+}
+
+/// The options dexily models for `cargo new` and `cargo init` — one set, since
+/// the two share a shape. Each is a safe switch or a plain value (a template, a
+/// quiet/verbose level, an edition, a package name, a VCS to initialise, a
+/// registry name, a colour choice); none of them makes cargo build, fetch or
+/// run anything, so scaffolding cannot become a way to run downloaded code. An
+/// option not here — `--config`, `-Z`, a later addition — is refused, not
+/// guessed at: the same fail-closed stance as git, for the same reason.
+const CARGO_OPTIONS: &[(&str, Takes)] = &[
+    ("--bin", Takes::Nothing),
+    ("--lib", Takes::Nothing),
+    ("-q", Takes::Nothing),
+    ("--quiet", Takes::Nothing),
+    ("-v", Takes::Nothing),
+    ("--verbose", Takes::Nothing),
+    ("--frozen", Takes::Nothing),
+    ("--locked", Takes::Nothing),
+    ("--offline", Takes::Nothing),
+    ("-h", Takes::Nothing),
+    ("--help", Takes::Nothing),
+    ("--edition", Takes::Value),
+    ("--name", Takes::Value),
+    ("--vcs", Takes::Value),
+    ("--registry", Takes::Value),
+    ("--color", Takes::Value),
+];
+
+/// `go mod init` takes no options of its own, so its table is empty and any
+/// word starting with `-` is refused.
+const GO_OPTIONS: &[(&str, Takes)] = &[];
+
+/// One option word for a cargo or go line, looked up in `table` — the analogue
+/// of git's [`passed_on`], without git's "runs a program" table: these
+/// scaffolders have no such option, so a word not in `table` is simply refused.
+/// Returns the option as spelled, what it takes, and whether a value came
+/// attached with `=`.
+fn modelled<'a>(
+    text: &'a str,
+    table: &[(&'static str, Takes)],
+    command: &str,
+) -> Result<(&'a str, Takes, bool), Refusal> {
+    let (name, attached) = match text.split_once('=') {
+        Some((name, _)) => (name, true),
+        None => (text, false),
+    };
+    match table.iter().find(|(known, _)| *known == name) {
+        Some((_, Takes::Nothing)) if attached => Err(Refusal::refused(format!(
+            "`{name}` takes no value, so `{text}` is not understood. Run `{command}` directly."
+        ))),
+        Some((_, takes)) => Ok((name, *takes, attached)),
+        None => Err(Refusal::refused(format!(
+            "`{name}` is not an option dexily models for `{command}`: options go in full and one \
+             at a time (`--edition 2021`, not `--ed 2021` or `-qv`). Run `{command}` directly."
+        ))),
+    }
+}
+
+/// A cargo or go subcommand's own words, read once: an unknown option refused,
+/// a `Value` option's value skipped so it is never read as a folder, and `--`
+/// ending the options. The positionals are returned in order — the folder each
+/// command wants is worked out from them afterwards.
+fn scaffold_args<'a>(
+    command: &str,
+    table: &[(&'static str, Takes)],
+    args: &'a [OsString],
+) -> Result<Vec<&'a OsString>, Refusal> {
+    let mut positionals = Vec::new();
+    let mut options_done = false;
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        let text = arg.to_string_lossy();
+        if options_done || !text.starts_with('-') || text == "-" {
+            positionals.push(arg);
+            continue;
+        }
+        if text == "--" {
+            options_done = true;
+            continue;
+        }
+        let (_, takes, attached) = modelled(&text, table, command)?;
+        // `Optional` takes a value only after `=`, never the next word; cargo
+        // and go model none, but the scanner handles it as git's does.
+        if takes == Takes::Value && !attached {
+            args.next();
+        }
+    }
+    Ok(positionals)
+}
+
+/// cargo: only `new` and `init` make a project, so only they run, and only with
+/// options dexily models. `cargo new` makes the folder it names; `cargo init`
+/// writes a `Cargo.toml` into the folder it names, or the working one when it
+/// names none. Anything else is unknown, like any `cargo build`.
+///
+/// Like git's, in two steps: the subcommand and its options first, every reason
+/// to refuse the line decided before the folder is worked out.
+fn cargo(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
+    let subcommand = args.first().map(|a| a.to_string_lossy());
+    let command = CargoCommand::parse(subcommand.as_deref()).ok_or(Refusal::Unknown)?;
+    let positionals = scaffold_args(command.name(), CARGO_OPTIONS, &args[1..])?;
+    Ok(cargo_folder(command, cwd, &positionals)
+        .map(|folder| Expected {
+            folder,
+            proof: command.proof(),
+        })
+        .into_iter()
+        .collect())
+}
+
+/// The folder a cargo line that will run should leave a project in, from its
+/// positionals: `cargo new`'s path, or `cargo init`'s path or the working
+/// folder when it names none. `cargo new` with no path only prints its usage,
+/// so there is nothing to track.
+fn cargo_folder(command: CargoCommand, cwd: &Path, positionals: &[&OsString]) -> Option<PathBuf> {
+    match command {
+        CargoCommand::New => positionals.first().map(|path| cwd.join(path)),
+        CargoCommand::Init => Some(match positionals.first() {
+            Some(path) => cwd.join(path),
+            None => cwd.to_path_buf(),
+        }),
+    }
+}
+
+/// go: the one shape dexily knows is `go mod init`, which writes a `go.mod` into
+/// the working folder — proven like `git init`'s `.git`. Any other `go` line is
+/// not a project command, so it is unknown. `go mod init` takes no options, so
+/// a word starting with `-` after it is refused, not ignored; its `[module]`
+/// argument names the module path, never a folder, so the folder tracked is
+/// always the working one.
+fn go(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
+    let word = |at: usize| args.get(at).map(|a| a.to_string_lossy());
+    if word(0).as_deref() != Some("mod") || word(1).as_deref() != Some("init") {
+        return Err(Refusal::Unknown);
+    }
+    // The empty table refuses any option; the module path is a positional we
+    // never read as a folder.
+    scaffold_args("go mod init", GO_OPTIONS, &args[2..])?;
+    Ok(vec![Expected {
+        folder: cwd.to_path_buf(),
+        proof: Proof::Holds("go.mod"),
+    }])
 }
 
 /// The folders to track: those whose proof holds now that the command has

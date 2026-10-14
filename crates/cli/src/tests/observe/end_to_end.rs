@@ -419,7 +419,8 @@ fn a_command_without_a_recognizer_never_runs() {
     assert!(is_usage(&result));
     assert_eq!(
         result.unwrap_err().to_string(),
-        "`rm` isn't a command dexily observes (it knows: mkdir, git init, git clone). Run it directly."
+        "`rm` isn't a command dexily observes (it knows: mkdir, git init, git clone, cargo new, \
+         cargo init, go mod init). Run it directly."
     );
     assert!(run.folder("thing").is_dir(), "rm never ran");
 }
@@ -925,4 +926,103 @@ fn trackers_that_cannot_be_detected_again_leave_the_project_tracked_and_its_flag
         !said.contains("could not track") && !said.contains("dexily add"),
         "{said}"
     );
+}
+
+// cargo and go, with the real tools where the runner has them. `go` may be
+// absent on a runner, so its test skips rather than flakes; a Rust runner has
+// `cargo`, but it is guarded the same way for good measure.
+
+/// Whether a tool is on `PATH`: spawning it at all means it is there, whatever
+/// it does with no arguments.
+fn on_path(tool: &str) -> bool {
+    std::process::Command::new(tool).output().is_ok()
+}
+
+#[test]
+fn cargo_new_tracks_the_folder_it_made() {
+    if !on_path("cargo") {
+        return;
+    }
+    let run = Run::new();
+    // `--vcs none` keeps the scaffold to just the folder and its `Cargo.toml`.
+    let (result, _) = run.go(
+        &["cargo", "new", "-q", "--vcs", "none", "pkg"],
+        Says(Some(Track::Yes)),
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(
+        Path::new(&tracked[0].directory),
+        std::fs::canonicalize(run.folder("pkg")).unwrap()
+    );
+    assert!(run.folder("pkg").join("Cargo.toml").is_file());
+}
+
+#[test]
+fn cargo_init_tracks_the_folder_it_wrote_cargo_toml_into() {
+    if !on_path("cargo") {
+        return;
+    }
+    let run = Run::new();
+    std::fs::create_dir(run.folder("here")).unwrap();
+    let (result, _) = run.go_in(
+        &run.folder("here"),
+        &["cargo", "init", "-q", "--vcs", "none"],
+        Says(Some(Track::Yes)),
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(
+        Path::new(&tracked[0].directory),
+        std::fs::canonicalize(run.folder("here")).unwrap()
+    );
+    assert!(run.folder("here").join("Cargo.toml").is_file());
+}
+
+#[test]
+fn go_mod_init_tracks_the_working_folder() {
+    if !on_path("go") {
+        return;
+    }
+    let run = Run::new();
+    std::fs::create_dir(run.folder("svc")).unwrap();
+    let (result, _) = run.go_in(
+        &run.folder("svc"),
+        &["go", "mod", "init", "example.com/svc"],
+        Says(Some(Track::Yes)),
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(
+        Path::new(&tracked[0].directory),
+        std::fs::canonicalize(run.folder("svc")).unwrap()
+    );
+    assert!(run.folder("svc").join("go.mod").is_file());
+}
+
+#[test]
+fn a_cargo_option_dexily_does_not_model_is_refused_before_cargo_runs() {
+    // No tool needed: the refusal happens before anything would run, so the
+    // folder is never made whatever `cargo` on the runner would do.
+    let run = Run::new();
+    let (result, _) = run.go(
+        &[
+            "cargo",
+            "new",
+            "--config",
+            "net.git-fetch-with-cli=true",
+            "pkg",
+        ],
+        MustNotAsk,
+        never_asked,
+    );
+    assert!(is_usage(&result));
+    assert!(!run.folder("pkg").exists(), "cargo must not have run");
+    assert!(run.tracked().is_empty());
 }
