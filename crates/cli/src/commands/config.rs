@@ -51,6 +51,17 @@ pub enum Setting {
         #[arg(long, conflicts_with = "value")]
         reset: bool,
     },
+    /// Show or set whether an observed command asks before tracking a folder
+    /// it made. Off auto-tracks every folder, as `--yes` does for one run.
+    TrackPrompt {
+        /// `on` or `off`. Omit it to show the current one.
+        #[arg(value_enum)]
+        value: Option<Switch>,
+
+        /// Go back to the built-in default (on).
+        #[arg(long, conflicts_with = "value")]
+        reset: bool,
+    },
     /// Show or set how icons are drawn: as Nerd Font glyphs (needs a Nerd
     /// Font in the terminal), as emoji, or not at all.
     Icons {
@@ -69,6 +80,7 @@ pub fn run(args: ConfigArgs, _ctx: &Context) -> anyhow::Result<Outcome> {
         Setting::FolderColor { color, reset } => color_setting(ColorSetting::Folder, color, reset),
         Setting::HeaderColor { color, reset } => color_setting(ColorSetting::Header, color, reset),
         Setting::FormWrap { value, reset } => form_wrap(value, reset),
+        Setting::TrackPrompt { value, reset } => track_prompt(value, reset),
         Setting::Icons { style, reset } => icons(style, reset),
     }
 }
@@ -130,6 +142,25 @@ fn form_wrap(value: Option<Switch>, reset: bool) -> anyhow::Result<Outcome> {
     }
     Ok(Outcome::FormWrap {
         wrap: settings.form_wrap.unwrap_or(true),
+    })
+}
+
+fn track_prompt(value: Option<Switch>, reset: bool) -> anyhow::Result<Outcome> {
+    let mut settings = load_settings(reset)?;
+    let changed = if reset {
+        settings.track_prompt = None;
+        true
+    } else if let Some(value) = value {
+        settings.track_prompt = Some(matches!(value, Switch::On));
+        true
+    } else {
+        false
+    };
+    if changed {
+        settings::save(&settings)?;
+    }
+    Ok(Outcome::TrackPrompt {
+        prompt: settings.track_prompt.unwrap_or(true),
     })
 }
 

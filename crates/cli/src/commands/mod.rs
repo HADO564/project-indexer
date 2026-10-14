@@ -137,6 +137,9 @@ pub enum Outcome {
     /// Whether the edit form's focus wraps at its ends, after `config
     /// form-wrap` showed or changed it.
     FormWrap { wrap: bool },
+    /// Whether an observed command asks before tracking a folder it made,
+    /// after `config track-prompt` showed or changed it.
+    TrackPrompt { prompt: bool },
     /// How icons are drawn, after `config icons` showed or changed it.
     Icons { style: IconStyle },
     /// Every group in the sidebar's order, each with its count of live

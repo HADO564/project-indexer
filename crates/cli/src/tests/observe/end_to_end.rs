@@ -71,6 +71,10 @@ struct Run {
     groups: Arc<GroupService>,
     /// Whether the database was opened at all.
     opened: Rc<Cell<bool>>,
+    /// Stands in for the `track_prompt` setting on disk: production reads it
+    /// from `cli-settings.json`, but a test here sets it before a run and the
+    /// harness threads it into `Options`. On by default, as a fresh install is.
+    track_prompt: Cell<bool>,
 }
 
 impl Run {
@@ -81,6 +85,7 @@ impl Run {
             projects: ctx.projects.clone(),
             groups: ctx.groups.clone(),
             opened: Rc::new(Cell::new(false)),
+            track_prompt: Cell::new(true),
         }
     }
 
@@ -114,6 +119,7 @@ impl Run {
             yes: cli.yes,
             json: cli.json,
             quiet: cli.quiet,
+            track_prompt: self.track_prompt.get(),
             flags: cli.observe,
         };
         let mut ctx = context(true, Scripted(editor));
@@ -189,6 +195,44 @@ fn with_nobody_to_ask_it_tracks_and_says_so() {
     assert_eq!(result.unwrap(), 0);
     assert_eq!(run.tracked().len(), 1);
     assert!(said.starts_with("dexily: tracking \"thing\" at "), "{said}");
+}
+
+#[test]
+fn with_the_track_prompt_off_it_tracks_without_asking_and_says_so() {
+    // `config track-prompt off` on disk. The folder is tracked as under
+    // `--yes` — no prompt, so `MustNotAsk` is never consulted — and the
+    // ordinary `tracking …` line is printed.
+    let run = Run::new();
+    run.track_prompt.set(false);
+    let (result, said) = run.go(&["mkdir", "thing"], MustNotAsk, never_asked);
+    assert_eq!(result.unwrap(), 0);
+    let tracked = run.tracked();
+    assert_eq!(tracked.len(), 1);
+    assert_eq!(tracked[0].name, "thing");
+    assert!(said.starts_with("dexily: tracking \"thing\" at "), "{said}");
+}
+
+#[test]
+fn the_track_prompt_off_still_asks_about_nothing_for_an_already_tracked_folder() {
+    // Off means auto-track, not re-track: a folder already tracked is still
+    // only re-detected, never asked about or created again.
+    let run = Run::new();
+    run.track_prompt.set(false);
+    run.go(&["mkdir", "thing"], MustNotAsk, never_asked)
+        .0
+        .unwrap();
+    let (result, said) = run.go_in(
+        &run.folder("thing"),
+        &["git", "init", "-q"],
+        MustNotAsk,
+        never_asked,
+    );
+    assert_eq!(result.unwrap(), 0);
+    assert_eq!(run.tracked().len(), 1, "the same project, not a second one");
+    assert_eq!(
+        said,
+        "dexily: \"thing\" was already tracked; detected its trackers again\n"
+    );
 }
 
 #[test]

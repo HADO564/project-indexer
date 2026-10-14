@@ -180,6 +180,9 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
         // every tracker in full.
         Outcome::Project { project, .. } => emit(out, &ProjectJson::from(project.as_ref())),
         Outcome::FormWrap { wrap } => emit(out, &serde_json::json!({ "form_wrap": wrap })),
+        Outcome::TrackPrompt { prompt } => {
+            emit(out, &serde_json::json!({ "track_prompt": prompt }))
+        }
         Outcome::Icons { style } => emit(out, &serde_json::json!({ "icons": style })),
         Outcome::Groups { groups } => {
             let groups: Vec<GroupJson> = groups

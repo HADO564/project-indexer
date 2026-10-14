@@ -150,7 +150,10 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
                 yes: cli.yes,
                 json: cli.json,
                 quiet: cli.quiet,
+                // `track_prompt` is read from `cli-settings.json` by
+                // `observe::run`; `..default` supplies its on-by-default here.
                 flags: cli.observe,
+                ..Default::default()
             },
         ),
     }

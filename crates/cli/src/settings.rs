@@ -32,6 +32,12 @@ pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub form_wrap: Option<bool>,
 
+    /// Whether an observed command that makes a folder asks before tracking it
+    /// (the `dexily: track "…"? [Y/n/e]` prompt). Missing means on; off
+    /// auto-tracks every folder, exactly as `--yes` does for one run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_prompt: Option<bool>,
+
     /// How icons are drawn before names in `list`, `show` and `group list`.
     /// Missing means off.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -308,6 +308,14 @@ fn form_wrap_is_reported_under_its_settings_key() {
 }
 
 #[test]
+fn track_prompt_is_reported_under_its_settings_key() {
+    assert_eq!(
+        render(&Outcome::TrackPrompt { prompt: true })["data"],
+        json!({ "track_prompt": true })
+    );
+}
+
+#[test]
 fn an_unchanged_edit_is_the_project_as_it_was() {
     let doc = render(&Outcome::Unchanged {
         project: Box::new(project("app", json!([]))),

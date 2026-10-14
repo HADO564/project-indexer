@@ -141,6 +141,9 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
         Outcome::FormWrap { wrap } => {
             writeln!(out, "{}", if *wrap { "on" } else { "off" })?;
         }
+        Outcome::TrackPrompt { prompt } => {
+            writeln!(out, "{}", if *prompt { "on" } else { "off" })?;
+        }
         Outcome::Icons { style } => {
             writeln!(out, "{}", style.name())?;
         }

@@ -40,13 +40,14 @@ use crate::confirm::{Gate, StdinConfirmer, TerminalGate, Track, UnsafeGate};
 use crate::context::Context;
 use crate::editor::{FormKind, TerminalEditor};
 use crate::output::json;
+use crate::settings;
 
 use flags::{Fields, ObserveFlags};
 use recognizers::Refusal;
 
 /// How an observed command was asked for: dexily's global flags, and its own
 /// flags for the project the command creates.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Options {
     /// `--yes`: track without asking.
     pub yes: bool,
@@ -54,11 +55,39 @@ pub struct Options {
     pub json: bool,
     /// `--quiet`: none of dexily's own lines, though never a warning.
     pub quiet: bool,
+    /// Whether to ask before tracking a folder the command made — the
+    /// `[Y/n/e]` prompt. Off (from `config track-prompt off`) auto-tracks, as
+    /// `--yes` does. [`run`] fills it from `cli-settings.json`; a test sets it.
+    pub track_prompt: bool,
     pub flags: ObserveFlags,
 }
 
-pub fn run(argv: &[OsString], options: Options) -> anyhow::Result<ExitCode> {
+impl Default for Options {
+    fn default() -> Self {
+        // Everything off except the track prompt, which is on by default — a
+        // fresh install asks, and `Options::default()` keeps that behaviour.
+        Self {
+            yes: false,
+            json: false,
+            quiet: false,
+            track_prompt: true,
+            flags: ObserveFlags::default(),
+        }
+    }
+}
+
+pub fn run(argv: &[OsString], mut options: Options) -> anyhow::Result<ExitCode> {
     let cwd = std::env::current_dir()?;
+    // The one place the observer reads `cli-settings.json`: whether the track
+    // prompt is on. A broken or missing file must never stop the command, so
+    // any error falls back to prompting (the built-in default), as
+    // `resolve_look` does for the colours. Silently, unlike `resolve_look`: the
+    // observer's own `--json` document goes to stderr, so a warning here would
+    // corrupt it.
+    options.track_prompt = settings::load()
+        .ok()
+        .and_then(|saved| saved.track_prompt)
+        .unwrap_or(true);
     let (yes, json) = (options.yes, options.json);
     let code = observe(
         argv,
@@ -216,9 +245,11 @@ pub(crate) fn observe(
     // dexily's own flags, checked before the command runs: a group that does
     // not exist must stop everything now, not after a folder has been made.
     // Flags also mean the user has already decided and described the project,
-    // and `--json` has nobody to ask: either way, no question.
+    // and `--json` has nobody to ask: either way, no question. The track prompt
+    // being off (`config track-prompt off`) is the user deciding once, for
+    // every run, to be asked nothing — the folder is tracked as under `--yes`.
     let database = Database::new(open);
-    let ask = options.flags.is_empty() && voice != Voice::Json;
+    let ask = options.flags.is_empty() && voice != Voice::Json && options.track_prompt;
     let fields = options
         .flags
         .check(&database, cwd, expectation.folders.len())
