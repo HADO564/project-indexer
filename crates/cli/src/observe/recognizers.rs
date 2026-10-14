@@ -17,6 +17,7 @@ pub const KNOWN: &[&str] = &[
     "mkdir",
     "git init",
     "git clone",
+    "git worktree add",
     "cargo new",
     "cargo init",
     "go mod init",
@@ -148,8 +149,16 @@ pub fn label(argv: &[OsString]) -> String {
     if program == "git" {
         // A line refused for an option before the subcommand has none to
         // name: it is just `git`.
-        if let Some(subcommand) = git_line(&argv[1..]).ok().and_then(|line| line.subcommand) {
-            return format!("git {subcommand}");
+        if let Ok(line) = git_line(&argv[1..]) {
+            if let Some(subcommand) = line.subcommand {
+                // `git worktree add` names two words, like `go mod init`;
+                // every other `git worktree` form, and every other
+                // subcommand, names just one.
+                if subcommand == "worktree" && word_is(line.rest.first(), "add") {
+                    return "git worktree add".to_string();
+                }
+                return format!("git {subcommand}");
+            }
         }
     }
     // cargo and go name the subcommand straight after the program: one word
@@ -399,6 +408,12 @@ fn option_arity(name: &str, passed: &[(&'static str, Takes)]) -> Option<Takes> {
         .map(|&(_, takes)| takes)
 }
 
+/// Whether an argument is exactly `word` — for the two-word subcommands
+/// (`git worktree add`) whose second word decides what runs.
+fn word_is(arg: Option<&OsString>, word: &str) -> bool {
+    arg.map(|a| a.to_string_lossy()).as_deref() == Some(word)
+}
+
 /// Git's line before the subcommand's own arguments.
 struct GitLine<'a> {
     /// Where `-C` moves git to, relative to the working folder. It may repeat.
@@ -442,13 +457,27 @@ fn git_line(args: &[OsString]) -> Result<GitLine<'_>, Refusal> {
 enum GitCommand {
     Init,
     Clone,
+    /// `git worktree add <path> [<commit-ish>]`: checks a working tree out of
+    /// an existing repo at `<path>`, which gets a `.git` *file* pointing back
+    /// at the repo — the same `.git` proof as `init`/`clone`.
+    WorktreeAdd,
 }
 
 impl GitCommand {
-    fn parse(subcommand: Option<&str>) -> Option<Self> {
+    /// The command a parsed git line names, and the arguments that are its
+    /// own — after the subcommand words are consumed. Every command but
+    /// `worktree` is one word, so `rest` passes straight through; `worktree`
+    /// is two, and only its `add` form makes a project, so it eats the `add`
+    /// and every other `worktree` form (`list`, `remove`, …) is `None`, as
+    /// unknown as `git push`.
+    fn resolve<'a>(
+        subcommand: Option<&str>,
+        rest: &'a [OsString],
+    ) -> Option<(Self, &'a [OsString])> {
         match subcommand? {
-            "init" => Some(Self::Init),
-            "clone" => Some(Self::Clone),
+            "init" => Some((Self::Init, rest)),
+            "clone" => Some((Self::Clone, rest)),
+            "worktree" if word_is(rest.first(), "add") => Some((Self::WorktreeAdd, &rest[1..])),
             _ => None,
         }
     }
@@ -457,6 +486,7 @@ impl GitCommand {
         match self {
             Self::Init => "git init",
             Self::Clone => "git clone",
+            Self::WorktreeAdd => "git worktree add",
         }
     }
 
@@ -525,15 +555,43 @@ impl GitCommand {
                 ("--reference-if-able", Value),
                 ("--separate-git-dir", Value),
             ],
+            // The real, safe options `git worktree add` takes. None names or
+            // runs a program (unlike `init`/`clone`, whose `--template` and
+            // `--upload-pack` do), so the fail-closed table needs no "runs a
+            // program" cousin — a word not here is simply refused, as on the
+            // others. `-b`/`-B` name a new branch, `--reason` a lock reason;
+            // the rest are plain switches.
+            Self::WorktreeAdd => &[
+                ("-f", Nothing),
+                ("--force", Nothing),
+                ("--detach", Nothing),
+                ("--checkout", Nothing),
+                ("--no-checkout", Nothing),
+                ("--lock", Nothing),
+                ("--reason", Value),
+                ("--orphan", Nothing),
+                ("-b", Value),
+                ("-B", Value),
+                ("--track", Nothing),
+                ("--no-track", Nothing),
+                ("--guess-remote", Nothing),
+                ("--no-guess-remote", Nothing),
+                ("--relative-paths", Nothing),
+                ("--no-relative-paths", Nothing),
+                ("-q", Nothing),
+                ("--quiet", Nothing),
+            ],
         }
     }
 
     /// How many arguments it reads: `init [folder]`, `clone <repository>
-    /// [folder]`.
+    /// [folder]`, `worktree add <path> [<commit-ish>]`. For `worktree add`
+    /// only the first is a folder — the second is a ref — but both are read
+    /// so a stray word after the ref is not mistaken for one.
     fn positionals(self) -> usize {
         match self {
             Self::Init => 1,
-            Self::Clone => 2,
+            Self::Clone | Self::WorktreeAdd => 2,
         }
     }
 }
@@ -574,17 +632,21 @@ fn git_args(command: GitCommand, args: &[OsString]) -> Result<GitArgs<'_>, Refus
     Ok(parsed)
 }
 
-/// Git: only `init` and `clone` make a project, so only they run, and only
-/// with options dexily knows. Their proof is a `.git` in the folder, which may
-/// have existed already.
+/// Git: only `init`, `clone` and `worktree add` make a project, so only they
+/// run, and only with options dexily knows. Each one's proof is a `.git` in
+/// the folder — a directory for `init`/`clone`, a file for `worktree add` —
+/// which may have existed already.
 ///
 /// In two steps, in this order: first every reason to refuse the line, then —
 /// only for a line that will run — the folder it should leave a project in.
 /// Nothing about the folder can therefore let a refused line through.
 fn git(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
     let line = git_line(args)?;
-    let command = GitCommand::parse(line.subcommand.as_deref()).ok_or(Refusal::Unknown)?;
-    let parsed = git_args(command, line.rest)?;
+    // `resolve` consumes the subcommand words — the `add` of `worktree add`
+    // among them — and hands back the arguments that are the command's own.
+    let (command, rest) =
+        GitCommand::resolve(line.subcommand.as_deref(), line.rest).ok_or(Refusal::Unknown)?;
+    let parsed = git_args(command, rest)?;
     refuse_address(command, &parsed)?;
 
     let base = cwd.join(&line.base);
@@ -600,9 +662,9 @@ fn git(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
 /// The repo a refused git line would still make, worked out while ignoring
 /// every reason it was refused — the same two steps as [`git`], but stepping
 /// over each option by its known arity ([`option_arity`]) instead of refusing
-/// it. `None` the moment a word cannot be placed: not `init` or `clone`, or an
-/// option no table knows, where the folder after it is a guess, so an override
-/// tracks nothing rather than the wrong thing.
+/// it. `None` the moment a word cannot be placed: not `init`, `clone` or
+/// `worktree add`, or an option no table knows, where the folder after it is
+/// a guess, so an override tracks nothing rather than the wrong thing.
 ///
 /// This is read only after a person at a terminal has overridden the refusal,
 /// never to decide whether the command runs: it cannot let a refused line
@@ -628,7 +690,10 @@ fn git_expectation(args: &[OsString], cwd: &Path) -> Option<Expectation> {
             at += 1;
         }
     };
-    let command = GitCommand::parse(Some(&subcommand))?;
+    // `resolve` consumes the subcommand words, the `add` of `worktree add`
+    // among them, so the walk below starts on the command's own arguments —
+    // or there is nothing to place (a non-`add` `worktree` form, say).
+    let (command, own) = GitCommand::resolve(Some(&subcommand), &args[at..])?;
 
     // The subcommand's own words: the same step-over, collecting the
     // positionals and whether it is a bare repository nobody works in.
@@ -637,7 +702,7 @@ fn git_expectation(args: &[OsString], cwd: &Path) -> Option<Expectation> {
         bare: false,
     };
     let mut options_done = false;
-    let mut rest = args[at..].iter();
+    let mut rest = own.iter();
     while let Some(arg) = rest.next() {
         let text = arg.to_string_lossy();
         if options_done || !text.starts_with('-') || text == "-" {
@@ -702,6 +767,10 @@ fn git_folder(command: GitCommand, base: &Path, parsed: &GitArgs) -> Option<Path
                 None => humanish(&repository).map(|name| base.join(name)),
             }
         }
+        // `worktree add <path> [<commit-ish>]`: the first positional is the
+        // new working tree's folder; the second, if any, is a ref to check
+        // out there, never a folder. With no path git only prints usage.
+        GitCommand::WorktreeAdd => parsed.positionals.first().map(|path| base.join(path)),
     }
 }
 
