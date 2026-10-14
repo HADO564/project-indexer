@@ -21,6 +21,10 @@ pub const KNOWN: &[&str] = &[
     "cargo init",
     "go mod init",
     "gh repo create",
+    "npm init",
+    "pnpm init",
+    "yarn init",
+    "poetry init",
 ];
 
 /// What a command should leave behind, worked out before it runs.
@@ -159,6 +163,10 @@ pub fn label(argv: &[OsString]) -> String {
     if program == "gh" {
         return with_subcommand(&program, &argv[1..], 2);
     }
+    // A package manager names one: `npm init`, `poetry init`, `npm install`.
+    if matches!(program.as_str(), "npm" | "pnpm" | "yarn" | "poetry") {
+        return with_subcommand(&program, &argv[1..], 1);
+    }
     program
 }
 
@@ -217,6 +225,8 @@ pub fn expect_on(argv: &[OsString], cwd: &Path, windows: bool) -> Result<Expecta
         "cargo" => cargo(rest, cwd)?,
         "go" => go(rest, cwd)?,
         "gh" => gh(rest, cwd)?,
+        "npm" | "pnpm" | "yarn" => package_manager_init(&name, rest, cwd)?,
+        "poetry" => poetry_init(rest, cwd)?,
         _ => return Err(Refusal::Unknown),
     };
     // A folder named twice (`mkdir -p a a`) is one folder: one question, one
@@ -962,6 +972,103 @@ fn gh(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
         folder: cwd.join(folder),
         proof: Proof::Holds(".git"),
     }])
+}
+
+/// The options dexily models for `npm` / `pnpm` / `yarn init` — a few safe
+/// switches and values; none runs code. An unknown flag is refused, like git's.
+const NODE_INIT_OPTIONS: &[(&str, Takes)] = &[
+    ("-y", Takes::Nothing),
+    ("--yes", Takes::Nothing),
+    ("-p", Takes::Nothing),
+    ("--private", Takes::Nothing),
+    ("--workspaces", Takes::Nothing),
+    ("-w", Takes::Value),
+    ("--workspace", Takes::Value),
+    ("--scope", Takes::Value),
+    ("-h", Takes::Nothing),
+    ("--help", Takes::Nothing),
+];
+
+/// The options dexily models for `poetry init` — it writes a `pyproject.toml`
+/// and installs nothing, so its flags are safe; an unknown one is refused.
+const POETRY_INIT_OPTIONS: &[(&str, Takes)] = &[
+    ("--name", Takes::Value),
+    ("--description", Takes::Value),
+    ("--author", Takes::Value),
+    ("--python", Takes::Value),
+    ("--dependency", Takes::Value),
+    ("--dev-dependency", Takes::Value),
+    ("--license", Takes::Value),
+    ("-n", Takes::Nothing),
+    ("--no-interaction", Takes::Nothing),
+    ("-q", Takes::Nothing),
+    ("--quiet", Takes::Nothing),
+    ("-h", Takes::Nothing),
+    ("--help", Takes::Nothing),
+];
+
+/// A package manager's `init` that writes a manifest in the working folder and
+/// nothing else. **Only the bare form runs:** a positional argument to
+/// `npm init` / `yarn init` names an *initializer* package, which npm downloads
+/// and runs (`npm init vite` is `npx create-vite`) — the very thing the
+/// allowlist exists to stop — so a line that has one is refused. The bare form
+/// only writes a file (and at most runs the user's own local init config, as
+/// `git init` may run their global template), so it is safe to pass on. Options
+/// fail closed, like git's.
+fn manifest_init(
+    command: &str,
+    table: &[(&'static str, Takes)],
+    manifest: &'static str,
+    args: &[OsString],
+    cwd: &Path,
+) -> Result<Vec<Expected>, Refusal> {
+    let positionals = scaffold_args(command, table, args)?;
+    if let Some(extra) = positionals.first() {
+        return Err(Refusal::refused(format!(
+            "`{command} {}` runs a downloaded package, so dexily does not pass it on — only a \
+             bare `{command}`, which just writes a {manifest}. Run it directly.",
+            extra.to_string_lossy()
+        )));
+    }
+    Ok(vec![Expected {
+        folder: cwd.to_path_buf(),
+        proof: Proof::Holds(manifest),
+    }])
+}
+
+/// `npm` / `pnpm` / `yarn`: only their bare `init` runs — see [`manifest_init`].
+/// Anything else (`npm install`, `npm run`, `npm create`) is unknown.
+fn package_manager_init(
+    tool: &str,
+    args: &[OsString],
+    cwd: &Path,
+) -> Result<Vec<Expected>, Refusal> {
+    if args.first().map(|a| a.to_string_lossy()).as_deref() != Some("init") {
+        return Err(Refusal::Unknown);
+    }
+    manifest_init(
+        &format!("{tool} init"),
+        NODE_INIT_OPTIONS,
+        "package.json",
+        &args[1..],
+        cwd,
+    )
+}
+
+/// `poetry`: only `poetry init` runs — it writes a `pyproject.toml` and installs
+/// nothing. `poetry new`, `poetry add` and the rest are unknown. (`pip` has no
+/// project-init command of its own, so none is recognised for it.)
+fn poetry_init(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
+    if args.first().map(|a| a.to_string_lossy()).as_deref() != Some("init") {
+        return Err(Refusal::Unknown);
+    }
+    manifest_init(
+        "poetry init",
+        POETRY_INIT_OPTIONS,
+        "pyproject.toml",
+        &args[1..],
+        cwd,
+    )
 }
 
 /// The folders to track: those whose proof holds now that the command has

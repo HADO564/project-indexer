@@ -11,7 +11,7 @@ step with no pairing — and it works without the app installed.
 `config` all run against the app's database, and a bare `edit` in a terminal
 opens a full-screen form (`edit --full` for every field). `group` lists,
 creates, changes and deletes groups; a project joins one with `edit --group`.
-**The observer works for `mkdir`, `git init`, `git clone`, `cargo new`/`init`, `go mod init` and `gh repo create`**:
+**The observer works for `mkdir`, `git init`/`clone`, `cargo new`/`init`, `go mod init`, `gh repo create`, and the package managers' bare `init` (`npm`, `pnpm`, `yarn`, `poetry`)**:
 `dexily mkdir thing` makes the folder and tracks it, and
 `dexily git clone <repo>` does the same for a repository. The TUI still returns "not implemented". The command is `dexily`.
 
@@ -48,12 +48,13 @@ dexily <anything> --json        {"schema": 1, "data": …} on stdout, or {"schem
 Put `dexily` in front of a command and it runs the real one — same output, same
 prompts, same exit code — then tracks what the command created. **Only commands
 dexily has a recognizer for run at all**; today that is `mkdir` (`md` too on
-Windows), `git init`, `git clone`, `cargo new`/`cargo init`, `go mod init` and
-`gh repo create` (which, with `--clone`, tracks the repo it clones locally).
-Anything else — any other git or gh command, and `npm`/`pnpm` (whose
-`init`/`create` run a downloaded package) among them — is refused before it
-starts, so a script or an agent given dexily can never use it to run arbitrary
-programs:
+Windows), `git init`/`clone`, `cargo new`/`init`, `go mod init`, `gh repo create`
+(with `--clone`, tracks the repo it clones), and the package managers' **bare**
+`init` — `npm`, `pnpm`, `yarn`, `poetry` — which only writes a manifest. Anything
+else is refused before it starts — `npm init <initializer>`, which downloads and
+runs a package (`npm init vite` is `npx create-vite`), and every other
+subcommand among it — so a script or an agent given dexily can never use it to
+run arbitrary programs:
 
 ```
 $ dexily mkdir friction

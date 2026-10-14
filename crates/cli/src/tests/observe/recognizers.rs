@@ -986,6 +986,73 @@ fn any_other_gh_command_is_not_known() {
     }
 }
 
+// npm / pnpm / yarn init write a package.json in the working folder; poetry
+// init writes a pyproject.toml. Only the bare form runs — an initializer
+// positional (`npm init vite`) downloads and runs a package, so it is refused.
+
+#[test]
+fn a_bare_package_manager_init_writes_its_manifest() {
+    for tool in ["npm", "pnpm", "yarn"] {
+        assert_eq!(
+            expects(&[tool, "init"]),
+            holds_at("", "package.json"),
+            "{tool}"
+        );
+        assert_eq!(
+            expects(&[tool, "init", "-y"]),
+            holds_at("", "package.json"),
+            "{tool} -y"
+        );
+    }
+    assert_eq!(expects(&["poetry", "init"]), holds_at("", "pyproject.toml"));
+    assert_eq!(
+        expects(&["poetry", "init", "--name", "thing", "-n"]),
+        holds_at("", "pyproject.toml")
+    );
+}
+
+#[test]
+fn an_init_with_an_initializer_is_refused() {
+    // The positional names a package npm would download and run.
+    for words in [
+        &["npm", "init", "vite"][..],
+        &["npm", "init", "@vue/create"],
+        &["yarn", "init", "react-app"],
+        &["pnpm", "init", "foo"],
+        &["poetry", "init", "foo"],
+    ] {
+        assert!(
+            matches!(expects(words), Err(Refusal::Refused(..))),
+            "{words:?}: {:?}",
+            expects(words)
+        );
+    }
+}
+
+#[test]
+fn an_init_with_an_unmodeled_flag_is_refused() {
+    assert!(matches!(
+        expects(&["npm", "init", "--registry=https://example.test"]),
+        Err(Refusal::Refused(..))
+    ));
+}
+
+#[test]
+fn any_package_manager_command_other_than_init_is_unknown() {
+    for words in [
+        &["npm", "install"][..],
+        &["npm", "run", "build"],
+        &["npm", "create", "vite"],
+        &["pnpm", "add", "x"],
+        &["yarn"],
+        &["poetry", "add", "x"],
+        &["poetry", "new", "x"],
+        &["poetry"],
+    ] {
+        assert_eq!(expects(words), Err(Refusal::Unknown), "{words:?}");
+    }
+}
+
 #[test]
 fn any_other_go_command_is_not_known() {
     for words in [
