@@ -1053,6 +1053,45 @@ fn any_package_manager_command_other_than_init_is_unknown() {
     }
 }
 
+// uv init scaffolds a Python project (a pyproject.toml) in the folder it names,
+// or the working one. Its positional is that folder — not a downloaded package
+// as npm's is — so it is tracked, like `cargo init`.
+
+#[test]
+fn uv_init_expects_the_folder_it_names_or_the_working_one() {
+    assert_eq!(expects(&["uv", "init"]), holds_at("", "pyproject.toml"));
+    assert_eq!(
+        expects(&["uv", "init", "app"]),
+        holds_at("app", "pyproject.toml")
+    );
+    assert_eq!(
+        expects(&["uv", "init", "--python", "3.12", "app"]),
+        holds_at("app", "pyproject.toml"),
+        "the --python value is not the folder"
+    );
+    assert_eq!(
+        expects(&["uv", "init", "--lib", "mylib"]),
+        holds_at("mylib", "pyproject.toml")
+    );
+}
+
+#[test]
+fn uv_init_fails_closed_and_other_uv_commands_are_unknown() {
+    assert!(matches!(
+        expects(&["uv", "init", "--badflag"]),
+        Err(Refusal::Refused(..))
+    ));
+    for words in [
+        &["uv", "add", "requests"][..],
+        &["uv", "sync"],
+        &["uv", "run", "main.py"],
+        &["uv", "pip", "install", "x"],
+        &["uv"],
+    ] {
+        assert_eq!(expects(words), Err(Refusal::Unknown), "{words:?}");
+    }
+}
+
 #[test]
 fn any_other_go_command_is_not_known() {
     for words in [

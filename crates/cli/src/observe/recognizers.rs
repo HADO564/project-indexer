@@ -25,6 +25,7 @@ pub const KNOWN: &[&str] = &[
     "pnpm init",
     "yarn init",
     "poetry init",
+    "uv init",
 ];
 
 /// What a command should leave behind, worked out before it runs.
@@ -164,7 +165,7 @@ pub fn label(argv: &[OsString]) -> String {
         return with_subcommand(&program, &argv[1..], 2);
     }
     // A package manager names one: `npm init`, `poetry init`, `npm install`.
-    if matches!(program.as_str(), "npm" | "pnpm" | "yarn" | "poetry") {
+    if matches!(program.as_str(), "npm" | "pnpm" | "yarn" | "poetry" | "uv") {
         return with_subcommand(&program, &argv[1..], 1);
     }
     program
@@ -227,6 +228,7 @@ pub fn expect_on(argv: &[OsString], cwd: &Path, windows: bool) -> Result<Expecta
         "gh" => gh(rest, cwd)?,
         "npm" | "pnpm" | "yarn" => package_manager_init(&name, rest, cwd)?,
         "poetry" => poetry_init(rest, cwd)?,
+        "uv" => uv(rest, cwd)?,
         _ => return Err(Refusal::Unknown),
     };
     // A folder named twice (`mkdir -p a a`) is one folder: one question, one
@@ -1069,6 +1071,54 @@ fn poetry_init(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> 
         &args[1..],
         cwd,
     )
+}
+
+/// The options dexily models for `uv init` — safe switches and values (a layout
+/// choice, a name, a Python version, a VCS). None installs or runs anything;
+/// uv's downloading happens in `uv add` / `uv sync` / `uv run`, which are not
+/// recognised. An unknown flag is refused, like git's.
+const UV_INIT_OPTIONS: &[(&str, Takes)] = &[
+    ("--package", Takes::Nothing),
+    ("--no-package", Takes::Nothing),
+    ("--lib", Takes::Nothing),
+    ("--app", Takes::Nothing),
+    ("--bare", Takes::Nothing),
+    ("--no-readme", Takes::Nothing),
+    ("--no-pin-python", Takes::Nothing),
+    ("--no-workspace", Takes::Nothing),
+    ("--name", Takes::Value),
+    ("-p", Takes::Value),
+    ("--python", Takes::Value),
+    ("--vcs", Takes::Value),
+    ("--description", Takes::Value),
+    ("--author-from", Takes::Value),
+    ("-q", Takes::Nothing),
+    ("--quiet", Takes::Nothing),
+    ("-v", Takes::Nothing),
+    ("--verbose", Takes::Nothing),
+    ("-h", Takes::Nothing),
+    ("--help", Takes::Nothing),
+];
+
+/// `uv`: only `uv init` runs — it scaffolds a Python project (a `pyproject.toml`
+/// and a little more) in the folder it names, or the working one when it names
+/// none. Unlike `npm init`, uv's positional is that folder, not a package it
+/// downloads and runs, so it is safe to pass on (proven by the `pyproject.toml`,
+/// like `cargo init`'s `Cargo.toml`). `uv add`, `uv sync`, `uv run`, `uv pip` —
+/// which do fetch and run — are unknown. Options fail closed, like git's.
+fn uv(args: &[OsString], cwd: &Path) -> Result<Vec<Expected>, Refusal> {
+    if args.first().map(|a| a.to_string_lossy()).as_deref() != Some("init") {
+        return Err(Refusal::Unknown);
+    }
+    let positionals = scaffold_args("uv init", UV_INIT_OPTIONS, &args[1..])?;
+    let folder = match positionals.first() {
+        Some(path) => cwd.join(path),
+        None => cwd.to_path_buf(),
+    };
+    Ok(vec![Expected {
+        folder,
+        proof: Proof::Holds("pyproject.toml"),
+    }])
 }
 
 /// The folders to track: those whose proof holds now that the command has
