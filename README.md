@@ -1,4 +1,4 @@
-# Project Indexer
+# Dexily
 
 A desktop app that keeps track of the projects scattered across your disk — what
 they are, where they are, and what opens them.
@@ -41,7 +41,7 @@ folder, an external drive — some are git repos, some are game projects, some a
 just a folder with a few files. Finding the one you want means remembering where
 you put it and which app opens it.
 
-Project Indexer keeps that in one place. It does not move your files, manage your
+Dexily keeps that in one place. It does not move your files, manage your
 repositories, or replace your editor. It is an index: a list that knows where
 everything is and how to open it.
 
@@ -113,6 +113,9 @@ Download the installer for your platform from the
 | Linux (Debian/Ubuntu) | `project-indexer_<version>_amd64.deb` |
 | Linux (Fedora/RHEL) | `project-indexer-<version>-1.x86_64.rpm` |
 | Linux (portable) | `project-indexer_<version>_amd64.AppImage` |
+
+Up to `0.3.5` these assets are named `project-indexer_<version>_…`; the app has
+been renamed to Dexily, so from the next release they are `Dexily_<version>_…`.
 
 Builds are unsigned, so Windows SmartScreen and macOS Gatekeeper will warn on
 first launch.
@@ -385,7 +388,7 @@ In short: **use it freely.** Personal use, internal company use, education and
 research are all fine, at no cost, with no seat count. You may read, modify and
 build on the source. The one thing you may not do is ship it — or something
 substantially like it — as a commercial product or service that competes with
-Project Indexer.
+Dexily.
 
 Every version becomes available under the plain **Apache License 2.0 two years
 after it is published**, automatically and irrevocably. The restriction protects
