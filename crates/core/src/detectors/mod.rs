@@ -15,12 +15,22 @@
 pub mod detector;
 pub mod runner;
 
+pub mod cmake;
+pub mod dart;
+pub mod docker;
+pub mod dotnet;
+pub mod elixir;
 pub mod git;
 pub mod go;
 pub mod godot;
+pub mod gradle;
+pub mod maven;
 pub mod node;
+pub mod php;
 pub mod python;
+pub mod ruby;
 pub mod rust;
+pub mod swift;
 pub mod unity;
 pub mod unreal;
 
@@ -42,5 +52,15 @@ pub fn default_detectors() -> Vec<Box<dyn Detector>> {
         Box::new(godot::GodotDetector),
         Box::new(unity::UnityDetector),
         Box::new(rust::RustDetector),
+        Box::new(cmake::CmakeDetector),
+        Box::new(maven::MavenDetector),
+        Box::new(gradle::GradleDetector),
+        Box::new(docker::DockerDetector),
+        Box::new(php::PhpDetector),
+        Box::new(ruby::RubyDetector),
+        Box::new(dart::DartDetector),
+        Box::new(swift::SwiftDetector),
+        Box::new(elixir::ElixirDetector),
+        Box::new(dotnet::DotnetDetector),
     ]
 }

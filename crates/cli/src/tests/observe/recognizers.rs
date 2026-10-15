@@ -438,6 +438,18 @@ fn a_command_is_labelled_as_a_person_would_name_it() {
     assert_eq!(label(&argv(&["git", "clone", "u"])), "git clone");
     assert_eq!(label(&argv(&["git", "-C", "sub", "push"])), "git push");
     assert_eq!(label(&argv(&["git"])), "git");
+    // `git worktree add` names two words, like `go mod init`; every other
+    // `worktree` form names just the one.
+    assert_eq!(
+        label(&argv(&["git", "worktree", "add", "wt"])),
+        "git worktree add"
+    );
+    assert_eq!(
+        label(&argv(&["git", "-C", "repo", "worktree", "add", "../wt"])),
+        "git worktree add"
+    );
+    assert_eq!(label(&argv(&["git", "worktree", "list"])), "git worktree");
+    assert_eq!(label(&argv(&["git", "worktree"])), "git worktree");
     // cargo and go name the subcommand, whether dexily runs the line or not.
     assert_eq!(label(&argv(&["cargo", "new", "app"])), "cargo new");
     assert_eq!(label(&argv(&["cargo", "init"])), "cargo init");
@@ -760,6 +772,96 @@ fn asking_git_about_itself_is_not_a_project_command() {
     // Known words, no subcommand: unknown rather than refused.
     assert_eq!(git_expects(&["git", "--version"]), Err(Refusal::Unknown));
     assert_eq!(git_expects(&["git", "--help"]), Err(Refusal::Unknown));
+}
+
+// `git worktree add <path> [<commit-ish>]` checks a working tree out of an
+// existing repo at `<path>`, which gets a `.git` file — the same `.git` proof
+// as `init`/`clone`. The two-word subcommand eats its `add`; only that form
+// runs, and the `<commit-ish>` second positional is a ref, never a folder.
+
+#[test]
+fn git_worktree_add_tracks_the_path_it_names() {
+    assert_eq!(
+        git_expects(&["git", "worktree", "add", "wt"]),
+        repo_at("wt")
+    );
+    // `-C` moves where the path is placed, as it does for init/clone.
+    assert_eq!(
+        git_expects(&["git", "-C", "repo", "worktree", "add", "../wt"]),
+        repo_at("repo/../wt")
+    );
+    // The second positional is a commit-ish, not a folder.
+    assert_eq!(
+        git_expects(&["git", "worktree", "add", "wt", "main"]),
+        repo_at("wt")
+    );
+    // An option value is skipped, never read as the path.
+    assert_eq!(
+        git_expects(&["git", "worktree", "add", "-b", "feature", "wt"]),
+        repo_at("wt")
+    );
+    // Every modelled flag passes, and `--` lets the path start with a dash.
+    assert_eq!(
+        git_expects(&["git", "worktree", "add", "-f", "--detach", "--", "-odd"]),
+        repo_at("-odd")
+    );
+    // With no path git only prints usage, so there is nothing to track.
+    assert_eq!(git_expects(&["git", "worktree", "add"]), Ok(Vec::new()));
+}
+
+#[test]
+fn git_worktree_add_fails_closed_on_an_unmodeled_option() {
+    let why = refusal(&["git", "worktree", "add", "--bad", "wt"]);
+    assert!(
+        why.starts_with("`--bad` is not an option dexily passes on to git worktree add:"),
+        "{why}"
+    );
+    // An abbreviation is refused too, like on init/clone.
+    refusal(&["git", "worktree", "add", "--detac", "wt"]);
+}
+
+#[test]
+fn any_other_git_worktree_form_is_not_known() {
+    for words in [
+        &["git", "worktree", "list"][..],
+        &["git", "worktree", "remove", "x"],
+        &["git", "worktree", "prune"],
+        &["git", "worktree", "move", "a", "b"],
+        &["git", "worktree", "lock", "x"],
+        &["git", "worktree", "unlock", "x"],
+        &["git", "worktree", "repair"],
+        &["git", "worktree"],
+    ] {
+        assert_eq!(git_expects(words), Err(Refusal::Unknown), "{words:?}");
+    }
+}
+
+#[test]
+fn an_overridden_refused_worktree_add_line_still_knows_its_folder() {
+    // Refused for a global that runs a program, yet the working tree it would
+    // make is placeable all the same: the expectation rides on the refusal for
+    // a terminal override to track. A non-`add` form carries nothing.
+    let Err(Refusal::Refused(_, Some(expectation))) = expect(
+        &argv(&["git", "-c", "core.x=y", "worktree", "add", "wt"]),
+        cwd(),
+    ) else {
+        panic!("a refused worktree add should carry its expectation");
+    };
+    assert_eq!(
+        expectation.folders,
+        vec![Expected {
+            folder: cwd().join("wt"),
+            proof: Proof::Holds(".git"),
+        }]
+    );
+    // A non-`add` worktree form makes no project, so even when the same global
+    // refuses the line, there is nothing to place and it carries nothing.
+    let Err(Refusal::Refused(_, overridden)) =
+        expect(&argv(&["git", "-c", "core.x=y", "worktree", "list"]), cwd())
+    else {
+        panic!("the -c global refuses the line");
+    };
+    assert_eq!(overridden, None);
 }
 
 // cargo: `new` makes the folder it names (like `mkdir`), `init` writes a

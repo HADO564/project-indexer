@@ -21,6 +21,7 @@ project in. Anything else is refused before it starts.
 | `mkdir <folders…>` | each folder it actually creates | the new folder |
 | `git init [dir]` | the working folder, or the one named (`-C` moves it) | a `.git` |
 | `git clone <repo> [dir]` | the folder named, or the one git derives from the address | a `.git` |
+| `git worktree add <path>` | the new working tree it checks out | a `.git` |
 | `cargo new <path>` | the new folder | the new folder |
 | `cargo init [path]` | the folder named, or the working one | a `Cargo.toml` |
 | `go mod init [module]` | the working folder | a `go.mod` |
@@ -73,6 +74,16 @@ above: a Godot project made in the editor is recognised just the same.
 | `godot` | `project.godot` |
 | `unity` | `ProjectSettings/ProjectVersion.txt` |
 | `rust` | `Cargo.toml` |
+| `cmake` | `CMakeLists.txt` |
+| `maven` | `pom.xml` |
+| `gradle` | `build.gradle` or `build.gradle.kts` |
+| `docker` | `Dockerfile`, or a `compose`/`docker-compose` file |
+| `php` | `composer.json` |
+| `ruby` | `Gemfile` |
+| `dart` | `pubspec.yaml` |
+| `swift` | `Package.swift` |
+| `elixir` | `mix.exs` |
+| `dotnet` | a `*.csproj`/`*.sln`, or `global.json` |
 
 A folder can carry several kinds at once — a cloned Unreal project comes out with
 both `git` and `unreal`. Each kind's fields under `--json` are in

@@ -29,6 +29,11 @@ anyhow = "1"
 # Only for the timestamp fields of `--json`'s project shape (`output/json.rs`).
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4.6.6", features = ["derive"] }
+# A `log` backend for `-v`/`RUST_LOG`: surfaces core's diagnostics (an
+# unreadable scan directory, a detector error) on stderr, leaving stdout and
+# the `--json` document untouched. Installed only when asked, so default
+# output stays silent.
+env_logger = "0.10"
 # `config_dir()` is what Tauri's `app_config_dir()` is built on, so the CLI
 # resolves the same `projects.db` as the app; see `src/paths.rs`.
 dirs = "6"

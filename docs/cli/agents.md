@@ -43,7 +43,7 @@ code is `crates/cli/src/output/json.rs`, and its tests are in
 | `dexily list <query> --json` | an array of the projects whose name contains `query` (exact names first, then names starting with it, then the rest), or whose path ends with it when `query` contains `/`. An empty array, exit 0, when nothing matches |
 | `dexily list --view <set> --json` | the same array drawn from a different set: `all` (the default), `favorites`, or `binned`. The view picks the source, so `--tracker` and a query still narrow whatever it returns. **A binned project appears only under `binned`** — favouriting is stored independently of binning, so a favourited project that is binned drops out of `favorites` and comes back when restored |
 | `dexily list --sort <field> [--reverse] --json` | the same array, ordered by `name` (A to Z) or `last-opened` (most recent first). `--reverse` flips whichever field was chosen — it is not a synonym for descending, because the two fields have opposite natural directions. Default `name` |
-| `dexily list --tracker <kind> --json`, `dexily show <query> --tracker <kind> --json` | the same, narrowed to projects carrying that tracker (`git` or `unreal`) before the query is matched. Name several by repeating the flag or with commas (`-t git,unreal`) to keep projects carrying any of them. An unknown kind is a usage error, exit 2. The flag picks columns and detail sections in human output; the JSON document is the same with or without it, and always carries every tracker in full |
+| `dexily list --tracker <kind> --json`, `dexily show <query> --tracker <kind> --json` | the same, narrowed to projects carrying that tracker (any detected `kind` — see [`SUPPORTED-COMMANDS-AND-PROGRAMS.md`](SUPPORTED-COMMANDS-AND-PROGRAMS.md)) before the query is matched. Name several by repeating the flag or with commas (`-t git,node`) to keep projects carrying any of them. An unknown kind is a usage error, exit 2. The flag picks columns and detail sections in human output; the JSON document is the same with or without it, and always carries every tracker in full |
 | `dexily show <query> --json` | one [project](#a-project). `query` is an exact name, a full id, an id prefix of 8+ characters, a `parent/folder` path ending, or part of a name, tried in that order. No match or several matches is an [error](#errors) |
 | `dexily add [dir] --json` | `{"project": {…}, "already_tracked": false}`. Registers `dir`, or the current directory when it is left out. The path is resolved to an absolute one before it is stored. Already tracked is not an error: the same document comes back with `already_tracked: true` and nothing is changed |
 | `dexily open <query> --json` | one [project](#a-project), with `last_opened_at` stamped. Hands its directory to the system opener, or to the app in `open_with`. A directory that has been deleted or moved, or a missing `open_with` app, is an [error](#errors) |
@@ -84,16 +84,21 @@ same exit code — and then tracks the folder it made. `dexily git init` and
 `dexily git clone <repo>` do the same for a repository. This is the one place
 dexily runs another program, so its rules differ from every command above.
 
-- **Only a command dexily has a recognizer for runs.** Today: `mkdir` (and
-  `md` on Windows), `git init` and `git clone`, the program named bare.
-  Anything else — `ls`, `rm`, any other git subcommand, a path such as
-  `/bin/mkdir` — is refused **before it runs**, exit 2, as prose:
-  ``dexily: `git push` isn't a command dexily observes (it knows: mkdir, git
-  init, git clone). Run it directly.`` **dexily cannot be used to run arbitrary
-  commands**; run those yourself. A person at a terminal can be prompted to run
-  a refused command anyway (`run it anyway? [y/N]`), but a script, a pipe, a
-  redirect and `--json` are never asked — they always get the refusal — so this
-  does not widen what you, calling dexily non-interactively, can run.
+- **Only a command dexily has a recognizer for runs.** The full list — `mkdir`
+  (`md` on Windows), the project-making `git` subcommands (`init`, `clone`,
+  `worktree add`), the scaffolders (`cargo new`/`init`, `go mod init`,
+  `gh repo create`, `uv init`, `flutter create`, `deno init`, `zig init`) and the
+  bare `init` of the JS package managers and `poetry` — is in
+  [`SUPPORTED-COMMANDS-AND-PROGRAMS.md`](SUPPORTED-COMMANDS-AND-PROGRAMS.md).
+  Anything else — `ls`, `rm`, an unrecognised subcommand, a path such as
+  `/bin/mkdir` — is refused **before it runs**, exit 2, as prose that names the
+  commands it does know (``dexily: `git push` isn't a command dexily observes (it
+  knows: mkdir, git init, git clone, …). Run it directly.``). **dexily cannot be
+  used to run arbitrary commands**; run those yourself. A person at a terminal can
+  be prompted to run a refused command anyway (`run it anyway? [y/N]`), but a
+  script, a pipe, a redirect and `--json` are never asked — they always get the
+  refusal — so this does not widen what you, calling dexily non-interactively,
+  can run.
 - **The exit code is the command's own**, whatever dexily then manages to
   record: `0` when it succeeded, its own code when it failed, and 128 + the
   signal's number when a signal ended it (130 for Ctrl+C, which is left to the
@@ -305,7 +310,13 @@ prompt ends dexily with 130. Its own lines, all on stderr:
 ### Trackers
 
 Each tracker is an object with a `kind` and that kind's own fields beside it.
-Today there are two kinds:
+The two richest kinds are documented in full below; many more are detected from
+marker files — `node`, `python`, `go`, `godot`, `unity`, `rust`, `cmake`,
+`maven`, `gradle`, `docker`, `php`, `ruby`, `dart`, `swift`, `elixir`, `dotnet` —
+each carrying its `kind` and a few descriptive fields (a name, a version, a
+marker). The full list of kinds and the files that detect them is in
+[`SUPPORTED-COMMANDS-AND-PROGRAMS.md`](SUPPORTED-COMMANDS-AND-PROGRAMS.md); per
+the schema rule, treat any kind or field you don't recognise as data to skip.
 
 | `kind` | Fields |
 |---|---|

@@ -2,6 +2,7 @@
 //! `indexer-core`'s `src/tests/`.
 
 mod appearance;
+mod cli;
 mod commands;
 mod editor;
 mod observe;

@@ -51,6 +51,12 @@ struct Cli {
     #[arg(long, short, global = true)]
     quiet: bool,
 
+    /// Surface diagnostics on stderr that are otherwise silent — a directory
+    /// that could not be read during a scan, a detector that errored. Honours
+    /// `RUST_LOG` too, which can raise the level (`RUST_LOG=debug dexily …`).
+    #[arg(long, short, global = true)]
+    verbose: bool,
+
     /// The colour used to highlight each project's folder name, for this run
     /// only. Without it, the default set by `dexily config folder-color`
     /// applies, else cyan. `dexily config folder-color --help` lists the colours.
@@ -87,6 +93,7 @@ enum Invocation {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    init_logging(cli.verbose);
     let format = Format::from_json_flag(cli.json);
     match run(cli) {
         Ok(code) => code,
@@ -109,6 +116,20 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Install a `log` backend only when asked: with `-v`, or whenever `RUST_LOG`
+/// is set. The core's diagnostics (an unreadable scan directory, a detector
+/// error) then reach stderr, leaving stdout — and the `--json` document —
+/// untouched. Without either, no logger is installed and they stay silent, so
+/// default output is exactly as before. `RUST_LOG` wins when set; otherwise
+/// `-v` means `warn` and above.
+fn init_logging(verbose: bool) {
+    if std::env::var_os("RUST_LOG").is_none() && !verbose {
+        return;
+    }
+    // env_logger writes to stderr by default.
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
 }
 
 fn run(cli: Cli) -> anyhow::Result<ExitCode> {

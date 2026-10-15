@@ -581,6 +581,36 @@ fn unity() -> serde_json::Value {
 fn rust() -> serde_json::Value {
     json!({ "Rust": { "name": "dexily" }})
 }
+fn cmake() -> serde_json::Value {
+    json!({ "Cmake": { "project_name": "MyApp" }})
+}
+fn maven() -> serde_json::Value {
+    json!({ "Maven": { "artifact_id": "my-app", "version": "1.2.3" }})
+}
+fn gradle() -> serde_json::Value {
+    json!({ "Gradle": { "marker": "build.gradle.kts" }})
+}
+fn docker() -> serde_json::Value {
+    json!({ "Docker": { "marker": "Dockerfile" }})
+}
+fn php() -> serde_json::Value {
+    json!({ "Php": { "name": "vendor/package" }})
+}
+fn ruby() -> serde_json::Value {
+    json!({ "Ruby": { "ruby_version": "3.2.0" }})
+}
+fn dart() -> serde_json::Value {
+    json!({ "Dart": { "name": "my_app", "version": "1.0.0" }})
+}
+fn swift() -> serde_json::Value {
+    json!({ "Swift": { "name": "MyLibrary" }})
+}
+fn elixir() -> serde_json::Value {
+    json!({ "Elixir": { "app": "my_app" }})
+}
+fn dotnet() -> serde_json::Value {
+    json!({ "Dotnet": { "marker": "App.sln" }})
+}
 
 #[test]
 fn the_node_kind_shows_a_package_and_a_version_column() {
@@ -607,6 +637,16 @@ fn each_new_kind_fills_its_column_and_adds_a_detail_section() {
         (TrackerKind::Python, python(), "python", "mypkg"),
         (TrackerKind::Unity, unity(), "unity", "2021.3.0f1"),
         (TrackerKind::Rust, rust(), "rust", "dexily"),
+        (TrackerKind::Cmake, cmake(), "cmake", "MyApp"),
+        (TrackerKind::Maven, maven(), "maven", "my-app"),
+        (TrackerKind::Gradle, gradle(), "gradle", "build.gradle.kts"),
+        (TrackerKind::Docker, docker(), "docker", "Dockerfile"),
+        (TrackerKind::Php, php(), "php", "vendor/package"),
+        (TrackerKind::Ruby, ruby(), "ruby", "3.2.0"),
+        (TrackerKind::Dart, dart(), "dart", "my_app"),
+        (TrackerKind::Swift, swift(), "swift", "MyLibrary"),
+        (TrackerKind::Elixir, elixir(), "elixir", "my_app"),
+        (TrackerKind::Dotnet, dotnet(), "dotnet", "App.sln"),
     ];
 
     for (kind, tracker, section, value) in cases {

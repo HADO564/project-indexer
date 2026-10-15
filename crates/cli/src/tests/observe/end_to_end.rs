@@ -419,9 +419,9 @@ fn a_command_without_a_recognizer_never_runs() {
     assert!(is_usage(&result));
     assert_eq!(
         result.unwrap_err().to_string(),
-        "`rm` isn't a command dexily observes (it knows: mkdir, git init, git clone, cargo new, \
-         cargo init, go mod init, gh repo create, npm init, pnpm init, yarn init, poetry init, \
-         uv init, flutter create, deno init, zig init). Run it directly."
+        "`rm` isn't a command dexily observes (it knows: mkdir, git init, git clone, git worktree \
+         add, cargo new, cargo init, go mod init, gh repo create, npm init, pnpm init, yarn init, \
+         poetry init, uv init, flutter create, deno init, zig init). Run it directly."
     );
     assert!(run.folder("thing").is_dir(), "rm never ran");
 }
