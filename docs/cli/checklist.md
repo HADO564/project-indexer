@@ -133,9 +133,9 @@ Design decided 2026-10-08 — three phases, no threads; outcome not output; dexi
 
 ## 5. The TUI
 
-- [ ] `dexily` with no arguments opens it
-- [ ] Panes: sidebar views with counts, the project list, project detail
-- [ ] Keybinds for movement and search
+- [x] `dexily` with no arguments opens it (2026-10-15, PR #34, phase 1) — the read-only browser; without a terminal it errors cleanly rather than hanging. `tui::app::App` is pure state (keys in, fields out) like `FormState`, so navigation is unit-tested; the loop in `tui::run` reuses `tui::terminal::Session` for the alternate screen and its Drop/panic teardown. Spec: `../superpowers/specs/2026-10-15-tui-design.md`
+- [x] Panes: sidebar views with counts, the project list, project detail (2026-10-15, phase 1) — sidebar is the fixed views **All · Favourites · Ungrouped · Bin** then the groups (scrolls, never collapses), each with its count; the list and detail draw icons and mark colours from `appearance` as `list`/`show` do, and an empty view says so
+- [ ] Keybinds for movement and search — **movement done** (phase 1): `j`/`k`+arrows, `g`/`G` ends, `Tab`/`h`/`l` panes, `[`/`]` sidebar sections, `q`/`Esc`/`Ctrl+C`. Search (`/`, filtering the focused pane) is phase 4
 - [ ] A `:` command line parsed into the same `Command` as the shell, defaulting to the selected project
 - [ ] Letter shortcuts that run commands on the selected project (`o` open, `d` untrack, …)
 - [ ] `n` opens the `:` line with `:add ` pre-filled — the current directory, `Tab` completing paths

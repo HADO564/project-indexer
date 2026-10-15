@@ -148,9 +148,12 @@ errors cleanly rather than hanging.
 
 ## 8. Phases (one PR each)
 
-1. **Skeleton (render-only).** Enter the alt-screen, draw the three panes from a
-   one-time read, `j/k`/arrows move, `Tab` switches pane, `q` quits cleanly.
-   Message line wired to the writer. No mutations. Proves loop, layout, teardown.
+1. **Skeleton (render-only) — shipped 2026-10-15, PR #34.** Enter the alt-screen,
+   draw the three panes from a one-time read, `j/k`/arrows and `g`/`G` move,
+   `Tab`/`h`/`l` switch pane, `[`/`]` jump sidebar sections, `q`/`Esc`/`Ctrl+C`
+   quit cleanly. Icons and mark colours drawn from `appearance` (Q5), an empty
+   view says so, no terminal errors cleanly. No mutations. Proved the loop,
+   layout and teardown.
 2. **The `:` command line.** Parse into `Command`, run it, render the `Outcome`
    on the message line, reload. The heart of "every change is a command".
 3. **Shortcuts + action menu + `?` help + hint line.** Letter keys dispatch
@@ -247,6 +250,9 @@ default. *Your call:* include grid mode in the TUI milestone, or list-only for n
   reads via a reverse/bold modifier.
 
 No new rendering model — the mark logic is already shared with the shell.
+**Implemented in phase 1 (2026-10-15):** glyphs from `appearance::glyph`, names
+in `appearance::mark_rgb` / `rgb` colour, `NO_COLOR` honoured, favourite starred
+in gold.
 
 **Q6 — Detail tab, and the graph.** Detail is a **pane**, not a tab; `Enter`
 expands it full-screen for a project with many fields/trackers, then collapses

@@ -121,6 +121,33 @@ fn entering_the_groups_pane_shows_the_first_group_at_once() {
 }
 
 #[test]
+fn g_and_capital_g_jump_to_the_ends_of_a_pane() {
+    // Views pane: G to the last view (Bin), g back to the first (All).
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('G'));
+    assert_eq!(app.active(), &View::Bin);
+    press(&mut app, KeyCode::Char('g'));
+    assert_eq!(app.active(), &View::All);
+
+    // List pane: no groups, so Tab lands straight on the list, still on All.
+    let mut app = App::new(
+        vec![
+            project("a", None, false),
+            project("b", None, false),
+            project("c", None, false),
+        ],
+        vec![],
+        vec![],
+    );
+    press(&mut app, KeyCode::Tab);
+    assert_eq!(app.focus(), Pane::List);
+    press(&mut app, KeyCode::Char('G'));
+    assert_eq!(app.selected_project().map(|p| p.name.as_str()), Some("c"));
+    press(&mut app, KeyCode::Char('g'));
+    assert_eq!(app.selected_project().map(|p| p.name.as_str()), Some("a"));
+}
+
+#[test]
 fn tab_cycles_views_groups_list() {
     let mut app = fixture();
     assert_eq!(app.focus(), Pane::Views);

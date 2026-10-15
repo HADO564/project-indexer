@@ -1,11 +1,15 @@
 //! Drawing the read-only panes: the sidebar (fixed views, then groups), the
 //! project list, and the selected project's detail, with a status line and a
-//! hint line beneath. Styled with modifiers alone — reversed for the cursor,
-//! bold for the focused pane's border, dim for labels — so it reads the same
-//! under `NO_COLOR`, the way the edit form does.
+//! hint line beneath.
+//!
+//! Icons and mark colours come from the shared `appearance` module, exactly as
+//! `dexily list` and `show` draw them — the project's own colour, else its
+//! group's, with the glyph from `config icons`. `NO_COLOR` drops the colour but
+//! keeps the glyphs, and the cursor and focus are drawn with modifiers
+//! (reversed, bold, dim) so they still read when colour is off.
 
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
@@ -13,6 +17,7 @@ use ratatui::Frame;
 use indexer_core::domain::views::View;
 use indexer_core::domain::{Group, Project};
 
+use crate::appearance::{self, IconStyle};
 use crate::tui::app::{view_label, App, Pane};
 
 pub fn draw(frame: &mut Frame, app: &App) {
@@ -44,6 +49,8 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, app: &App) {
     let [views_area, groups_area] =
         Layout::vertical([Constraint::Length(views_height), Constraint::Fill(1)]).areas(area);
 
+    // The fixed views are not projects or groups, so they carry no icon or
+    // colour — only their name and count.
     let view_items: Vec<ListItem> = app
         .views()
         .iter()
@@ -70,7 +77,7 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, app: &App) {
             let count = app.count_for(&View::Group {
                 id: group.id.clone(),
             });
-            ListItem::new(entry_line(&group.name, count))
+            ListItem::new(group_line(group, count, app.icons(), app.color_enabled()))
         })
         .collect();
     render_list(
@@ -85,19 +92,39 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, app: &App) {
 
 fn draw_list(frame: &mut Frame, area: Rect, app: &App) {
     let visible = app.visible();
+    let focused = app.focus() == Pane::List;
+    let title = format!("PROJECTS — {}", view_label(app.active(), app.groups()));
+
+    // An empty view says so rather than leaving a blank pane with nothing to
+    // tell a scan that found nothing from a bin that is simply empty.
+    if visible.is_empty() {
+        let mut block = Block::bordered().title(title);
+        if focused {
+            block = block.border_style(Style::new().add_modifier(Modifier::BOLD));
+        }
+        let note = Paragraph::new(Line::from(Span::styled(
+            "  no projects in this view",
+            Style::new().add_modifier(Modifier::DIM),
+        )))
+        .block(block);
+        frame.render_widget(note, area);
+        return;
+    }
+
     let items: Vec<ListItem> = visible
         .iter()
-        .map(|project| ListItem::new(project_line(project)))
+        .map(|project| {
+            let mark = appearance::mark_rgb(project.color.as_deref(), app.group_color_of(project));
+            let style = mark_style(mark, app.color_enabled());
+            ListItem::new(project_line(
+                project,
+                app.icons(),
+                style,
+                app.color_enabled(),
+            ))
+        })
         .collect();
-    let title = format!("PROJECTS — {}", view_label(app.active(), app.groups()));
-    render_list(
-        frame,
-        area,
-        &title,
-        items,
-        app.list_sel(),
-        app.focus() == Pane::List,
-    );
+    render_list(frame, area, &title, items, app.list_sel(), focused);
 }
 
 fn draw_detail(frame: &mut Frame, area: Rect, app: &App) {
@@ -107,7 +134,15 @@ fn draw_detail(frame: &mut Frame, area: Rect, app: &App) {
             "no project selected",
             Style::new().add_modifier(Modifier::DIM),
         ))],
-        Some(project) => detail_lines(project, app.groups()),
+        Some(project) => {
+            let mark = appearance::mark_rgb(project.color.as_deref(), app.group_color_of(project));
+            detail_lines(
+                project,
+                app.groups(),
+                app.icons(),
+                mark_style(mark, app.color_enabled()),
+            )
+        }
     };
     frame.render_widget(Paragraph::new(lines).block(block), area);
 }
@@ -151,6 +186,7 @@ fn render_list(
     frame.render_stateful_widget(list, area, &mut state);
 }
 
+/// A plain sidebar entry — a fixed view — with its count dimmed.
 fn entry_line(label: &str, count: usize) -> Line<'static> {
     Line::from(vec![
         Span::raw(label.to_string()),
@@ -161,28 +197,71 @@ fn entry_line(label: &str, count: usize) -> Line<'static> {
     ])
 }
 
-fn project_line(project: &Project) -> Line<'static> {
-    let star = if project.favorite { "★ " } else { "  " };
-    let trackers = tracker_labels(project);
-    Line::from(vec![
-        Span::styled(star.to_string(), Style::new().add_modifier(Modifier::DIM)),
-        Span::raw(project.name.clone()),
-        Span::styled(
-            if trackers.is_empty() {
-                String::new()
-            } else {
-                format!("   {trackers}")
-            },
-            Style::new().add_modifier(Modifier::DIM),
-        ),
-    ])
+/// A group row: its icon (if icons are on), its name in the group's colour, and
+/// its count.
+fn group_line(group: &Group, count: usize, icons: IconStyle, color_enabled: bool) -> Line<'static> {
+    let mut spans = Vec::new();
+    if let Some(glyph) = appearance::glyph(&group.icon, icons) {
+        spans.push(Span::raw(format!("{glyph} ")));
+    }
+    spans.push(Span::styled(
+        group.name.clone(),
+        mark_style(appearance::rgb(&group.color), color_enabled),
+    ));
+    spans.push(Span::styled(
+        format!("  ({count})"),
+        Style::new().add_modifier(Modifier::DIM),
+    ));
+    Line::from(spans)
 }
 
-fn detail_lines(project: &Project, groups: &[Group]) -> Vec<Line<'static>> {
-    let mut lines = vec![Line::from(Span::styled(
-        project.name.clone(),
-        Style::new().add_modifier(Modifier::BOLD),
-    ))];
+/// A project row: its icon, a gold star when favourited, and its name in its
+/// mark colour, with its trackers dimmed after.
+fn project_line(
+    project: &Project,
+    icons: IconStyle,
+    name_style: Style,
+    color_enabled: bool,
+) -> Line<'static> {
+    let mut spans = Vec::new();
+    if let Some(glyph) = appearance::glyph(project.icon.as_deref().unwrap_or("folder"), icons) {
+        spans.push(Span::styled(format!("{glyph} "), name_style));
+    }
+    // A two-column slot either way, so names line up whether or not a project
+    // is favourited.
+    if project.favorite {
+        spans.push(Span::styled(
+            "★ ",
+            mark_style(appearance::rgb("gold"), color_enabled),
+        ));
+    } else {
+        spans.push(Span::raw("  "));
+    }
+    spans.push(Span::styled(project.name.clone(), name_style));
+    let trackers = tracker_labels(project);
+    if !trackers.is_empty() {
+        spans.push(Span::styled(
+            format!("   {trackers}"),
+            Style::new().add_modifier(Modifier::DIM),
+        ));
+    }
+    Line::from(spans)
+}
+
+fn detail_lines(
+    project: &Project,
+    groups: &[Group],
+    icons: IconStyle,
+    name_style: Style,
+) -> Vec<Line<'static>> {
+    let bold = name_style.add_modifier(Modifier::BOLD);
+    let mut title = Vec::new();
+    if let Some(glyph) = appearance::glyph(project.icon.as_deref().unwrap_or("folder"), icons) {
+        title.push(Span::styled(format!("{glyph} "), bold));
+    }
+    title.push(Span::styled(project.name.clone(), bold));
+    let mut lines = vec![Line::from(title)];
+
     lines.push(row("directory", &project.directory));
     lines.push(row("id", short_id(&project.id)));
     if let Some(id) = &project.group_id {
@@ -218,6 +297,15 @@ fn row(label: &str, value: &str) -> Line<'static> {
     ])
 }
 
+/// A foreground style from a mark colour, or plain when there is no colour or
+/// `NO_COLOR` is set.
+fn mark_style(rgb: Option<(u8, u8, u8)>, color_enabled: bool) -> Style {
+    match rgb {
+        Some((r, g, b)) if color_enabled => Style::new().fg(Color::Rgb(r, g, b)),
+        _ => Style::new(),
+    }
+}
+
 fn tracker_labels(project: &Project) -> String {
     project
         .trackers
@@ -233,7 +321,7 @@ fn short_id(id: &str) -> &str {
 
 fn hint_line() -> Line<'static> {
     Line::from(Span::styled(
-        " j/k move · Tab/h/l pane · [ ] section · q quit",
+        " j/k move · g/G ends · Tab/h/l pane · [ ] section · q quit",
         Style::new().add_modifier(Modifier::DIM),
     ))
 }

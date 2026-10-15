@@ -15,7 +15,9 @@ use indexer_core::domain::views::{resolve_view, view_counts, View, ViewCounts};
 use indexer_core::domain::{Group, Project};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use crate::appearance::IconStyle;
 use crate::context::Context;
+use crate::settings;
 
 /// Which pane the keys drive. The sidebar is two panes — the fixed views and
 /// the groups — so `[` / `]` can jump between them; the list is the third.
@@ -43,6 +45,10 @@ pub(crate) struct App {
     active: View,
     list_sel: usize,
     focus: Pane,
+    /// How icons are drawn, from `config icons`; `Off` by default.
+    icons: IconStyle,
+    /// Whether colour is drawn — false under `NO_COLOR`.
+    color: bool,
     quit: bool,
 }
 
@@ -53,7 +59,15 @@ impl App {
         let projects = ctx.projects.list(opts)?;
         let deleted = ctx.projects.list_deleted(opts)?;
         let groups = ctx.groups.list()?;
-        Ok(Self::new(projects, deleted, groups))
+        let mut app = Self::new(projects, deleted, groups);
+        // A broken settings file must not stop the browser opening — icons off
+        // is the safe default, as `resolve_look` falls back for the colours.
+        app.icons = settings::load()
+            .ok()
+            .and_then(|saved| saved.icons)
+            .unwrap_or_default();
+        app.color = std::env::var_os("NO_COLOR").is_none();
+        Ok(app)
     }
 
     /// The part of [`load`](Self::load) that has no I/O, so tests can drive the
@@ -72,6 +86,8 @@ impl App {
             groups_sel: 0,
             list_sel: 0,
             focus: Pane::Views,
+            icons: IconStyle::Off,
+            color: true,
             quit: false,
         }
     }
@@ -101,6 +117,22 @@ impl App {
     }
     pub(crate) fn quit(&self) -> bool {
         self.quit
+    }
+    pub(crate) fn icons(&self) -> IconStyle {
+        self.icons
+    }
+    pub(crate) fn color_enabled(&self) -> bool {
+        self.color
+    }
+
+    /// The colour of a project's group, if it has one — the fallback for a
+    /// project's own mark colour, as `dexily list` resolves it.
+    pub(crate) fn group_color_of(&self, project: &Project) -> Option<&str> {
+        let id = project.group_id.as_deref()?;
+        self.groups
+            .iter()
+            .find(|group| group.id == id)
+            .map(|group| group.color.as_str())
     }
 
     /// How many projects a sidebar entry holds, from the precomputed counts.
@@ -139,6 +171,8 @@ impl App {
             KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
             KeyCode::Char('j') | KeyCode::Down => self.move_down(),
             KeyCode::Char('k') | KeyCode::Up => self.move_up(),
+            KeyCode::Char('g') => self.move_top(),
+            KeyCode::Char('G') => self.move_bottom(),
             KeyCode::Char('h') | KeyCode::Left => self.focus_left(),
             KeyCode::Char('l') | KeyCode::Right => self.focus_right(),
             KeyCode::Tab => self.focus_next(),
@@ -166,6 +200,32 @@ impl App {
             Pane::Groups => self.groups_sel = self.groups_sel.saturating_sub(1),
             Pane::List => {
                 self.list_sel = self.list_sel.saturating_sub(1);
+                return;
+            }
+        }
+        self.sync_active();
+    }
+
+    /// `g`: jump to the top of the focused pane.
+    fn move_top(&mut self) {
+        match self.focus {
+            Pane::Views => self.views_sel = 0,
+            Pane::Groups => self.groups_sel = 0,
+            Pane::List => {
+                self.list_sel = 0;
+                return;
+            }
+        }
+        self.sync_active();
+    }
+
+    /// `G`: jump to the bottom of the focused pane.
+    fn move_bottom(&mut self) {
+        match self.focus {
+            Pane::Views => self.views_sel = self.views.len().saturating_sub(1),
+            Pane::Groups => self.groups_sel = self.groups.len().saturating_sub(1),
+            Pane::List => {
+                self.list_sel = self.visible().len().saturating_sub(1);
                 return;
             }
         }

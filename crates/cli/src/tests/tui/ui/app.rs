@@ -37,14 +37,17 @@ fn group(id: &str, name: &str) -> Group {
     .unwrap()
 }
 
-fn screen(width: u16, height: u16) -> Vec<String> {
-    let app = App::new(
+fn sample() -> App {
+    App::new(
         vec![project("alpha", None), project("bravo", Some("g-work"))],
         vec![],
         vec![group("g-work", "Work")],
-    );
+    )
+}
+
+fn render(app: &App, width: u16, height: u16) -> Vec<String> {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-    terminal.draw(|frame| draw(frame, &app)).unwrap();
+    terminal.draw(|frame| draw(frame, app)).unwrap();
     let buffer = terminal.backend().buffer();
     (0..buffer.area.height)
         .map(|y| {
@@ -57,7 +60,7 @@ fn screen(width: u16, height: u16) -> Vec<String> {
 
 #[test]
 fn renders_the_three_panes_the_status_and_the_hint() {
-    let text = screen(90, 20).join("\n");
+    let text = render(&sample(), 90, 20).join("\n");
     for needle in [
         "VIEWS",    // sidebar: the fixed views block
         "All",      //   its first entry
@@ -76,5 +79,14 @@ fn renders_the_three_panes_the_status_and_the_hint() {
 #[test]
 fn does_not_panic_in_a_small_terminal() {
     // A cramped terminal must still render — ratatui clips, it does not crash.
-    let _ = screen(20, 6);
+    let _ = render(&sample(), 20, 6);
+}
+
+#[test]
+fn an_empty_view_says_so() {
+    // No projects at all: the All view is empty, so the list pane names the
+    // emptiness rather than leaving a blank frame.
+    let app = App::new(vec![], vec![], vec![]);
+    let text = render(&app, 90, 20).join("\n");
+    assert!(text.contains("no projects in this view"), "{text}");
 }
