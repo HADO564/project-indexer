@@ -13,7 +13,12 @@ use crate::commands::{Outcome, TrackerKind, View};
 use crate::output::color::Color;
 use crate::output::Look;
 
-pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Result<()> {
+pub fn write(
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+    outcome: &Outcome,
+    look: Look,
+) -> anyhow::Result<()> {
     let terminal = std::io::stdout().is_terminal();
     let color = terminal && std::env::var_os("NO_COLOR").is_none();
     // Icons only on a terminal, as colours: a script reading a name from a
@@ -35,11 +40,11 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
                 // view has to, or `--view binned` on an empty bin would claim
                 // nothing is tracked at all.
                 match query {
-                    Some(query) => eprintln!("dexily: no projects match \"{query}\""),
+                    Some(query) => writeln!(err, "dexily: no projects match \"{query}\"")?,
                     None => match view {
-                        View::All => eprintln!("dexily: no projects tracked yet"),
-                        View::Favorites => eprintln!("dexily: no favourites yet"),
-                        View::Binned => eprintln!("dexily: the bin is empty"),
+                        View::All => writeln!(err, "dexily: no projects tracked yet")?,
+                        View::Favorites => writeln!(err, "dexily: no favourites yet")?,
+                        View::Binned => writeln!(err, "dexily: the bin is empty")?,
                     },
                 }
                 return Ok(());
@@ -149,7 +154,10 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
         }
         Outcome::Groups { groups } => {
             if groups.is_empty() {
-                eprintln!("dexily: no groups yet — make one with `dexily group create <name>`");
+                writeln!(
+                    err,
+                    "dexily: no groups yet — make one with `dexily group create <name>`"
+                )?;
                 return Ok(());
             }
             let style = TableStyle {
@@ -163,18 +171,20 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
         }
         Outcome::GroupSaved { group, created } => {
             let verb = if *created { "created" } else { "updated" };
-            eprintln!("dexily: {verb} the group \"{}\"", group.name);
+            writeln!(err, "dexily: {verb} the group \"{}\"", group.name)?;
         }
         Outcome::GroupDeleted { group, members } => match members {
-            0 => eprintln!("dexily: deleted the group \"{}\"", group.name),
-            1 => eprintln!(
+            0 => writeln!(err, "dexily: deleted the group \"{}\"", group.name)?,
+            1 => writeln!(
+                err,
                 "dexily: deleted the group \"{}\" — its 1 project is now ungrouped",
                 group.name
-            ),
-            n => eprintln!(
+            )?,
+            n => writeln!(
+                err,
                 "dexily: deleted the group \"{}\" — its {n} projects are now ungrouped",
                 group.name
-            ),
+            )?,
         },
         Outcome::Color { color: chosen, .. } => {
             let name = chosen.name();
@@ -193,72 +203,82 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
             already_tracked,
         } => {
             if *already_tracked {
-                eprintln!(
+                writeln!(
+                    err,
                     "dexily: already tracking \"{}\" at {}",
                     project.name, project.directory
-                );
+                )?;
             } else {
-                eprintln!(
+                writeln!(
+                    err,
                     "dexily: tracking \"{}\" at {}",
                     project.name, project.directory
-                );
+                )?;
             }
         }
         Outcome::Untracked { project } => {
-            eprintln!(
+            writeln!(
+                err,
                 "dexily: stopped tracking \"{}\" — {} is untouched",
                 project.name, project.directory
-            );
+            )?;
         }
         Outcome::Opened { project } => {
-            eprintln!("dexily: opening \"{}\"", project.name);
+            writeln!(err, "dexily: opening \"{}\"", project.name)?;
         }
         Outcome::Favorited { project, favorite } => {
             if *favorite {
-                eprintln!("dexily: \"{}\" is now a favourite", project.name);
+                writeln!(err, "dexily: \"{}\" is now a favourite", project.name)?;
             } else {
-                eprintln!("dexily: \"{}\" is no longer a favourite", project.name);
+                writeln!(err, "dexily: \"{}\" is no longer a favourite", project.name)?;
             }
         }
         Outcome::Edited { project } => {
-            eprintln!("dexily: updated \"{}\"", project.name);
+            writeln!(err, "dexily: updated \"{}\"", project.name)?;
         }
         Outcome::Unchanged { project } => {
-            eprintln!("dexily: nothing changed in \"{}\"", project.name);
+            writeln!(err, "dexily: nothing changed in \"{}\"", project.name)?;
         }
         // The bin holds projects whose folder was deleted, so restoring brings
         // back the entry and not the files — said here, where a user expecting
         // their folder back would otherwise find out from `open`.
         Outcome::Restored { project } => {
-            eprintln!(
+            writeln!(
+                err,
                 "dexily: restored \"{}\" — the record only; files deleted from {} are not brought back",
                 project.name, project.directory
-            );
+            )?;
         }
         Outcome::Purged { project } => {
-            eprintln!(
+            writeln!(
+                err,
                 "dexily: purged \"{}\" — its record is gone for good",
                 project.name
-            );
+            )?;
         }
-        Outcome::Cancelled => eprintln!("dexily: cancelled"),
+        Outcome::Cancelled => writeln!(err, "dexily: cancelled")?,
         Outcome::Imported { report } => {
             // A summary, not a table: what matters is the counts and the rows
             // that failed. Prose, so it goes to stderr like every other
             // message that is not data.
-            eprintln!(
+            writeln!(
+                err,
                 "dexily: registered {}, skipped {} already tracked",
                 report.imported.len(),
                 report.skipped
-            );
+            )?;
             for failure in &report.failures {
                 // Listed, never fatal: one bad directory must not cost the run.
-                eprintln!("dexily: failed {}: {}", failure.directory, failure.message);
+                writeln!(
+                    err,
+                    "dexily: failed {}: {}",
+                    failure.directory, failure.message
+                )?;
             }
         }
         Outcome::Scanned { root, report } => {
             if report.candidates.is_empty() {
-                eprintln!("dexily: no projects found under {root}");
+                writeln!(err, "dexily: no projects found under {root}")?;
             } else {
                 let style = TableStyle {
                     folder_color: color.then_some(look.folder),
@@ -275,21 +295,23 @@ pub fn write(out: &mut impl Write, outcome: &Outcome, look: Look) -> anyhow::Res
                 .iter()
                 .filter(|c| c.already_tracked)
                 .count();
-            eprintln!(
+            writeln!(
+                err,
                 "dexily: {} found under {root}, {tracked} already tracked, {} directories visited",
                 report.candidates.len(),
                 report.visited
-            );
+            )?;
             if !report.candidates.is_empty() {
-                eprintln!("dexily: re-run with --import to register them:");
-                eprintln!("  dexily scan {root} --import");
+                writeln!(err, "dexily: re-run with --import to register them:")?;
+                writeln!(err, "  dexily scan {root} --import")?;
             }
             if report.stopped_early {
                 // Never silent: an incomplete walk must not read as an empty disk.
-                eprintln!(
+                writeln!(
+                    err,
                     "dexily: stopped at the {}-directory limit — results are incomplete",
                     indexer_core::domain::scan::MAX_DIRECTORIES
-                );
+                )?;
             }
         }
     }

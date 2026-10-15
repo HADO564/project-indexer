@@ -36,27 +36,36 @@ pub struct Look {
     pub icons: IconStyle,
 }
 
-/// `look` only affects human output; `--json` is never coloured.
-pub fn print(outcome: &Outcome, format: Format, look: Look) -> anyhow::Result<()> {
+/// The result goes to stdout; dexily's own prose goes to `err`, supplied by the
+/// caller — the real stderr in a shell, the message line in the TUI. `look`
+/// only affects human output; `--json` is never coloured.
+pub fn print(
+    outcome: &Outcome,
+    format: Format,
+    look: Look,
+    err: &mut dyn Write,
+) -> anyhow::Result<()> {
     let mut out = std::io::stdout().lock();
     match format {
-        Format::Human => human::write(&mut out, outcome, look)?,
+        Format::Human => human::write(&mut out, err, outcome, look)?,
         Format::Json => json::write(&mut out, outcome)?,
     }
     out.flush()?;
     Ok(())
 }
 
-/// Reports a failed command on stderr: prose, or under `--json` the
+/// Reports a failed command: prose, or under `--json` the
 /// `{"schema": 1, "error": …}` document, so a script can tell a query that
-/// matched nothing from one that matched several without parsing prose.
-pub fn print_error(error: &anyhow::Error, format: Format) {
+/// matched nothing from one that matched several without parsing prose. Writes
+/// to `err` — the real stderr in a shell, the TUI's message line otherwise.
+pub fn print_error(error: &anyhow::Error, format: Format, err: &mut dyn Write) {
     match format {
-        Format::Human => eprintln!("dexily: {error:#}"),
+        Format::Human => {
+            let _ = writeln!(err, "dexily: {error:#}");
+        }
         Format::Json => {
-            let mut err = std::io::stderr().lock();
-            if json::write_error(&mut err, error).is_err() {
-                eprintln!("dexily: {error:#}");
+            if json::write_error(err, error).is_err() {
+                let _ = writeln!(err, "dexily: {error:#}");
             }
         }
     }

@@ -17,3 +17,6 @@ vite.config.ts.timestamp-*
 
 # graphify knowledge graph output
 /graphify-out/
+
+# personal graph-question scratchpad (not shared)
+/docs/graph-questions.md

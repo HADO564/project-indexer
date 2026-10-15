@@ -248,7 +248,7 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
 
 /// Writes a failure as `{"schema": 1, "error": {"kind", "message", …}}`.
 /// Meant for stderr: under `--json`, stdout only ever holds a result.
-pub fn write_error(out: &mut impl Write, error: &anyhow::Error) -> anyhow::Result<()> {
+pub fn write_error(out: &mut (impl Write + ?Sized), error: &anyhow::Error) -> anyhow::Result<()> {
     let error = match error.downcast_ref::<Failure>() {
         Some(Failure::NotFound { query, .. }) => ErrorJson {
             kind: "not_found",
