@@ -177,6 +177,24 @@ it, a fork and its upstream, a client engagement and the three repositories it
 spans. Groups already give one exclusive band per project — links are the
 non-exclusive, many-to-many relation that groups deliberately are not.
 
+A link **names itself.** The edge carries a short label the user writes — not a
+fixed type from a menu but the actual relationship. The motivating case: a Unity
+game whose C# code lives in one folder and whose art and scene assets live in
+another, tracked as two separate projects (each detected on its own terms, both
+already in the database), joined by an edge the user calls "assets" — or
+"scripts", read from the other end. The flat list and the detectors can see each
+folder; only the named edge records that they are one thing worked on in two
+places.
+
+Links are worth exposing to **agents and scripts**, not just the canvas. An edge
+in `show`'s `--json` lets an agent asked about the game jump straight to the
+assets folder it was built from — and back — instead of guessing from names or
+paths. That makes linking a producer for the
+[agent surface](../cli/ROADMAP.md#agent-access--mcp-or-a-cli-plus-a-skill): the
+CLI manages edges (`dexily link <a> <b> --as assets`, `dexily unlink`,
+`dexily links <project>`) and carries them in every project's `--json`, so the
+GUI's graph and an agent's lookup read the same relations.
+
 The graph is drawn with **Svelte Flow** (`@xyflow/svelte`), the SvelteKit
 counterpart to React Flow from the same authors. It has to be a bundled
 dependency rather than anything CDN-loaded — the content security policy
@@ -184,9 +202,13 @@ forbids fetching code at runtime, and that is a property worth keeping.
 
 What needs deciding:
 
-- **Are links typed, and are they directed?** "depends on" and "forked from"
-  have a direction that "related to" does not. Untyped and undirected is the
-  cheap start; adding a type later is additive, adding direction later is not.
+- **The label, and whether the edge is directed.** The user writes the label,
+  so it is free text (`assets`, `depends on`, `forked from`), not a fixed menu.
+  But some read one way — `forked from` — and the two ends may want different
+  words (`scripts` ↔ `assets`), which is really a direction question. A single
+  undirected label is the cheap start; a per-direction second label and an
+  explicit direction are additive-then-not, in that order — so decide early
+  whether an edge is one labelled line or two.
 - **Where links live.** A many-to-many edge does not fit the JSON project blob
   the way a scalar field does, so this is a real table and a schema step. It
   should land on the same migration machinery the groups work builds, not
@@ -197,6 +219,12 @@ What needs deciding:
 - **What a link does when a project is deleted.** Soft-deleted projects stay in
   the bin, so their edges should presumably persist and grey out rather than
   vanish — otherwise restoring a project silently loses its connections.
+- **One model, two surfaces.** The edges are core data — a real table and a
+  `LinkService`, built on the same migration machinery as groups — surfaced by
+  the GUI canvas *and* by the CLI and `--json` alike, not a GUI-only feature.
+  Settling the core shape (the two project ids, the label, any direction) before
+  either frontend is drawn keeps them reading the same relations and lets agents
+  traverse links the moment they exist.
 
 ## Global shortcut
 

@@ -298,6 +298,12 @@ Three things have to be answered before either ships.
 - **Whether the GUI remains the primary face.** Asked plainly, because if the
   answer is no, that reorders most of this document rather than adding to it.
 
+The [project-linking graph](../app/ROADMAP.md#project-linking), once it exists,
+is a natural surface to expose here: an edge carried in each project's `--json`
+lets an agent jump from a project to a related one — a Unity game to the assets
+folder it was built from — by the name a person gave the link, not by guessing
+from paths.
+
 ## Distribution and releases
 
 **Packaging comes after the package.** Nothing here is started, and none of it
