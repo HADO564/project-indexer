@@ -167,6 +167,13 @@ per-row failures instead of calling `refresh_trackers` or `into_result()`; and
 
 ## Project linking
 
+> **Deferred — a later release, not before the TUI.** Held back on purpose: the
+> [TUI](../cli/ROADMAP.md#the-tui--every-change-is-a-command) is the larger
+> milestone and should land first, and linking must not be allowed to weigh the
+> app down. When it is picked up, build it in two steps (below) — the lean
+> data/CLI layer first, the whole-set graph canvas only if real, accumulated
+> links prove it worth the weight.
+
 Connect one project to another the way Obsidian connects notes — an explicit,
 navigable edge between two entries, and a graph view over the whole set. The
 project list answers "what do I have"; links answer "what did I build this
@@ -194,6 +201,15 @@ paths. That makes linking a producer for the
 CLI manages edges (`dexily link <a> <b> --as assets`, `dexily unlink`,
 `dexily links <project>`) and carries them in every project's `--json`, so the
 GUI's graph and an agent's lookup read the same relations.
+
+**Two steps, by weight.** First the lean layer: the edges as core data (a small
+table and a `LinkService`), the CLI to manage them, the edges in each project's
+`--json`, and at most a "Related" list on the project page. That carries the
+whole value above — the named relationship, the agent traversal — and adds
+nothing for anyone who never links. The whole-set graph *canvas* is the second
+step and the costly one (a route of its own and a bundled drawing library), so
+it waits for its own trigger: enough links in real use that seeing them laid out
+earns its keep. Until then the app stays exactly as light as it is now.
 
 The graph is drawn with **Svelte Flow** (`@xyflow/svelte`), the SvelteKit
 counterpart to React Flow from the same authors. It has to be a bundled
