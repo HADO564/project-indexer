@@ -241,8 +241,12 @@ fn detail_in_group(
         group,
     };
     let mut out = Vec::new();
+    // This helper renders the project-detail view, which is all on stdout; its
+    // prose sink is unused, so discard it.
+    let mut err = std::io::sink();
     write(
         &mut out,
+        &mut err,
         &outcome,
         Look {
             folder: Color::DEFAULT_FOLDER,
@@ -716,12 +720,13 @@ fn show_through_a_pipe_has_no_glyphs_but_names_the_colour_and_icon() {
         }),
     };
     let mut out = Vec::new();
+    let mut err = std::io::sink();
     let look = Look {
         folder: Color::DEFAULT_FOLDER,
         header: Color::DEFAULT_HEADER,
         icons: IconStyle::Emoji,
     };
-    write(&mut out, &outcome, look).unwrap();
+    write(&mut out, &mut err, &outcome, look).unwrap();
     // Tests never write to a terminal, which is a pipe's case: no colour,
     // and no glyph, so a script reading the first line gets the name.
     let rendered = String::from_utf8(out).unwrap();
@@ -729,4 +734,26 @@ fn show_through_a_pipe_has_no_glyphs_but_names_the_colour_and_icon() {
     assert!(has_row(&rendered, "group", "Work"), "{rendered}");
     assert!(has_row(&rendered, "color", "violet"), "{rendered}");
     assert!(has_row(&rendered, "icon", "rocket"), "{rendered}");
+}
+
+#[test]
+fn prose_goes_to_the_err_writer_and_stdout_stays_empty() {
+    // A prose-only outcome: "opening …" is a message, not data, so stdout must
+    // stay empty (a script reading it sees no rows) and the line must land on
+    // the prose writer the caller passed in — the hook a TUI uses to put it on
+    // its message line instead of over the alternate screen.
+    let outcome = Outcome::Opened {
+        project: Box::new(project("app", "/home/me/work/app", json!([]), None)),
+    };
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let look = Look {
+        folder: Color::DEFAULT_FOLDER,
+        header: Color::DEFAULT_HEADER,
+        icons: IconStyle::Off,
+    };
+    write(&mut out, &mut err, &outcome, look).unwrap();
+    assert!(out.is_empty(), "stdout should carry no prose: {out:?}");
+    let prose = String::from_utf8(err).unwrap();
+    assert_eq!(prose, "dexily: opening \"app\"\n");
 }

@@ -19,6 +19,7 @@ mod tui;
 mod tests;
 
 use std::ffi::OsString;
+use std::io::Write;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
@@ -101,18 +102,19 @@ fn main() -> ExitCode {
             // A usage error is prose with exit code 2, as clap's own are —
             // even under `--json`, which the contract reserves for results
             // and for failures a script can act on.
+            let mut err = std::io::stderr().lock();
             if let Some(Failure::Usage { message }) = e.downcast_ref::<Failure>() {
                 // An empty message is already-reported: the observer's override
                 // prompt showed the reason, the user declined, and there is
                 // nothing to add — just the exit code.
                 if !message.is_empty() {
-                    eprintln!("dexily: {message}");
+                    let _ = writeln!(err, "dexily: {message}");
                 }
                 return ExitCode::from(2);
             }
             // The whole cause chain is printed, so core's own message — the
             // version-skew guard above all — reaches the user intact.
-            output::print_error(&e, format);
+            output::print_error(&e, format, &mut err);
             ExitCode::FAILURE
         }
     }
@@ -160,7 +162,8 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
             )?;
             let outcome = commands::run(command, &ctx)?;
             let look = resolve_look(cli.folder_color, cli.header_color);
-            output::print(&outcome, Format::from_json_flag(cli.json), look)?;
+            let mut err = std::io::stderr().lock();
+            output::print(&outcome, Format::from_json_flag(cli.json), look, &mut err)?;
             Ok(ExitCode::SUCCESS)
         }
         // The observer opens the database itself, *after* the wrapped command
