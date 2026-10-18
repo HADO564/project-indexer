@@ -19,7 +19,9 @@ pub struct ScanArgs {
     /// The folder to scan inside — `~/code`, not a project's own directory.
     pub directory: PathBuf,
 
-    /// How far below the folder to look. 1 visits only its children.
+    /// How far below the folder to look.
+    ///
+    /// 1 visits only its children.
     #[arg(long, default_value_t = 1)]
     pub depth: u32,
 
@@ -31,6 +33,7 @@ pub struct ScanArgs {
     #[arg(long, short = 't', value_enum, value_delimiter = ',')]
     pub tracker: Vec<TrackerKind>,
 
+    /// Register every project found, not just list them.
     #[arg(long)]
     pub import: bool,
 }

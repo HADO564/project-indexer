@@ -43,55 +43,69 @@ pub struct EditArgs {
     /// Replace the notes. An empty string clears them.
     #[arg(long, group = "change")]
     pub notes: Option<String>,
-    /// Add a tag. Repeat the flag or separate tags with commas. Adding a tag
-    /// the project already has changes nothing.
+    /// Add a tag.
+    ///
+    /// Repeat the flag or separate tags with commas. Adding a tag the project
+    /// already has changes nothing.
     #[arg(long, group = "change", value_delimiter = ',')]
     pub add_tag: Vec<String>,
 
-    /// Remove a tag, ignoring case. Repeat the flag or separate tags with
-    /// commas. Removals happen before additions, so a tag both removed and
-    /// added ends up present.
+    /// Remove a tag, ignoring case.
+    ///
+    /// Repeat the flag or separate tags with commas. Removals happen before
+    /// additions, so a tag both removed and added ends up present.
     #[arg(long, group = "change", value_delimiter = ',')]
     pub remove_tag: Vec<String>,
 
-    /// Set a property, replacing one with the same name whatever its case.
-    /// Repeat the flag for several; the value is everything after the first
-    /// `=`, kept exactly as typed, commas included.
+    /// Set a property (`key=value`).
+    ///
+    /// Replaces one with the same name whatever its case. Repeat the flag for
+    /// several; the value is everything after the first `=`, kept exactly as
+    /// typed, commas included.
     #[arg(long, group = "change", value_name = "KEY=VALUE", value_parser = parse_property)]
     pub set: Vec<(String, String)>,
 
-    /// Remove a property, ignoring case. Repeat the flag for several. Unsets
-    /// happen before sets, so a property both unset and set ends up set.
+    /// Remove a property, ignoring case.
+    ///
+    /// Repeat the flag for several. Unsets happen before sets, so a property
+    /// both unset and set ends up set.
     #[arg(long, group = "change", value_name = "KEY")]
     pub unset: Vec<String>,
 
-    /// Only consider projects with one of these trackers when matching.
+    /// Match only projects with these trackers.
+    ///
     /// Repeat the flag or separate the kinds with commas.
     #[arg(long, short = 't', value_enum, value_delimiter = ',')]
     pub tracker: Vec<TrackerKind>,
 
-    /// Open the form with every field, not just the description, tags and
-    /// properties. It only chooses the form, so it cannot be combined with a
-    /// field flag.
+    /// Open the form with every field.
+    ///
+    /// Not just the description, tags and properties. It only chooses the
+    /// form, so it cannot be combined with a field flag.
     #[arg(long, conflicts_with = "change")]
     pub full: bool,
 
-    /// Point the project at another folder — after moving or renaming it on
-    /// disk. It must exist, and no other project may have it. A relative path
-    /// is resolved from where you run the command.
+    /// Point the project at another folder.
+    ///
+    /// After moving or renaming it on disk. It must exist, and no other
+    /// project may have it. A relative path is resolved from where you run the
+    /// command.
     #[arg(long, group = "change")]
     pub directory: Option<PathBuf>,
 
-    /// The app to open the project with: its name, or where it is installed.
-    /// Stored as typed, less any spaces around it, and only checked when you
-    /// `open` the project. An empty string clears it, so the system's default
-    /// app opens it again.
+    /// The app to open the project with.
+    ///
+    /// Its name, or where it is installed. Stored as typed, less any spaces
+    /// around it, and only checked when you `open` the project. An empty
+    /// string clears it, so the system's default app opens it again.
     #[arg(long, group = "change")]
     pub open_with: Option<String>,
 
-    /// Put the project in this group, matched ignoring case. A project is in
-    /// one group at a time, so this moves it out of any other. An empty string
-    /// takes it out, as `--ungroup` does.
+    /// Put the project in this group.
+    ///
+    /// Matched ignoring case. A project is in one group at a time, so this
+    /// moves it out of any other. An empty string takes it out, as `--ungroup`
+    /// does.
     #[arg(long, group = "change")]
     pub group: Option<String>,
 
@@ -99,13 +113,17 @@ pub struct EditArgs {
     #[arg(long, group = "change", conflicts_with = "group")]
     pub ungroup: bool,
 
-    /// The project's own colour: cyan, gold, amber, rust, violet, green, blue
-    /// or pink, or #rrggbb. An empty string clears it.
+    /// The project's own colour — a palette name or #rrggbb.
+    ///
+    /// cyan, gold, amber, rust, violet, green, blue or pink, or a #rrggbb hex
+    /// value. An empty string clears it.
     #[arg(long, group = "change")]
     pub color: Option<String>,
 
-    /// The project's own icon: a bundled one (folder, rocket, code, …) or
-    /// custom:<name> for one added in the app. An empty string clears it.
+    /// The project's own icon — a bundled name or custom:<name>.
+    ///
+    /// A bundled one (folder, rocket, code, …) or custom:<name> for one added
+    /// in the app. An empty string clears it.
     #[arg(long, group = "change")]
     pub icon: Option<String>,
 }

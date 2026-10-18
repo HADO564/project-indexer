@@ -35,6 +35,7 @@ The CLI is released independently of the desktop app, under tags of the form
 
 - **An overridden recognized-git line now tracks the repo it makes.** When a person at a terminal overrides a refused `git init` / `git clone` (refused only over an option), dexily forms the expectation it had already parsed and tracks the repository, applying the project flags — rather than tracking nothing. An overridden *unknown* command still tracks nothing (there is no recognizer to know what it made), and the override is still terminal-only, so the allowlist guarantee is unchanged.
 - `edit --color` now points at the right palette when the value typed is a *terminal* colour (one of `config folder-color`'s larger set, such as `red`) rather than a project colour, instead of refusing it with no hint. A genuine typo still gets the plain error.
+- **`-h` is now a concise summary; `--help` keeps the full detail.** Each command's and flag's help was one long paragraph, shown in full by both `-h` and `--help`. The first line is now a short description — so `dexily <cmd> -h` and the command list read at a glance — and the elaboration (rules, examples, caveats) stays under `--help`. `scan --import`, which had no help text at all, now describes itself. The complete reference is the new [manual](../../docs/cli/MANUAL.md) (#35).
 
 ### Fixed
 

@@ -9,8 +9,8 @@ This is the user-facing reference. For the machine-readable `--json` contract
 commands the observer recognises and project types it detects see
 [`SUPPORTED-COMMANDS-AND-PROGRAMS.md`](SUPPORTED-COMMANDS-AND-PROGRAMS.md).
 
-> Every command also prints `dexily <command> --help`. This manual is the
-> readable overview; `--help` is the exhaustive detail.
+> `dexily <command> -h` gives a one-line summary of each flag; `--help` adds the
+> full detail for each. This manual is the readable overview of the lot.
 
 ## Contents
 
