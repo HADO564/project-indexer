@@ -87,25 +87,35 @@ impl std::fmt::Display for SortByKind {
 
 #[derive(Debug, Args)]
 pub struct ListArgs {
-    /// Only list projects whose name contains this, or, when it has a `/`,
-    /// whose path ends with it (`work/app`). Ignores case.
+    /// Filter by name, or by a `/`-path ending (`work/app`).
+    ///
+    /// Keeps projects whose name contains this, or, when it has a `/`, whose
+    /// path ends with it. Ignores case.
     pub query: Option<String>,
 
-    /// Order the table by this field. Each field has its own natural
-    /// direction — names run A to Z, last opened runs most recent first.
+    /// Order the table (`name` or `last-opened`).
+    ///
+    /// Each field has its own natural direction — names run A to Z, last
+    /// opened runs most recent first.
     #[arg(long, short = 's', value_enum, default_value_t = SortByKind::Name)]
     pub sort: SortByKind,
 
-    /// Flip the sort: Z to A by name, oldest first by last opened.
+    /// Flip the sort.
+    ///
+    /// Z to A by name, oldest first by last opened.
     #[arg(long, short = 'r')]
     pub reverse: bool,
 
-    /// Only include projects with one of these trackers, before the query is
-    /// matched. Repeat the flag or separate the kinds with commas.
+    /// Keep only projects with these trackers.
+    ///
+    /// Applied before the query is matched. Repeat the flag or separate the
+    /// kinds with commas.
     #[arg(long, short = 't', value_enum, value_delimiter = ',')]
     pub tracker: Vec<TrackerKind>,
 
-    /// Which projects to draw from. Binned projects appear only under `binned`.
+    /// Which set to draw from.
+    ///
+    /// Binned projects appear only under `binned`.
     #[arg(long, value_enum, default_value_t = View::All)]
     pub view: View,
 }

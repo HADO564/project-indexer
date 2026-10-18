@@ -54,15 +54,20 @@ pub enum Command {
     Unfavorite(favorite::FavoriteArgs),
     /// Change a project's fields.
     Edit(edit::EditArgs),
-    /// Bring a project back from the bin. Only its record returns: the bin
-    /// holds projects whose folder was deleted, and the files stay gone.
+    /// Bring a project back from the bin.
+    ///
+    /// Only its record returns: the bin holds projects whose folder was
+    /// deleted, and the files stay gone.
     Restore(restore::RestoreArgs),
-    /// Permanently delete a binned project's record. Asks first; cannot be undone.
+    /// Permanently delete a binned project's record.
+    ///
+    /// Asks first; cannot be undone.
     Purge(purge::PurgeArgs),
     /// Find projects under a directory, and optionally register them.
     Scan(scan::ScanArgs),
-    /// List, create, change or delete groups. To put a project in one, use
-    /// `edit --group`.
+    /// List, create, change or delete groups.
+    ///
+    /// To put a project in one, use `edit --group`.
     Group(group::GroupArgs),
     /// Show or change the CLI's settings.
     Config(config::ConfigArgs),

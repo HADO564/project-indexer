@@ -36,10 +36,16 @@ use crate::output::{Format, Look};
 #[command(
     name = "dexily",
     version,
-    about = "Track your projects from the terminal"
+    about = "Track your projects from the terminal",
+    long_about = "Track your projects from the terminal.\n\n\
+        A bare `dexily` opens the full-screen browser; a subcommand runs once. \
+        Use -h for a short summary and --help for the full detail. The complete \
+        reference is the manual: docs/cli/MANUAL.md"
 )]
 struct Cli {
-    /// Print a versioned JSON document instead of human-readable output.
+    /// Print a versioned JSON document instead of human output.
+    ///
+    /// The schema and every field are documented in docs/cli/agents.md.
     #[arg(long, global = true)]
     json: bool,
 
@@ -47,25 +53,32 @@ struct Cli {
     #[arg(long, short, global = true)]
     yes: bool,
 
+    /// Silence dexily's own lines on an observed command.
+    ///
     /// With an observed command (`dexily mkdir thing`): none of dexily's own
     /// lines — never the command's output, and never a warning.
     #[arg(long, short, global = true)]
     quiet: bool,
 
-    /// Surface diagnostics on stderr that are otherwise silent — a directory
-    /// that could not be read during a scan, a detector that errored. Honours
-    /// `RUST_LOG` too, which can raise the level (`RUST_LOG=debug dexily …`).
+    /// Surface otherwise-silent diagnostics on stderr.
+    ///
+    /// A directory that could not be read during a scan, a detector that
+    /// errored. Honours `RUST_LOG` too, which can raise the level
+    /// (`RUST_LOG=debug dexily …`).
     #[arg(long, short, global = true)]
     verbose: bool,
 
-    /// The colour used to highlight each project's folder name, for this run
-    /// only. Without it, the default set by `dexily config folder-color`
-    /// applies, else cyan. `dexily config folder-color --help` lists the colours.
+    /// Folder-name highlight colour, for this run only.
+    ///
+    /// Without it, the default set by `dexily config folder-color` applies,
+    /// else cyan. `dexily config folder-color --help` lists the colours.
     #[arg(long, value_enum, global = true, hide_possible_values = true)]
     folder_color: Option<Color>,
 
-    /// The colour of table headers, for this run only. Without it, the default
-    /// set by `dexily config header-color` applies, else magenta.
+    /// Table-header colour, for this run only.
+    ///
+    /// Without it, the default set by `dexily config header-color` applies,
+    /// else magenta.
     #[arg(long, value_enum, global = true, hide_possible_values = true)]
     header_color: Option<Color>,
 
