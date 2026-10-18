@@ -8,7 +8,11 @@ cargo-dist-version = "0.32.0"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
-installers = ["shell", "powershell"]
+installers = ["shell", "powershell", "homebrew"]
+# The Homebrew tap that receives the generated formula, so macOS/Linux users
+# can `brew install HADO564/homebrew-tap/dexily`. dist pushes the formula here
+# on each `dexily-v*` release, using the HOMEBREW_TAP_TOKEN secret.
+tap = "HADO564/homebrew-tap"
 # Target platforms to build apps for (Rust target-triple syntax)
 # Linux builds are static (musl), so one binary runs on every distro whatever
 # its glibc.
@@ -30,7 +34,7 @@ plan-jobs = ["./release-checks"]
 # Once every binary is built and uploaded, and before the release is
 # announced: `dexily-core` and `dexily` to crates.io, together, so the crates
 # and the archives are the same code. If this fails the release stays a draft.
-publish-jobs = ["./publish-crates"]
+publish-jobs = ["homebrew", "./publish-crates"]
 # After a release, hand "Latest" back to the newest app release, so the
 # releases page keeps pointing app users at the app.
 post-announce-jobs = ["./restore-latest"]

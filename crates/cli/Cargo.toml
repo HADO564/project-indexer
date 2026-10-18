@@ -6,6 +6,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Track your projects from the terminal: the command line for Project Indexer"
 repository = "https://github.com/HADO564/project-indexer"
+homepage = "https://github.com/HADO564/project-indexer"
 readme = "README.md"
 license-file = "../../LICENSE"
 keywords = ["projects", "cli", "tui", "git", "workspace"]
