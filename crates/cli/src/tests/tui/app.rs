@@ -6,7 +6,7 @@ use indexer_core::domain::{Group, Project};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde_json::json;
 
-use crate::tui::app::{view_label, App, Pane};
+use crate::tui::app::{view_label, Action, App, Mode, Pane};
 
 fn project(name: &str, group_id: Option<&str>, favorite: bool) -> Project {
     serde_json::from_value(json!({
@@ -52,6 +52,12 @@ fn fixture() -> App {
 
 fn press(app: &mut App, code: KeyCode) {
     app.handle(KeyEvent::new(code, KeyModifiers::NONE));
+}
+
+fn type_str(app: &mut App, text: &str) {
+    for ch in text.chars() {
+        press(app, KeyCode::Char(ch));
+    }
 }
 
 fn names(app: &App) -> Vec<String> {
@@ -216,6 +222,56 @@ fn q_esc_and_ctrl_c_quit() {
     let mut app = fixture();
     app.handle(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
     assert!(app.quit());
+}
+
+#[test]
+fn colon_opens_the_command_line_and_typing_edits_it() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(':'));
+    assert_eq!(app.mode(), &Mode::Command(String::new()));
+    type_str(&mut app, "open app");
+    assert_eq!(app.mode(), &Mode::Command("open app".into()));
+    press(&mut app, KeyCode::Backspace);
+    assert_eq!(app.mode(), &Mode::Command("open ap".into()));
+}
+
+#[test]
+fn nav_keys_type_into_the_command_line_rather_than_acting() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(':'));
+    // j, k, q would move or quit in the browser; here they are just text.
+    type_str(&mut app, "jkq");
+    assert_eq!(app.mode(), &Mode::Command("jkq".into()));
+    assert!(!app.quit());
+}
+
+#[test]
+fn esc_cancels_the_command_line_without_quitting() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(':'));
+    type_str(&mut app, "open app");
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), &Mode::Normal);
+    assert!(!app.quit());
+}
+
+#[test]
+fn enter_runs_the_typed_command_and_returns_to_normal() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(':'));
+    type_str(&mut app, "favorite app");
+    let action = app.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(action, Some(Action::Run("favorite app".into())));
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
+fn an_empty_command_line_runs_nothing() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(':'));
+    let action = app.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(action, None);
+    assert_eq!(app.mode(), &Mode::Normal);
 }
 
 #[test]
