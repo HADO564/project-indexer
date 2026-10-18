@@ -13,7 +13,10 @@ opens a full-screen form (`edit --full` for every field). `group` lists,
 creates, changes and deletes groups; a project joins one with `edit --group`.
 **The observer works for `mkdir`, `git`, `cargo`, `go`, `gh repo create`, and the package/project managers' `init`** — the full list is in [Supported commands and programs](../../docs/cli/SUPPORTED-COMMANDS-AND-PROGRAMS.md):
 `dexily mkdir thing` makes the folder and tracks it, and
-`dexily git clone <repo>` does the same for a repository. The TUI still returns "not implemented". The command is `dexily`.
+`dexily git clone <repo>` does the same for a repository. A bare `dexily` opens
+the keyboard-driven TUI — a browser of your projects with a `:` command line
+that runs the same commands. The command is `dexily`; the full command reference
+is in [the manual](../../docs/cli/MANUAL.md).
 
 ```
 dexily list                     every project, as a table (--view, -s name|last-opened, -r to flip)
@@ -167,6 +170,7 @@ src/
 
 | Document | What it is for |
 |---|---|
+| [`docs/cli/MANUAL.md`](../../docs/cli/MANUAL.md) | the user manual: every command, its flags and examples |
 | [`docs/superpowers/specs/2026-09-14-cli-design.md`](../../docs/superpowers/specs/2026-09-14-cli-design.md) | the design contract: structure, the command layer, releases, milestones |
 | [`docs/cli/ROADMAP.md`](../../docs/cli/ROADMAP.md) | what is planned for the CLI, and why |
 | [`docs/cli/agents.md`](../../docs/cli/agents.md) | the `--json` output, field by field, for scripts and LLM agents |

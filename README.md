@@ -22,6 +22,7 @@ frontend. Windows, macOS, and Linux.
 - [Features](#features)
 - [What it detects](#what-it-detects)
 - [Install](#install)
+- [Command-line tool (`dexily`)](#command-line-tool-dexily)
 - [Where your data lives](#where-your-data-lives)
 - [Using it](#using-it)
 - [Architecture](#architecture)
@@ -119,6 +120,16 @@ been renamed to Dexily, so from the next release they are `Dexily_<version>_…`
 
 Builds are unsigned, so Windows SmartScreen and macOS Gatekeeper will warn on
 first launch.
+
+### Command-line tool (`dexily`)
+
+Dexily also ships a standalone command-line tool, **`dexily`**, that works
+against the same project database — no app required. It is released separately
+under `dexily-v*` tags, and installs with `cargo install dexily` or a prebuilt
+installer.
+
+- **Install & overview:** [`crates/cli/README.md`](crates/cli/README.md)
+- **Command reference / manual:** [`docs/cli/MANUAL.md`](docs/cli/MANUAL.md)
 
 ## Where your data lives
 
