@@ -35,6 +35,10 @@ pub(crate) enum Pane {
 pub(crate) enum Mode {
     Normal,
     Command(String),
+    /// The which-key action menu is open, highlighting this item.
+    Menu(usize),
+    /// The `?` help overlay is open.
+    Help,
 }
 
 /// Something the event loop must do that `App` cannot, having no `Context`.
@@ -43,6 +47,16 @@ pub(crate) enum Mode {
 pub(crate) enum Action {
     /// Run this `:` line and show its result.
     Run(String),
+}
+
+/// One row of the action menu: the shortcut key, its label, and the `:` command
+/// it runs on the selected project. Shortcuts and the menu share this list, so
+/// they can never name different commands for the same key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MenuItem {
+    pub(crate) key: char,
+    pub(crate) label: &'static str,
+    pub(crate) command: String,
 }
 
 /// The whole TUI state for a frame.
@@ -213,6 +227,67 @@ impl App {
         self.visible().get(self.list_sel).copied()
     }
 
+    /// The actions that apply to the selected project — the rows of the `Space`
+    /// menu, and the targets of the letter shortcuts. Each runs a `:` command
+    /// on the project by id, so they go through the same path as a typed line.
+    /// Empty when nothing is selected.
+    pub(crate) fn menu_items(&self) -> Vec<MenuItem> {
+        let Some(project) = self.selected_project() else {
+            return Vec::new();
+        };
+        let id = &project.id;
+        if matches!(self.active, View::Bin) {
+            vec![
+                MenuItem {
+                    key: 'r',
+                    label: "Restore",
+                    command: format!("restore {id}"),
+                },
+                MenuItem {
+                    key: 'x',
+                    label: "Purge",
+                    command: format!("purge {id}"),
+                },
+            ]
+        } else {
+            let (fav_key, fav_label, fav_cmd) = if project.favorite {
+                ('f', "Unfavourite", "unfavorite")
+            } else {
+                ('f', "Favourite", "favorite")
+            };
+            vec![
+                MenuItem {
+                    key: 'o',
+                    label: "Open",
+                    command: format!("open {id}"),
+                },
+                MenuItem {
+                    key: fav_key,
+                    label: fav_label,
+                    command: format!("{fav_cmd} {id}"),
+                },
+                MenuItem {
+                    key: 'e',
+                    label: "Edit",
+                    command: format!("edit {id}"),
+                },
+                MenuItem {
+                    key: 'd',
+                    label: "Untrack",
+                    command: format!("untrack {id}"),
+                },
+            ]
+        }
+    }
+
+    /// The command a letter shortcut runs, if one applies to the selection.
+    fn shortcut_command(&self, key: char) -> Option<String> {
+        self.menu_items()
+            .into_iter()
+            .find(|item| item.key == key)
+            .map(|item| item.command)
+    }
+
     // --- key handling ---
 
     /// Applies one key press. In the browser it moves the selection or the
@@ -221,23 +296,34 @@ impl App {
     /// running a command needs the `Context` this does not hold.
     pub(crate) fn handle(&mut self, key: KeyEvent) -> Option<Action> {
         match self.mode {
-            Mode::Normal => {
-                self.handle_normal(key);
+            Mode::Normal => self.handle_normal(key),
+            Mode::Command(_) => self.handle_command(key),
+            Mode::Menu(_) => self.handle_menu(key),
+            Mode::Help => {
+                // Any key dismisses the help overlay.
+                self.mode = Mode::Normal;
                 None
             }
-            Mode::Command(_) => self.handle_command(key),
         }
     }
 
-    /// Browser keys: movement, focus, quit, and `:` to open the command line.
-    fn handle_normal(&mut self, key: KeyEvent) {
+    /// Browser keys: movement, focus, quit, `:` to open the command line, a
+    /// letter shortcut to run a command on the selection, `Space` for the
+    /// action menu, and `?` for help.
+    fn handle_normal(&mut self, key: KeyEvent) -> Option<Action> {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.quit = true;
-            return;
+            return None;
         }
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
             KeyCode::Char(':') => self.mode = Mode::Command(String::new()),
+            KeyCode::Char('?') => self.mode = Mode::Help,
+            KeyCode::Char(' ') => {
+                if !self.menu_items().is_empty() {
+                    self.mode = Mode::Menu(0);
+                }
+            }
             KeyCode::Char('j') | KeyCode::Down => self.move_down(),
             KeyCode::Char('k') | KeyCode::Up => self.move_up(),
             KeyCode::Char('g') => self.move_top(),
@@ -247,8 +333,47 @@ impl App {
             KeyCode::Tab => self.focus_next(),
             KeyCode::Char('[') => self.jump_section(Pane::Views),
             KeyCode::Char(']') => self.jump_section(Pane::Groups),
+            // A letter shortcut runs its command on the selected project.
+            KeyCode::Char(c) => {
+                if let Some(command) = self.shortcut_command(c) {
+                    return Some(Action::Run(command));
+                }
+            }
             _ => {}
         }
+        None
+    }
+
+    /// The action menu: `j`/`k` move, `Enter` runs the highlighted item, a
+    /// letter runs its item directly, `Esc`/`Space` close it.
+    fn handle_menu(&mut self, key: KeyEvent) -> Option<Action> {
+        let Mode::Menu(selected) = self.mode else {
+            return None;
+        };
+        let items = self.menu_items();
+        match key.code {
+            KeyCode::Esc | KeyCode::Char(' ') => self.mode = Mode::Normal,
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.mode = Mode::Menu((selected + 1).min(items.len().saturating_sub(1)));
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.mode = Mode::Menu(selected.saturating_sub(1));
+            }
+            KeyCode::Enter => {
+                self.mode = Mode::Normal;
+                return items
+                    .get(selected)
+                    .map(|item| Action::Run(item.command.clone()));
+            }
+            KeyCode::Char(c) => {
+                if let Some(item) = items.into_iter().find(|item| item.key == c) {
+                    self.mode = Mode::Normal;
+                    return Some(Action::Run(item.command));
+                }
+            }
+            _ => {}
+        }
+        None
     }
 
     /// Editing the `:` line: type into it, `Backspace` erases, `Esc` (or

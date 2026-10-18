@@ -8,10 +8,10 @@
 //! keeps the glyphs, and the cursor and focus are drawn with modifiers
 //! (reversed, bold, dim) so they still read when colour is off.
 
-use ratatui::layout::{Constraint, Layout, Position, Rect};
+use ratatui::layout::{Constraint, Flex, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
 use indexer_core::domain::views::View;
@@ -40,6 +40,87 @@ pub fn draw(frame: &mut Frame, app: &App) {
     draw_detail(frame, detail, app);
     draw_status(frame, status, app);
     frame.render_widget(Paragraph::new(hint_line(app)), hint);
+
+    // Overlays sit on top of the panes, over the body area.
+    match app.mode() {
+        Mode::Menu(selected) => draw_menu(frame, body, app, *selected),
+        Mode::Help => draw_help(frame, body),
+        _ => {}
+    }
+}
+
+/// The which-key action menu: a small centred popup of the selection's actions.
+fn draw_menu(frame: &mut Frame, area: Rect, app: &App, selected: usize) {
+    let items = app.menu_items();
+    let rows: Vec<ListItem> = items
+        .iter()
+        .map(|item| {
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!(" {}  ", item.key),
+                    Style::new().add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(item.label.to_string()),
+            ]))
+        })
+        .collect();
+    let popup = centered(28, rows.len() as u16 + 2, area);
+    frame.render_widget(Clear, popup);
+    let mut state = ListState::default();
+    state.select(Some(selected));
+    let list = List::new(rows)
+        .block(Block::bordered().title("Actions"))
+        .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
+        .highlight_symbol("> ");
+    frame.render_stateful_widget(list, popup, &mut state);
+}
+
+/// The `?` help overlay: every key and what it does, a centred popup.
+fn draw_help(frame: &mut Frame, area: Rect) {
+    let rows = [
+        ("j / k, ↑ / ↓", "move the selection"),
+        ("g / G", "top / bottom"),
+        ("Tab, h / l", "switch pane"),
+        ("[ / ]", "sidebar section"),
+        ("o", "open"),
+        ("f", "favourite / unfavourite"),
+        ("e", "edit"),
+        ("d", "untrack"),
+        ("r / x", "restore / purge (bin)"),
+        ("Space", "action menu"),
+        (":", "command line"),
+        ("?", "this help"),
+        ("q, Ctrl+C", "quit"),
+    ];
+    let lines: Vec<Line> = rows
+        .iter()
+        .map(|(keys, action)| {
+            Line::from(vec![
+                Span::styled(
+                    format!(" {keys:<14}"),
+                    Style::new().add_modifier(Modifier::BOLD),
+                ),
+                Span::raw((*action).to_string()),
+            ])
+        })
+        .collect();
+    let popup = centered(44, lines.len() as u16 + 2, area);
+    frame.render_widget(Clear, popup);
+    frame.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title("Keys")),
+        popup,
+    );
+}
+
+/// A fixed-size rectangle centred in `area` (clamped to it if larger).
+fn centered(width: u16, height: u16, area: Rect) -> Rect {
+    let [row] = Layout::vertical([Constraint::Length(height)])
+        .flex(Flex::Center)
+        .areas(area);
+    let [cell] = Layout::horizontal([Constraint::Length(width)])
+        .flex(Flex::Center)
+        .areas(row);
+    cell
 }
 
 fn draw_sidebar(frame: &mut Frame, area: Rect, app: &App) {
@@ -156,8 +237,9 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
             let x = x.min(area.x + area.width.saturating_sub(1));
             frame.set_cursor_position(Position::new(x, area.y));
         }
-        // Browsing: the last command's result, else a count summary.
-        Mode::Normal => {
+        // Browsing (or an overlay is up): the last command's result, else a
+        // count summary.
+        _ => {
             let text = if app.message().is_empty() {
                 let count = app.visible().len();
                 let noun = if count == 1 { "project" } else { "projects" };
@@ -338,7 +420,9 @@ fn short_id(id: &str) -> &str {
 fn hint_line(app: &App) -> Line<'static> {
     let keys = match app.mode() {
         Mode::Command(_) => " Enter run · Esc cancel",
-        Mode::Normal => " j/k move · g/G ends · Tab/h/l pane · [ ] section · : command · q quit",
+        Mode::Menu(_) => " j/k move · Enter run · Esc close",
+        Mode::Help => " any key closes",
+        Mode::Normal => " j/k move · o/f/e/d act · Space menu · : command · ? help · q quit",
     };
     Line::from(Span::styled(keys, Style::new().add_modifier(Modifier::DIM)))
 }

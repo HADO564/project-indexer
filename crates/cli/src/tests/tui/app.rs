@@ -275,6 +275,96 @@ fn an_empty_command_line_runs_nothing() {
 }
 
 #[test]
+fn a_letter_shortcut_runs_a_command_on_the_selection() {
+    let mut app = fixture(); // All view, selection is "alpha" (id "alpha-id")
+    let action = app.handle(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE));
+    assert_eq!(action, Some(Action::Run("open alpha-id".into())));
+}
+
+#[test]
+fn f_favourites_or_unfavourites_by_current_state() {
+    // alpha is not a favourite → favorite it.
+    let mut app = fixture();
+    assert_eq!(
+        app.handle(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE)),
+        Some(Action::Run("favorite alpha-id".into()))
+    );
+
+    // In the Favourites view, bravo (a favourite) → unfavorite it.
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('j')); // Views: Favourites, selection "bravo"
+    assert_eq!(
+        app.selected_project().map(|p| p.name.as_str()),
+        Some("bravo")
+    );
+    assert_eq!(
+        app.handle(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE)),
+        Some(Action::Run("unfavorite bravo-id".into()))
+    );
+}
+
+#[test]
+fn space_opens_the_menu_enter_runs_the_highlighted_item() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.mode(), &Mode::Menu(0)); // first item is Open
+    let action = app.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(action, Some(Action::Run("open alpha-id".into())));
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
+fn the_menu_moves_and_a_letter_runs_its_item() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(' '));
+    press(&mut app, KeyCode::Char('j'));
+    assert_eq!(app.mode(), &Mode::Menu(1));
+    // 'd' is the Untrack item's key — runs it directly and closes the menu.
+    let action = app.handle(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+    assert_eq!(action, Some(Action::Run("untrack alpha-id".into())));
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
+fn esc_closes_the_menu() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(' '));
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
+fn question_opens_help_and_any_key_closes_it() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('?'));
+    assert_eq!(app.mode(), &Mode::Help);
+    press(&mut app, KeyCode::Char('j')); // any key dismisses it
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
+fn the_bin_offers_restore_and_purge() {
+    let mut app = fixture();
+    for _ in 0..3 {
+        press(&mut app, KeyCode::Char('j')); // Views: All → Favourites → Ungrouped → Bin
+    }
+    assert_eq!(app.active(), &View::Bin);
+    assert_eq!(
+        app.selected_project().map(|p| p.name.as_str()),
+        Some("echo")
+    );
+    assert_eq!(
+        app.handle(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE)),
+        Some(Action::Run("restore echo-id".into()))
+    );
+    // `o` does not apply in the bin, so it is ignored (no action).
+    assert_eq!(
+        app.handle(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE)),
+        None
+    );
+}
+
+#[test]
 fn view_label_names_every_view() {
     let groups = vec![group("g-work", "Work")];
     assert_eq!(view_label(&View::All, &groups), "All");
