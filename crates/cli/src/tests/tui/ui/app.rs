@@ -4,11 +4,16 @@
 
 use indexer_core::domain::{Group, Project};
 use ratatui::backend::TestBackend;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Terminal;
 use serde_json::json;
 
 use crate::tui::app::App;
 use crate::tui::ui::app::draw;
+
+fn press(app: &mut App, code: KeyCode) {
+    app.handle(KeyEvent::new(code, KeyModifiers::NONE));
+}
 
 fn project(name: &str, group_id: Option<&str>) -> Project {
     serde_json::from_value(json!({
@@ -80,6 +85,24 @@ fn renders_the_three_panes_the_status_and_the_hint() {
 fn does_not_panic_in_a_small_terminal() {
     // A cramped terminal must still render — ratatui clips, it does not crash.
     let _ = render(&sample(), 20, 6);
+}
+
+#[test]
+fn the_action_menu_overlays_the_panes() {
+    let mut app = sample();
+    press(&mut app, KeyCode::Char(' '));
+    let text = render(&app, 90, 20).join("\n");
+    assert!(text.contains("Actions"), "{text}");
+    assert!(text.contains("Open"), "{text}");
+}
+
+#[test]
+fn the_help_overlay_lists_the_keys() {
+    let mut app = sample();
+    press(&mut app, KeyCode::Char('?'));
+    let text = render(&app, 90, 20).join("\n");
+    assert!(text.contains("Keys"), "{text}");
+    assert!(text.contains("quit"), "{text}");
 }
 
 #[test]

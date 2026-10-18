@@ -163,8 +163,12 @@ errors cleanly rather than hanging.
    until phases 4/3, so every non-interactive command works now. The heart of
    "every change is a command". (Defaulting an omitted target to the selected
    project is a phase-3 nicety, with the letter shortcuts.)
-3. **Shortcuts + action menu + `?` help + hint line.** Letter keys dispatch
-   commands on the selection; `Space` menu from the `Command` definitions.
+3. **Shortcuts + action menu + `?` help + hint line — shipped (phase 3).**
+   Letter keys (`o`/`f`/`e`/`d`, and `r`/`x` in the bin) dispatch a `:` command
+   on the selection; `Space` opens the which-key action menu, `?` the help
+   overlay. Shortcuts and the menu share one item list, so they never diverge.
+   (Mouse / right-click is still deferred; confirmation for `d`/`x` and the form
+   for `e` light up in phase 4 / the form phase.)
 4. **Live refresh + search + `n` add + `y/n` confirm.** `data_version` polling,
    `/` filter, `n` → prefilled `:add ` with Tab completion, the TUI `Confirmer`.
 5. **Configurable keys.** The shared form+TUI keymap and `config` rebinding,
