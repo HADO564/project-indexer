@@ -5,8 +5,9 @@
 //! the later phases in `docs/superpowers/specs/2026-10-15-tui-design.md`.
 
 pub(crate) mod app;
-mod cmdline;
+pub(crate) mod cmdline;
 pub mod form;
+pub(crate) mod host;
 mod keys;
 pub mod terminal;
 pub mod ui;
@@ -16,10 +17,12 @@ use std::io::{self, IsTerminal};
 use anyhow::bail;
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 
-use self::app::App;
+use self::app::{Action as AppAction, App};
 use self::form::{Action, FormState};
 use self::terminal::FormTerminal;
 use crate::context::Context;
+use crate::output::color::Color;
+use crate::output::Look;
 
 /// Opens the browser: read the database once, then draw and handle keys until
 /// the user quits. The terminal is put back by `Session`'s `Drop` on every way
@@ -38,7 +41,20 @@ pub fn run(ctx: &Context) -> anyhow::Result<()> {
         // events; acting on a release would run every key twice.
         if let Event::Key(key) = event::read()? {
             if key.kind == KeyEventKind::Press {
-                app.handle(key);
+                if let Some(AppAction::Run(line)) = app.handle(key) {
+                    let look = Look {
+                        folder: Color::DEFAULT_FOLDER,
+                        header: Color::DEFAULT_HEADER,
+                        icons: app.icons(),
+                    };
+                    let message = cmdline::run_line(&line, ctx, look);
+                    // A command may have changed the data; reload so the panes
+                    // reflect it. A failed reload is shown, not fatal.
+                    match app.reload(ctx) {
+                        Ok(()) => app.set_message(message),
+                        Err(error) => app.set_message(format!("dexily: reload failed: {error:#}")),
+                    }
+                }
             }
         }
     }

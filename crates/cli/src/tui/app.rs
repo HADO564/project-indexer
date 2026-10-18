@@ -7,8 +7,9 @@
 //! I/O — reading the database once at start, drawing each frame — and this owns
 //! what is on screen and where the cursor is.
 //!
-//! Phase 1 is read-only: it browses. Running commands, search and live refresh
-//! come in later phases (see `docs/superpowers/specs/2026-10-15-tui-design.md`).
+//! The `:` command line runs the shell's commands against the same core (the
+//! parsing and running live in [`super::cmdline`]); search and live refresh are
+//! later phases (see `docs/superpowers/specs/2026-10-15-tui-design.md`).
 
 use indexer_core::domain::sorting::SortOptions;
 use indexer_core::domain::views::{resolve_view, view_counts, View, ViewCounts};
@@ -26,6 +27,22 @@ pub(crate) enum Pane {
     Views,
     Groups,
     List,
+}
+
+/// What the status line is doing: the normal browser, or a `:` command being
+/// typed — the string is what has been typed so far.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Mode {
+    Normal,
+    Command(String),
+}
+
+/// Something the event loop must do that `App` cannot, having no `Context`.
+/// Returned by [`App::handle`] so the loop runs the command and reloads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Action {
+    /// Run this `:` line and show its result.
+    Run(String),
 }
 
 /// The whole TUI state for a frame.
@@ -49,6 +66,10 @@ pub(crate) struct App {
     icons: IconStyle,
     /// Whether colour is drawn — false under `NO_COLOR`.
     color: bool,
+    /// The status line's state: browsing, or typing a `:` command.
+    mode: Mode,
+    /// The last command's result, shown on the status line until the next one.
+    message: String,
     quit: bool,
 }
 
@@ -88,8 +109,32 @@ impl App {
             focus: Pane::Views,
             icons: IconStyle::Off,
             color: true,
+            mode: Mode::Normal,
+            message: String::new(),
             quit: false,
         }
+    }
+
+    /// Re-reads the database after a command may have changed it, keeping the
+    /// active view and clamping the selections. A view whose group has since
+    /// been deleted falls back to All, so the list is never left pointing at
+    /// nothing.
+    pub(crate) fn reload(&mut self, ctx: &Context) -> anyhow::Result<()> {
+        let opts = SortOptions::default();
+        self.projects = ctx.projects.list(opts)?;
+        self.deleted = ctx.projects.list_deleted(opts)?;
+        self.groups = ctx.groups.list()?;
+        self.counts = view_counts(&self.projects, &self.deleted, &self.groups);
+        if let View::Group { id } = &self.active {
+            if !self.groups.iter().any(|group| &group.id == id) {
+                self.active = View::All;
+                self.focus = Pane::Views;
+                self.views_sel = 0;
+            }
+        }
+        self.groups_sel = self.groups_sel.min(self.groups.len().saturating_sub(1));
+        self.list_sel = self.list_sel.min(self.visible().len().saturating_sub(1));
+        Ok(())
     }
 
     // --- read by the drawing code and the tests ---
@@ -123,6 +168,17 @@ impl App {
     }
     pub(crate) fn color_enabled(&self) -> bool {
         self.color
+    }
+    pub(crate) fn mode(&self) -> &Mode {
+        &self.mode
+    }
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// Set by the event loop to the result of the command it just ran.
+    pub(crate) fn set_message(&mut self, message: String) {
+        self.message = message;
     }
 
     /// The colour of a project's group, if it has one — the fallback for a
@@ -159,16 +215,29 @@ impl App {
 
     // --- key handling ---
 
-    /// Applies one key press. Sets `quit` on `q`, `Esc` or `Ctrl+C`; otherwise
-    /// moves the selection or the focus. Unknown keys are ignored — phase 1
-    /// only navigates.
-    pub(crate) fn handle(&mut self, key: KeyEvent) {
+    /// Applies one key press. In the browser it moves the selection or the
+    /// focus, or opens the `:` line; while the `:` line is open it edits that
+    /// line. Any [`Action`] returned is for the event loop to carry out, since
+    /// running a command needs the `Context` this does not hold.
+    pub(crate) fn handle(&mut self, key: KeyEvent) -> Option<Action> {
+        match self.mode {
+            Mode::Normal => {
+                self.handle_normal(key);
+                None
+            }
+            Mode::Command(_) => self.handle_command(key),
+        }
+    }
+
+    /// Browser keys: movement, focus, quit, and `:` to open the command line.
+    fn handle_normal(&mut self, key: KeyEvent) {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.quit = true;
             return;
         }
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
+            KeyCode::Char(':') => self.mode = Mode::Command(String::new()),
             KeyCode::Char('j') | KeyCode::Down => self.move_down(),
             KeyCode::Char('k') | KeyCode::Up => self.move_up(),
             KeyCode::Char('g') => self.move_top(),
@@ -179,6 +248,35 @@ impl App {
             KeyCode::Char('[') => self.jump_section(Pane::Views),
             KeyCode::Char(']') => self.jump_section(Pane::Groups),
             _ => {}
+        }
+    }
+
+    /// Editing the `:` line: type into it, `Backspace` erases, `Esc` (or
+    /// `Ctrl+C`) cancels back to the browser, `Enter` runs what was typed.
+    fn handle_command(&mut self, key: KeyEvent) -> Option<Action> {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        if key.code == KeyCode::Esc || (ctrl && key.code == KeyCode::Char('c')) {
+            self.mode = Mode::Normal;
+            return None;
+        }
+        let Mode::Command(buffer) = &mut self.mode else {
+            return None;
+        };
+        match key.code {
+            KeyCode::Enter => {
+                let line = std::mem::take(buffer);
+                self.mode = Mode::Normal;
+                (!line.trim().is_empty()).then_some(Action::Run(line))
+            }
+            KeyCode::Backspace => {
+                buffer.pop();
+                None
+            }
+            KeyCode::Char(c) if !ctrl => {
+                buffer.push(c);
+                None
+            }
+            _ => None,
         }
     }
 

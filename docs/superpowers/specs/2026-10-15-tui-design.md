@@ -154,8 +154,15 @@ errors cleanly rather than hanging.
    quit cleanly. Icons and mark colours drawn from `appearance` (Q5), an empty
    view says so, no terminal errors cleanly. No mutations. Proved the loop,
    layout and teardown.
-2. **The `:` command line.** Parse into `Command`, run it, render the `Outcome`
-   on the message line, reload. The heart of "every change is a command".
+2. **The `:` command line — shipped (phase 2).** `:` opens a
+   modal status line; the typed text is tokenized (quote-aware) and parsed by a
+   `no_binary_name` clap wrapper into the shell's `Command`, run with
+   `commands::run`, its prose shown on the status line, then the panes reload.
+   The TUI injects its own confirmer/editor (`tui::host`) that refuse the two
+   interactive flows — a destructive command's `y/n`, the bare-`edit` form —
+   until phases 4/3, so every non-interactive command works now. The heart of
+   "every change is a command". (Defaulting an omitted target to the selected
+   project is a phase-3 nicety, with the letter shortcuts.)
 3. **Shortcuts + action menu + `?` help + hint line.** Letter keys dispatch
    commands on the selection; `Space` menu from the `Command` definitions.
 4. **Live refresh + search + `n` add + `y/n` confirm.** `data_version` polling,
@@ -167,7 +174,17 @@ errors cleanly rather than hanging.
 
 - Mouse / right-click menu — the checklist mentions right-click; fold into phase
   3 only if cheap, else defer.
-- Configurable keys — phase 5.
+- Configurable keys — phase 5 (the shared form+TUI keymap, `config` rebinding).
+- **Theming / TUI colours** (asked 2026-10-16) — folds into the planned
+  **Theming** feature (checklist → *Theming*: `config theme <scheme>` /
+  `config theme set <role> <colour>`, LazyVim-style named schemes with per-role
+  overrides, saved in `cli-settings.json`). The TUI reads the same roles —
+  `folder`/`header` already are two — so there is no separate TUI theming effort;
+  it arrives when Theming does.
+- **Fonts** (asked 2026-10-16) — not possible: a terminal app cannot choose the
+  font, which the emulator owns; a program may only toggle bold, italic,
+  underline, dim and reversed. The one font-adjacent lever is the icon style
+  (`config icons nerd|emoji|off`), already wired.
 - Project linking / the graph view — deferred past the whole TUI (app roadmap).
 
 ## 10. Decisions — resolved (2026-10-15)

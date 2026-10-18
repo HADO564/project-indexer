@@ -8,7 +8,7 @@
 //! keeps the glyphs, and the cursor and focus are drawn with modifiers
 //! (reversed, bold, dim) so they still read when colour is off.
 
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, List, ListItem, ListState, Paragraph};
@@ -18,7 +18,7 @@ use indexer_core::domain::views::View;
 use indexer_core::domain::{Group, Project};
 
 use crate::appearance::{self, IconStyle};
-use crate::tui::app::{view_label, App, Pane};
+use crate::tui::app::{view_label, App, Mode, Pane};
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let [body, status, hint] = Layout::vertical([
@@ -39,7 +39,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     draw_list(frame, list, app);
     draw_detail(frame, detail, app);
     draw_status(frame, status, app);
-    frame.render_widget(Paragraph::new(hint_line()), hint);
+    frame.render_widget(Paragraph::new(hint_line(app)), hint);
 }
 
 fn draw_sidebar(frame: &mut Frame, area: Rect, app: &App) {
@@ -148,13 +148,29 @@ fn draw_detail(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
-    let count = app.visible().len();
-    let noun = if count == 1 { "project" } else { "projects" };
-    let text = format!(
-        " {count} {noun} · {}",
-        view_label(app.active(), app.groups())
-    );
-    frame.render_widget(Paragraph::new(text), area);
+    match app.mode() {
+        // Typing a command: the line is the input, with a cursor at its end.
+        Mode::Command(buffer) => {
+            frame.render_widget(Paragraph::new(format!(":{buffer}")), area);
+            let x = area.x + 1 + buffer.chars().count() as u16;
+            let x = x.min(area.x + area.width.saturating_sub(1));
+            frame.set_cursor_position(Position::new(x, area.y));
+        }
+        // Browsing: the last command's result, else a count summary.
+        Mode::Normal => {
+            let text = if app.message().is_empty() {
+                let count = app.visible().len();
+                let noun = if count == 1 { "project" } else { "projects" };
+                format!(
+                    " {count} {noun} · {}",
+                    view_label(app.active(), app.groups())
+                )
+            } else {
+                format!(" {}", app.message())
+            };
+            frame.render_widget(Paragraph::new(text), area);
+        }
+    }
 }
 
 /// A bordered list with its selected row reversed when the pane is focused, and
@@ -319,9 +335,10 @@ fn short_id(id: &str) -> &str {
     &id[..8.min(id.len())]
 }
 
-fn hint_line() -> Line<'static> {
-    Line::from(Span::styled(
-        " j/k move · g/G ends · Tab/h/l pane · [ ] section · q quit",
-        Style::new().add_modifier(Modifier::DIM),
-    ))
+fn hint_line(app: &App) -> Line<'static> {
+    let keys = match app.mode() {
+        Mode::Command(_) => " Enter run · Esc cancel",
+        Mode::Normal => " j/k move · g/G ends · Tab/h/l pane · [ ] section · : command · q quit",
+    };
+    Line::from(Span::styled(keys, Style::new().add_modifier(Modifier::DIM)))
 }

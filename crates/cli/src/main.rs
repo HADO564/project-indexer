@@ -148,9 +148,12 @@ fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     }
     match cli.invocation {
         None => {
+            // The TUI owns stdin (raw mode) and the alternate screen, so it
+            // supplies its own confirmer and editor rather than the shell's,
+            // which would read that stdin or draw over the interface.
             let ctx = Context::open(
-                Box::new(StdinConfirmer::new(cli.yes)),
-                Box::new(TerminalEditor::new(cli.json)),
+                Box::new(tui::host::TuiConfirmer),
+                Box::new(tui::host::TuiEditor),
             )?;
             tui::run(&ctx)?;
             Ok(ExitCode::SUCCESS)
