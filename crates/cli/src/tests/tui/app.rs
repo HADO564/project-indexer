@@ -1,6 +1,8 @@
 //! Navigation rules for the read-only TUI browser, driven as pure state — no
 //! terminal, no database — the way the form's state is tested.
 
+use std::path::PathBuf;
+
 use indexer_core::domain::views::View;
 use indexer_core::domain::{Group, Project};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -425,6 +427,55 @@ fn the_scan_dialog_cancels_and_an_empty_folder_scans_nothing() {
     press(&mut app, KeyCode::Char('s'));
     let action = app.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(action, None);
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
+fn tab_in_the_scan_dialog_opens_the_browser() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('s'));
+    let action = app.handle(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    assert_eq!(action, Some(Action::OpenBrowser));
+}
+
+#[test]
+fn the_folder_browser_navigates_and_scans() {
+    // Paths are built with the same APIs the code uses, so this holds on
+    // Windows (`\`) as well as Unix (`/`).
+    let base = PathBuf::from("/home/me/code");
+    let mut app = fixture();
+
+    app.set_browse(base.clone(), vec!["api".into(), "web".into()]);
+    assert!(matches!(app.mode(), Mode::Browse { .. }));
+
+    // j selects "web"; Enter descends into it.
+    press(&mut app, KeyCode::Char('j'));
+    assert_eq!(
+        app.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+        Some(Action::BrowseTo(base.join("web")))
+    );
+
+    // h goes to the parent.
+    app.set_browse(base.clone(), vec!["api".into()]);
+    assert_eq!(
+        app.handle(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE)),
+        Some(Action::BrowseTo(base.parent().unwrap().to_path_buf()))
+    );
+
+    // s scans the open folder and closes the browser.
+    app.set_browse(base.clone(), vec!["api".into()]);
+    assert_eq!(
+        app.handle(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE)),
+        Some(Action::Run(format!("scan \"{}\" --import", base.display())))
+    );
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
+fn esc_closes_the_folder_browser() {
+    let mut app = fixture();
+    app.set_browse(PathBuf::from("/tmp"), vec![]);
+    press(&mut app, KeyCode::Esc);
     assert_eq!(app.mode(), &Mode::Normal);
 }
 
