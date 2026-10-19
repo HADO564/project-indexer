@@ -82,10 +82,7 @@ fn moving_down_the_views_switches_the_active_view() {
     press(&mut app, KeyCode::Char('j')); // Favourites
     assert_eq!(app.active(), &View::Favorites);
     assert_eq!(names(&app), ["bravo"]);
-    press(&mut app, KeyCode::Char('j')); // Ungrouped
-    assert_eq!(app.active(), &View::Ungrouped);
-    assert_eq!(names(&app), ["alpha"]);
-    press(&mut app, KeyCode::Char('j')); // Bin — drawn from the deleted list
+    press(&mut app, KeyCode::Char('j')); // Bin — Ungrouped now lives in Groups
     assert_eq!(app.active(), &View::Bin);
     assert_eq!(names(&app), ["echo"]);
 }
@@ -104,11 +101,14 @@ fn the_views_cursor_clamps_at_both_ends() {
 }
 
 #[test]
-fn entering_the_groups_pane_shows_the_first_group_at_once() {
+fn entering_the_groups_pane_lands_on_ungrouped_then_the_groups() {
     let mut app = fixture();
     press(&mut app, KeyCode::Char(']')); // jump to Groups
     assert_eq!(app.focus(), Pane::Groups);
-    // The first group is active immediately, not only after a move.
+    // Ungrouped leads the Groups pane and is active at once.
+    assert_eq!(app.active(), &View::Ungrouped);
+    assert_eq!(names(&app), ["alpha"]);
+    press(&mut app, KeyCode::Char('j')); // Work
     assert_eq!(
         app.active(),
         &View::Group {
@@ -154,34 +154,39 @@ fn g_and_capital_g_jump_to_the_ends_of_a_pane() {
 }
 
 #[test]
-fn tab_cycles_views_groups_list() {
+fn tab_toggles_between_the_sidebar_and_the_list() {
     let mut app = fixture();
     assert_eq!(app.focus(), Pane::Views);
-    press(&mut app, KeyCode::Tab);
-    assert_eq!(app.focus(), Pane::Groups);
+    press(&mut app, KeyCode::Tab); // Views → List directly, not through Groups
+    assert_eq!(app.focus(), Pane::List);
+    press(&mut app, KeyCode::Tab); // back to the last sidebar section
+    assert_eq!(app.focus(), Pane::Views);
+
+    // From Groups, Tab reaches the list and returns to Groups.
+    press(&mut app, KeyCode::Char(']'));
     press(&mut app, KeyCode::Tab);
     assert_eq!(app.focus(), Pane::List);
     press(&mut app, KeyCode::Tab);
-    assert_eq!(app.focus(), Pane::Views);
+    assert_eq!(app.focus(), Pane::Groups);
 }
 
 #[test]
-fn tab_skips_an_empty_groups_pane() {
+fn the_groups_pane_always_holds_ungrouped() {
+    // No real groups, but the Groups pane still has the Ungrouped bucket.
     let mut app = App::new(vec![project("alpha", None, false)], vec![], vec![]);
+    press(&mut app, KeyCode::Char(']'));
+    assert_eq!(app.focus(), Pane::Groups);
+    assert_eq!(app.active(), &View::Ungrouped);
     press(&mut app, KeyCode::Tab);
     assert_eq!(app.focus(), Pane::List);
-    press(&mut app, KeyCode::Tab);
-    assert_eq!(app.focus(), Pane::Views);
-    // `]` has nothing to land on, so it is a no-op.
-    press(&mut app, KeyCode::Char(']'));
-    assert_eq!(app.focus(), Pane::Views);
 }
 
 #[test]
 fn the_list_cursor_moves_within_the_active_view() {
     let mut app = fixture();
-    press(&mut app, KeyCode::Char('l')); // focus Groups
-    press(&mut app, KeyCode::Char('l')); // focus List (Work: bravo, charlie)
+    press(&mut app, KeyCode::Char(']')); // Groups (Ungrouped)
+    press(&mut app, KeyCode::Char('j')); // Work group
+    press(&mut app, KeyCode::Char('l')); // into the list (Work: bravo, charlie)
     assert_eq!(app.focus(), Pane::List);
     assert_eq!(
         app.selected_project().map(|p| p.name.as_str()),

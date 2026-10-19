@@ -40,9 +40,9 @@ Three panes, a status line and a hint line:
 │ VIEWS           │ PROJECTS                 │ DETAIL           │
 │  All       (42) │ > Acme_Admin_Panel   Git │ Acme_Admin_Panel │
 │  Favourites (3) │   Acme_Storefront    Git │ directory  …     │
-│  Ungrouped (12) │   build_at_12:30         │ id         …     │
-│  Bin        (1) │   devmon         Git,Node│ tags       …     │
-│ GROUPS          │   …                      │ group      Work  │
+│  Bin        (1) │   build_at_12:30         │ id         …     │
+│ GROUPS          │   devmon         Git,Node│ tags       …     │
+│  Ungrouped (12) │   …                      │ group      Work  │
 │  Work       (5) │                          │ trackers   …     │
 │  Clients    (2) │                          │          ⏎ expand│
 │  … 8 more  ↓    │                          │                  │
@@ -52,9 +52,12 @@ Three panes, a status line and a hint line:
 └────────────────────────────────────────────────────────────────┘
 ```
 
-- **Sidebar** — the fixed views **All · Favourites · Ungrouped · Bin** (the core
-  `View` set, counts included), then the groups in sidebar order, each with its
-  live count. When the groups overflow, the sidebar **scrolls and keeps the
+- **Sidebar** — the fixed views **All · Favourites · Bin**, then a Groups
+  section led by **Ungrouped** (the "no group" bucket) and the groups in sidebar
+  order, each with its live count. `Tab` toggles between the sidebar and the
+  list so you reach the projects from the views in one key; `h`/`l` move pane by
+  pane (Views ↔ Groups ↔ List); `[`/`]` jump between the Views and Groups
+  sections. When the groups overflow, the sidebar **scrolls and keeps the
   selection in view — it never collapses into foldable sections.** That is a
   deliberate echo of the GUI: `viewState.ts` records that a sectioned/collapsible
   sidebar was *rejected* because persisting a selection is only safe when every
@@ -122,7 +125,8 @@ config layer over this table, not a rewrite.
 |---|---|
 | `j` / `↓`, `k` / `↑` | move the selection |
 | `g` / `G` | top / bottom |
-| `Tab` / `h` / `l` | switch focus sidebar ↔ list |
+| `Tab` | toggle sidebar ↔ list (Views → projects in one key) |
+| `h` / `l` | move pane by pane: Views ↔ Groups ↔ List |
 | `[` / `]` | (sidebar) jump to the previous / next section — Views ↔ Groups ↔ Saved |
 | `/` | **filter the focused pane** — view/group entries in the sidebar, or projects in the list (the `name: value` / free-text query engine); incremental, `Esc` clears, `Enter` commits |
 | `o` | open · `e` edit (opens the existing form) · `f` favourite toggle (list focus) |
@@ -207,9 +211,9 @@ errors cleanly rather than hanging.
 
 **Q1 — Large Groups (or Views) section.** A large section is handled three ways,
 never by collapsing:
-- **Scroll.** The fixed views (All/Favourites/Ungrouped/Bin) stay pinned at the
-  top; the groups list below scrolls and keeps the selection in view, with a
-  `… N more ↓` affordance.
+- **Scroll.** The fixed views (All/Favourites/Bin) stay pinned at the top; the
+  groups list below (Ungrouped, then the groups) scrolls and keeps the selection
+  in view, with a `… N more ↓` affordance.
 - **Filter (`/`).** With the sidebar focused, `/` starts an incremental
   find-as-you-type over the entries (vim-style), narrowing to those whose name
   matches; `Esc` clears it, `Enter` selects. Same `/` gesture as the list, which
@@ -248,9 +252,11 @@ not exist is a *saved* custom view — the `View` set is fixed. Decision:
   is one change surfaced in both, not a TUI-only bolt-on. The TUI's `/` still does
   ad-hoc `tag:` / property filtering now.
 
-**Q3 — Ungrouped.** Fixed: Ungrouped is a first-class core `View` (as is Bin) and
-is now in the sidebar — **All · Favourites · Ungrouped · Bin**. My first sketch
-dropped it; corrected in §2.
+**Q3 — Ungrouped.** Ungrouped is a first-class core `View`, shown in the sidebar.
+Placement settled (2026-10-19): the fixed VIEWS are **All · Favourites · Bin**,
+and **Ungrouped leads the GROUPS section** (it is the "no group" bucket, so it
+belongs with the groups), followed by the groups. Core is unchanged — this is a
+sidebar-presentation choice.
 
 **Q4 — Cards vs list.** The GUI already offers both (`ViewMode = "list" | "grid"`,
 `ProjectRow` vs `ProjectTile`), defaulting to list. A tile shows mark + name +

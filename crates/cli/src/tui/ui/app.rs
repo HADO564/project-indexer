@@ -124,8 +124,8 @@ fn centered(width: u16, height: u16, area: Rect) -> Rect {
 }
 
 fn draw_sidebar(frame: &mut Frame, area: Rect, app: &App) {
-    // The four fixed views sit above the groups: a fixed block tall enough for
-    // them plus its border, and the groups take whatever is left and scroll.
+    // The fixed views sit above the groups: a fixed block tall enough for them
+    // plus its border, and the groups take whatever is left and scroll.
     let views_height = app.views().len() as u16 + 2;
     let [views_area, groups_area] =
         Layout::vertical([Constraint::Length(views_height), Constraint::Fill(1)]).areas(area);
@@ -151,16 +151,18 @@ fn draw_sidebar(frame: &mut Frame, area: Rect, app: &App) {
         app.focus() == Pane::Views,
     );
 
-    let group_items: Vec<ListItem> = app
-        .groups()
-        .iter()
-        .map(|group| {
-            let count = app.count_for(&View::Group {
-                id: group.id.clone(),
-            });
-            ListItem::new(group_line(group, count, app.icons(), app.color_enabled()))
-        })
-        .collect();
+    // Ungrouped — the "no group" bucket — leads the Groups pane as a plain
+    // entry (it is not a real group, so no icon or colour), then the groups.
+    let mut group_items = vec![ListItem::new(entry_line(
+        "Ungrouped",
+        app.count_for(&View::Ungrouped),
+    ))];
+    group_items.extend(app.groups().iter().map(|group| {
+        let count = app.count_for(&View::Group {
+            id: group.id.clone(),
+        });
+        ListItem::new(group_line(group, count, app.icons(), app.color_enabled()))
+    }));
     render_list(
         frame,
         groups_area,

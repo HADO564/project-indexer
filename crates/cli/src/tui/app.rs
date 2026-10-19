@@ -76,6 +76,8 @@ pub(crate) struct App {
     active: View,
     list_sel: usize,
     focus: Pane,
+    /// The sidebar section `Tab` returns to from the list — Views or Groups.
+    sidebar_focus: Pane,
     /// How icons are drawn, from `config icons`; `Off` by default.
     icons: IconStyle,
     /// Whether colour is drawn — false under `NO_COLOR`.
@@ -109,7 +111,9 @@ impl App {
     /// navigation without a database.
     pub(crate) fn new(projects: Vec<Project>, deleted: Vec<Project>, groups: Vec<Group>) -> Self {
         let counts = view_counts(&projects, &deleted, &groups);
-        let views = vec![View::All, View::Favorites, View::Ungrouped, View::Bin];
+        // Ungrouped lives in the Groups pane (it is the "no group" bucket), not
+        // among the fixed views.
+        let views = vec![View::All, View::Favorites, View::Bin];
         Self {
             active: views[0].clone(),
             projects,
@@ -121,6 +125,7 @@ impl App {
             groups_sel: 0,
             list_sel: 0,
             focus: Pane::Views,
+            sidebar_focus: Pane::Views,
             icons: IconStyle::Off,
             color: true,
             mode: Mode::Normal,
@@ -146,7 +151,7 @@ impl App {
                 self.views_sel = 0;
             }
         }
-        self.groups_sel = self.groups_sel.min(self.groups.len().saturating_sub(1));
+        self.groups_sel = self.groups_sel.min(self.group_pane_len().saturating_sub(1));
         self.list_sel = self.list_sel.min(self.visible().len().saturating_sub(1));
         Ok(())
     }
@@ -213,6 +218,23 @@ impl App {
             View::Ungrouped => self.counts.ungrouped,
             View::Bin => self.counts.bin,
             View::Group { id } => self.counts.groups.get(id).copied().unwrap_or(0),
+        }
+    }
+
+    /// Rows in the Groups pane: the Ungrouped bucket, then the groups.
+    pub(crate) fn group_pane_len(&self) -> usize {
+        1 + self.groups.len()
+    }
+
+    /// The view a Groups-pane row maps to: row 0 is Ungrouped, the rest are the
+    /// groups in order.
+    fn group_pane_view(&self, index: usize) -> Option<View> {
+        if index == 0 {
+            Some(View::Ungrouped)
+        } else {
+            self.groups.get(index - 1).map(|group| View::Group {
+                id: group.id.clone(),
+            })
         }
     }
 
@@ -408,7 +430,7 @@ impl App {
     fn move_down(&mut self) {
         match self.focus {
             Pane::Views => self.views_sel = step_down(self.views_sel, self.views.len()),
-            Pane::Groups => self.groups_sel = step_down(self.groups_sel, self.groups.len()),
+            Pane::Groups => self.groups_sel = step_down(self.groups_sel, self.group_pane_len()),
             Pane::List => {
                 self.list_sel = step_down(self.list_sel, self.visible().len());
                 return;
@@ -446,7 +468,7 @@ impl App {
     fn move_bottom(&mut self) {
         match self.focus {
             Pane::Views => self.views_sel = self.views.len().saturating_sub(1),
-            Pane::Groups => self.groups_sel = self.groups.len().saturating_sub(1),
+            Pane::Groups => self.groups_sel = self.group_pane_len().saturating_sub(1),
             Pane::List => {
                 self.list_sel = self.visible().len().saturating_sub(1);
                 return;
@@ -455,44 +477,48 @@ impl App {
         self.sync_active();
     }
 
-    /// `h` / `Left`: focus the pane to the left, skipping Groups when empty.
+    /// `h` / `Left`: focus the pane to the left (List → Groups → Views). The
+    /// Groups pane always holds at least Ungrouped, so it is never skipped.
     fn focus_left(&mut self) {
-        self.focus = match self.focus {
-            Pane::List if self.groups.is_empty() => Pane::Views,
+        let next = match self.focus {
             Pane::List => Pane::Groups,
             Pane::Groups | Pane::Views => Pane::Views,
         };
-        self.sync_active();
+        self.set_focus(next);
     }
 
-    /// `l` / `Right`: focus the pane to the right, skipping Groups when empty.
+    /// `l` / `Right`: focus the pane to the right (Views → Groups → List).
     fn focus_right(&mut self) {
-        self.focus = match self.focus {
-            Pane::Views if self.groups.is_empty() => Pane::List,
+        let next = match self.focus {
             Pane::Views => Pane::Groups,
             Pane::Groups | Pane::List => Pane::List,
         };
-        self.sync_active();
+        self.set_focus(next);
     }
 
-    /// `Tab`: cycle Views → Groups → List → Views, skipping an empty Groups.
+    /// `Tab`: toggle between the sidebar and the list, so you reach the projects
+    /// from the views in one key without passing through Groups. From the list
+    /// it returns to whichever sidebar section you were last on.
     fn focus_next(&mut self) {
-        self.focus = match self.focus {
-            Pane::Views if self.groups.is_empty() => Pane::List,
-            Pane::Views => Pane::Groups,
-            Pane::Groups => Pane::List,
-            Pane::List => Pane::Views,
+        let next = match self.focus {
+            Pane::Views | Pane::Groups => Pane::List,
+            Pane::List => self.sidebar_focus,
         };
-        self.sync_active();
+        self.set_focus(next);
     }
 
-    /// `[` / `]`: jump straight to a sidebar section. Groups is a no-op when it
-    /// is empty — there is nothing to land on.
+    /// `[` / `]`: jump straight to a sidebar section.
     fn jump_section(&mut self, pane: Pane) {
-        if pane == Pane::Groups && self.groups.is_empty() {
-            return;
-        }
+        self.set_focus(pane);
+    }
+
+    /// Change focus, remember the sidebar section for `Tab`, and point the list
+    /// at the newly focused entry.
+    fn set_focus(&mut self, pane: Pane) {
         self.focus = pane;
+        if matches!(pane, Pane::Views | Pane::Groups) {
+            self.sidebar_focus = pane;
+        }
         self.sync_active();
     }
 
@@ -502,9 +528,7 @@ impl App {
     fn sync_active(&mut self) {
         let next = match self.focus {
             Pane::Views => self.views.get(self.views_sel).cloned(),
-            Pane::Groups => self.groups.get(self.groups_sel).map(|group| View::Group {
-                id: group.id.clone(),
-            }),
+            Pane::Groups => self.group_pane_view(self.groups_sel),
             Pane::List => None,
         };
         if let Some(view) = next {
