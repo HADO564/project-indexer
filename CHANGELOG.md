@@ -10,6 +10,12 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+## [0.3.7] — 2026-10-20
+
+Maintenance release: no user-facing changes since 0.3.6. Rebuilt and
+republished to refresh the installers and keep the app in step with the CLI's
+0.2.1 release.
+
 ## [0.3.6] — 2026-10-19
 
 ### Added
