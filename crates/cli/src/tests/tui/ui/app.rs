@@ -67,15 +67,16 @@ fn render(app: &App, width: u16, height: u16) -> Vec<String> {
 fn renders_the_three_panes_the_status_and_the_hint() {
     let text = render(&sample(), 90, 20).join("\n");
     for needle in [
-        "VIEWS",    // sidebar: the fixed views block
-        "All",      //   its first entry
-        "GROUPS",   // sidebar: the groups block
-        "Work",     //   the one group
-        "PROJECTS", // the list pane title
-        "alpha",    //   a project in the All view
-        "DETAIL",   // the detail pane
-        "projects", // the status line ("2 projects · All")
-        "quit",     // the hint line
+        "VIEWS",     // sidebar: the fixed views block
+        "All",       //   its first entry
+        "GROUPS",    // sidebar: the groups block
+        "Ungrouped", //   the no-group bucket, leading the groups
+        "Work",      //   the one group
+        "PROJECTS",  // the list pane title
+        "alpha",     //   a project in the All view
+        "DETAIL",    // the detail pane
+        "projects",  // the status line ("2 projects · All")
+        "quit",      // the hint line
     ] {
         assert!(text.contains(needle), "expected {needle:?} in:\n{text}");
     }
