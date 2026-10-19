@@ -10,9 +10,9 @@ ci = "github"
 # The installers to generate for each app
 installers = ["shell", "powershell", "homebrew"]
 # The Homebrew tap that receives the generated formula, so macOS/Linux users
-# can `brew install HADO564/homebrew-tap/dexily`. dist pushes the formula here
+# can `brew install HADO564/dexily-tap/dexily`. dist pushes the formula here
 # on each `dexily-v*` release, using the HOMEBREW_TAP_TOKEN secret.
-tap = "HADO564/homebrew-tap"
+tap = "HADO564/homebrew-dexily-tap"
 # Target platforms to build apps for (Rust target-triple syntax)
 # Linux builds are static (musl), so one binary runs on every distro whatever
 # its glibc.
