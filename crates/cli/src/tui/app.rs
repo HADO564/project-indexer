@@ -39,14 +39,23 @@ pub(crate) enum Mode {
     Menu(usize),
     /// The `?` help overlay is open.
     Help,
+    /// A destructive command is waiting for `y`/`n`: the prompt to show, and the
+    /// `:` line to run if confirmed.
+    Confirm {
+        prompt: String,
+        pending: String,
+    },
 }
 
 /// Something the event loop must do that `App` cannot, having no `Context`.
 /// Returned by [`App::handle`] so the loop runs the command and reloads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Action {
-    /// Run this `:` line and show its result.
+    /// Run this `:` line, first gating it behind a `y/N` prompt if it is
+    /// destructive (see `cmdline::needs_confirm`).
     Run(String),
+    /// Run this `:` line now — the user has already confirmed it.
+    RunConfirmed(String),
 }
 
 /// One row of the action menu: the shortcut key, its label, and the `:` command
@@ -321,9 +330,34 @@ impl App {
             Mode::Normal => self.handle_normal(key),
             Mode::Command(_) => self.handle_command(key),
             Mode::Menu(_) => self.handle_menu(key),
+            Mode::Confirm { .. } => self.handle_confirm(key),
             Mode::Help => {
                 // Any key dismisses the help overlay.
                 self.mode = Mode::Normal;
+                None
+            }
+        }
+    }
+
+    /// Enter the `y/N` gate for a destructive command; the event loop calls this
+    /// instead of running the command straight away.
+    pub(crate) fn begin_confirm(&mut self, prompt: String, pending: String) {
+        self.mode = Mode::Confirm { prompt, pending };
+    }
+
+    /// The confirmation gate: only `y` (or `Y`) runs the pending command;
+    /// anything else — `n`, `Esc`, a stray key — cancels, so nothing is deleted
+    /// by accident.
+    fn handle_confirm(&mut self, key: KeyEvent) -> Option<Action> {
+        let pending = match &self.mode {
+            Mode::Confirm { pending, .. } => pending.clone(),
+            _ => return None,
+        };
+        self.mode = Mode::Normal;
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => Some(Action::RunConfirmed(pending)),
+            _ => {
+                self.message = "cancelled".to_string();
                 None
             }
         }

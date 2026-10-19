@@ -239,6 +239,16 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
             let x = x.min(area.x + area.width.saturating_sub(1));
             frame.set_cursor_position(Position::new(x, area.y));
         }
+        // A destructive command is waiting for y/N: show the prompt, bold.
+        Mode::Confirm { prompt, .. } => {
+            frame.render_widget(
+                Paragraph::new(Line::from(Span::styled(
+                    format!(" {prompt}"),
+                    Style::new().add_modifier(Modifier::BOLD),
+                ))),
+                area,
+            );
+        }
         // Browsing (or an overlay is up): the last command's result, else a
         // count summary.
         _ => {
@@ -423,6 +433,7 @@ fn hint_line(app: &App) -> Line<'static> {
     let keys = match app.mode() {
         Mode::Command(_) => " Enter run · Esc cancel",
         Mode::Menu(_) => " j/k move · Enter run · Esc close",
+        Mode::Confirm { .. } => " y confirm · any other key cancels",
         Mode::Help => " any key closes",
         Mode::Normal => " j/k move · o/f/e/d act · Space menu · : command · ? help · q quit",
     };
