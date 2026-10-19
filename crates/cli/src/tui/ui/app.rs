@@ -45,8 +45,31 @@ pub fn draw(frame: &mut Frame, app: &App) {
     match app.mode() {
         Mode::Menu(selected) => draw_menu(frame, body, app, *selected),
         Mode::Help => draw_help(frame, body),
+        Mode::Scan(buffer) => draw_scan(frame, body, buffer),
         _ => {}
     }
+}
+
+/// The scan dialog: a centred box to type the folder to scan, with a cursor.
+fn draw_scan(frame: &mut Frame, area: Rect, buffer: &str) {
+    let popup = centered(54, 4, area);
+    frame.render_widget(Clear, popup);
+    let block = Block::bordered().title("Scan a folder");
+    let inner = block.inner(popup);
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(format!("> {buffer}")),
+            Line::from(Span::styled(
+                ". = current folder · Enter scan · Esc cancel",
+                Style::new().add_modifier(Modifier::DIM),
+            )),
+        ])
+        .block(block),
+        popup,
+    );
+    let x =
+        (inner.x + 2 + buffer.chars().count() as u16).min(inner.x + inner.width.saturating_sub(1));
+    frame.set_cursor_position(Position::new(x, inner.y));
 }
 
 /// The which-key action menu: a small centred popup of the selection's actions.
@@ -87,6 +110,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
         ("e", "edit"),
         ("d", "untrack"),
         ("r / x", "restore / purge (bin)"),
+        ("s", "scan a folder"),
         ("Space", "action menu"),
         (":", "command line"),
         ("?", "this help"),
@@ -432,10 +456,11 @@ fn short_id(id: &str) -> &str {
 fn hint_line(app: &App) -> Line<'static> {
     let keys = match app.mode() {
         Mode::Command(_) => " Enter run · Esc cancel",
+        Mode::Scan(_) => " type a folder · Enter scan · Esc cancel",
         Mode::Menu(_) => " j/k move · Enter run · Esc close",
         Mode::Confirm { .. } => " y confirm · any other key cancels",
         Mode::Help => " any key closes",
-        Mode::Normal => " j/k move · o/f/e/d act · Space menu · : command · ? help · q quit",
+        Mode::Normal => " j/k move · o/f/e/d act · s scan · Space menu · : cmd · ? help · q quit",
     };
     Line::from(Span::styled(keys, Style::new().add_modifier(Modifier::DIM)))
 }

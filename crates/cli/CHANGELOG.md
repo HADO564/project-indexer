@@ -13,6 +13,7 @@ The CLI is released independently of the desktop app, under tags of the form
 ### Added
 
 - **The TUI now deletes, behind a `y/N` gate.** `d` (untrack), `x` (purge) and `group delete` ask `Stop tracking this project? … [y/N]` on the status line first; only `y` runs it, and any other key cancels, so nothing is deleted by accident. This matches the shell, which already confirms the same three. (Previously these were blocked in the TUI.)
+- **Scan a folder from the TUI.** `s` opens a dialog for a folder to scan; type a path (or `.` for the current directory) and `Enter` runs `scan … --import`, so the projects it finds are tracked and appear in the list at once. (A folder picker to browse to the directory is coming next.)
 
 ## [0.2.0] — 2026-10-19
 

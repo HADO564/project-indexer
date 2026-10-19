@@ -107,6 +107,14 @@ fn the_help_overlay_lists_the_keys() {
 }
 
 #[test]
+fn the_scan_dialog_overlays_the_panes() {
+    let mut app = sample();
+    press(&mut app, KeyCode::Char('s'));
+    let text = render(&app, 90, 20).join("\n");
+    assert!(text.contains("Scan a folder"), "{text}");
+}
+
+#[test]
 fn an_empty_view_says_so() {
     // No projects at all: the All view is empty, so the list pane names the
     // emptiness rather than leaving a blank frame.
