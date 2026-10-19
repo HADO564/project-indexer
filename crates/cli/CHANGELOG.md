@@ -10,6 +10,13 @@ The CLI is released independently of the desktop app, under tags of the form
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-10-20
+
+Maintenance release: no functional changes. Rebuilt and republished to refresh
+every distribution channel — crates.io, the Homebrew tap, and the shell and
+PowerShell installers — and to keep the CLI in step with the app's 0.3.7
+release.
+
 ## [0.2.0] — 2026-10-19
 
 ### Added

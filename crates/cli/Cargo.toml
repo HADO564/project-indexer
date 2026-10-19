@@ -2,7 +2,7 @@
 name = "dexily"
 # Versioned independently of the desktop app and released as `dexily-v<version>`
 # tags; see CHANGELOG.md beside this file.
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Track your projects from the terminal: the command line for Project Indexer"
 repository = "https://github.com/HADO564/project-indexer"
@@ -25,7 +25,7 @@ path = "src/main.rs"
 [dependencies]
 # `version` as well as `path`: crates.io resolves it by version, this
 # workspace by path.
-dexily-core = { path = "../core", version = "0.3.6" }
+dexily-core = { path = "../core", version = "0.3.7" }
 anyhow = "1"
 # Only for the timestamp fields of `--json`'s project shape (`output/json.rs`).
 chrono = { version = "0.4.45", features = ["serde"] }
