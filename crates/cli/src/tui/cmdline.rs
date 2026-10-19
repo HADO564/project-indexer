@@ -5,6 +5,7 @@
 
 use clap::Parser;
 
+use crate::commands::group::GroupAction;
 use crate::commands::{self, Command, Outcome};
 use crate::context::Context;
 use crate::output::{human, Look};
@@ -39,6 +40,23 @@ pub(crate) fn run_line(line: &str, ctx: &Context, look: Look) -> String {
         Ok(outcome) => message_for(&outcome, look),
         Err(error) => format!("dexily: {error:#}"),
     }
+}
+
+/// If `line` parses to a command that deletes or stops tracking something, the
+/// prompt to show before running it; otherwise `None`. The TUI puts a `y/N`
+/// gate in front of these, matching the shell, which confirms the same three.
+pub(crate) fn needs_confirm(line: &str) -> Option<String> {
+    let argv = tokenize(line).ok()?;
+    let command = Line::try_parse_from(&argv).ok()?.command;
+    let prompt = match command {
+        Command::Untrack(_) => "Stop tracking this project? Its files are left alone. [y/N]",
+        Command::Purge(_) => "Permanently delete this binned record? Cannot be undone. [y/N]",
+        Command::Group(args) if matches!(args.action, GroupAction::Delete { .. }) => {
+            "Delete this group? Its projects are kept, ungrouped. [y/N]"
+        }
+        _ => return None,
+    };
+    Some(prompt.to_string())
 }
 
 /// Renders an outcome's **prose** (the message, not the table) by handing the

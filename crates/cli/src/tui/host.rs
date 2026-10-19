@@ -18,12 +18,15 @@ use indexer_core::{Group, Project, UpdateProject};
 use crate::confirm::{Confirmer, Track};
 use crate::editor::{FormKind, ProjectEditor};
 
-/// Refuses confirmation: the TUI's own `y/n` on the command line is phase 4.
+/// Approves confirmation. The TUI gates every destructive command with its own
+/// `y/N` prompt *before* running it (see `App`'s Confirm mode and
+/// `cmdline::needs_confirm`), so by the time a command asks here the user has
+/// already said yes.
 pub(crate) struct TuiConfirmer;
 
 impl Confirmer for TuiConfirmer {
     fn confirm(&self, _prompt: &str) -> anyhow::Result<bool> {
-        bail!("confirming a destructive command in the TUI isn't available yet — run it from the shell for now");
+        Ok(true)
     }
 
     fn track(&self, _prompt: &str) -> anyhow::Result<Option<Track>> {

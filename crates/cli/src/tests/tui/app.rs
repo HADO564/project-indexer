@@ -370,6 +370,30 @@ fn the_bin_offers_restore_and_purge() {
 }
 
 #[test]
+fn a_destructive_command_gates_on_y() {
+    let mut app = fixture();
+    app.begin_confirm("Delete? [y/N]".into(), "untrack alpha-id".into());
+    assert!(matches!(app.mode(), Mode::Confirm { .. }));
+    let action = app.handle(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    assert_eq!(
+        action,
+        Some(Action::RunConfirmed("untrack alpha-id".into()))
+    );
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
+fn any_other_key_cancels_the_confirmation() {
+    for code in [KeyCode::Char('n'), KeyCode::Esc, KeyCode::Enter] {
+        let mut app = fixture();
+        app.begin_confirm("Delete? [y/N]".into(), "purge alpha-id".into());
+        let action = app.handle(KeyEvent::new(code, KeyModifiers::NONE));
+        assert_eq!(action, None);
+        assert_eq!(app.mode(), &Mode::Normal);
+    }
+}
+
+#[test]
 fn view_label_names_every_view() {
     let groups = vec![group("g-work", "Work")];
     assert_eq!(view_label(&View::All, &groups), "All");

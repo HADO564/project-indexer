@@ -10,6 +10,10 @@ The CLI is released independently of the desktop app, under tags of the form
 
 ## [Unreleased]
 
+### Added
+
+- **The TUI now deletes, behind a `y/N` gate.** `d` (untrack), `x` (purge) and `group delete` ask `Stop tracking this project? … [y/N]` on the status line first; only `y` runs it, and any other key cancels, so nothing is deleted by accident. This matches the shell, which already confirms the same three. (Previously these were blocked in the TUI.)
+
 ## [0.2.0] — 2026-10-19
 
 ### Added
