@@ -3,7 +3,7 @@
 # it is shared by the app and the CLI and versioned with the app, and both use
 # it from this repository, never from the registry.
 name = "dexily-core"
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 description = "The shared core of Project Indexer and dexily: projects, groups, trackers and their SQLite store"
 repository = "https://github.com/HADO564/project-indexer"
