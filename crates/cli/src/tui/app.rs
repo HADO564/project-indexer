@@ -35,6 +35,9 @@ pub(crate) enum Pane {
 pub(crate) enum Mode {
     Normal,
     Command(String),
+    /// The scan dialog is open, asking for a folder to scan (the string is what
+    /// has been typed; `.` means the current directory).
+    Scan(String),
     /// The which-key action menu is open, highlighting this item.
     Menu(usize),
     /// The `?` help overlay is open.
@@ -329,6 +332,7 @@ impl App {
         match self.mode {
             Mode::Normal => self.handle_normal(key),
             Mode::Command(_) => self.handle_command(key),
+            Mode::Scan(_) => self.handle_scan(key),
             Mode::Menu(_) => self.handle_menu(key),
             Mode::Confirm { .. } => self.handle_confirm(key),
             Mode::Help => {
@@ -389,6 +393,7 @@ impl App {
             KeyCode::Tab => self.focus_next(),
             KeyCode::Char('[') => self.jump_section(Pane::Views),
             KeyCode::Char(']') => self.jump_section(Pane::Groups),
+            KeyCode::Char('s') => self.mode = Mode::Scan(String::new()),
             // A letter shortcut runs its command on the selected project.
             KeyCode::Char(c) => {
                 if let Some(command) = self.shortcut_command(c) {
@@ -398,6 +403,42 @@ impl App {
             _ => {}
         }
         None
+    }
+
+    /// The scan dialog: type a folder (`.` is the current directory), `Enter`
+    /// scans it and imports what it finds, `Backspace` edits, `Esc` cancels.
+    fn handle_scan(&mut self, key: KeyEvent) -> Option<Action> {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        if key.code == KeyCode::Esc || (ctrl && key.code == KeyCode::Char('c')) {
+            self.mode = Mode::Normal;
+            return None;
+        }
+        let Mode::Scan(buffer) = &mut self.mode else {
+            return None;
+        };
+        match key.code {
+            KeyCode::Enter => {
+                let folder = buffer.trim().to_string();
+                self.mode = Mode::Normal;
+                if folder.is_empty() {
+                    None
+                } else {
+                    // `--import` so the projects it finds appear at once; scan
+                    // resolves `.` to the current directory. Quoted in case the
+                    // path has spaces.
+                    Some(Action::Run(format!("scan \"{folder}\" --import")))
+                }
+            }
+            KeyCode::Backspace => {
+                buffer.pop();
+                None
+            }
+            KeyCode::Char(c) if !ctrl => {
+                buffer.push(c);
+                None
+            }
+            _ => None,
+        }
     }
 
     /// The action menu: `j`/`k` move, `Enter` runs the highlighted item, a

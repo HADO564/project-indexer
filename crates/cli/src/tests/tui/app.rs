@@ -394,6 +394,41 @@ fn any_other_key_cancels_the_confirmation() {
 }
 
 #[test]
+fn s_opens_the_scan_dialog_and_enter_scans_the_folder() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('s'));
+    assert_eq!(app.mode(), &Mode::Scan(String::new()));
+    type_str(&mut app, "~/code");
+    assert_eq!(app.mode(), &Mode::Scan("~/code".into()));
+    let action = app.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(action, Some(Action::Run("scan \"~/code\" --import".into())));
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
+fn the_scan_dialog_scans_the_current_folder_on_dot() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('s'));
+    type_str(&mut app, ".");
+    let action = app.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(action, Some(Action::Run("scan \".\" --import".into())));
+}
+
+#[test]
+fn the_scan_dialog_cancels_and_an_empty_folder_scans_nothing() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('s'));
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.mode(), &Mode::Normal);
+
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('s'));
+    let action = app.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(action, None);
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
 fn view_label_names_every_view() {
     let groups = vec![group("g-work", "Work")];
     assert_eq!(view_label(&View::All, &groups), "All");
