@@ -10,6 +10,15 @@ project is built, tested and worked on live in
 
 ## [Unreleased]
 
+## [0.3.6] — 2026-10-19
+
+### Added
+
+- **Many more project types are recognised.** Beyond git and Unreal, a tracked
+  folder is now detected as Node, Python, Go, Godot, Unity, Rust, CMake, Maven,
+  Gradle, Docker, PHP, Ruby, Dart, Swift, Elixir or .NET, each shown wherever a
+  project's type appears.
+
 ### Changed
 
 - **The app is now named Dexily.** The window title, the packaged product name
