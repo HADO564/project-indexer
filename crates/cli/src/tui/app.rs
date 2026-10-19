@@ -11,6 +11,8 @@
 //! parsing and running live in [`super::cmdline`]); search and live refresh are
 //! later phases (see `docs/superpowers/specs/2026-10-15-tui-design.md`).
 
+use std::path::PathBuf;
+
 use indexer_core::domain::sorting::SortOptions;
 use indexer_core::domain::views::{resolve_view, view_counts, View, ViewCounts};
 use indexer_core::domain::{Group, Project};
@@ -38,6 +40,13 @@ pub(crate) enum Mode {
     /// The scan dialog is open, asking for a folder to scan (the string is what
     /// has been typed; `.` means the current directory).
     Scan(String),
+    /// The folder browser is open at `path`, listing its subdirectories
+    /// (`entries`) with `sel` highlighted — for picking a folder to scan.
+    Browse {
+        path: PathBuf,
+        entries: Vec<String>,
+        sel: usize,
+    },
     /// The which-key action menu is open, highlighting this item.
     Menu(usize),
     /// The `?` help overlay is open.
@@ -59,6 +68,10 @@ pub(crate) enum Action {
     Run(String),
     /// Run this `:` line now — the user has already confirmed it.
     RunConfirmed(String),
+    /// Open the folder browser at the current directory (the loop reads it).
+    OpenBrowser,
+    /// Move the folder browser to this directory (the loop reads its subdirs).
+    BrowseTo(PathBuf),
 }
 
 /// One row of the action menu: the shortcut key, its label, and the `:` command
@@ -333,6 +346,7 @@ impl App {
             Mode::Normal => self.handle_normal(key),
             Mode::Command(_) => self.handle_command(key),
             Mode::Scan(_) => self.handle_scan(key),
+            Mode::Browse { .. } => self.handle_browse(key),
             Mode::Menu(_) => self.handle_menu(key),
             Mode::Confirm { .. } => self.handle_confirm(key),
             Mode::Help => {
@@ -347,6 +361,16 @@ impl App {
     /// instead of running the command straight away.
     pub(crate) fn begin_confirm(&mut self, prompt: String, pending: String) {
         self.mode = Mode::Confirm { prompt, pending };
+    }
+
+    /// Open (or move) the folder browser to `path` with its subdirectories; the
+    /// event loop calls this after reading the directory off disk.
+    pub(crate) fn set_browse(&mut self, path: PathBuf, entries: Vec<String>) {
+        self.mode = Mode::Browse {
+            path,
+            entries,
+            sel: 0,
+        };
     }
 
     /// The confirmation gate: only `y` (or `Y`) runs the pending command;
@@ -413,6 +437,11 @@ impl App {
             self.mode = Mode::Normal;
             return None;
         }
+        // Tab opens the folder browser (a text key would clash with typing a
+        // path). The loop reads the directory and fills the browser.
+        if key.code == KeyCode::Tab {
+            return Some(Action::OpenBrowser);
+        }
         let Mode::Scan(buffer) = &mut self.mode else {
             return None;
         };
@@ -435,6 +464,42 @@ impl App {
             }
             KeyCode::Char(c) if !ctrl => {
                 buffer.push(c);
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// The folder browser: `j`/`k` move among the subfolders, `Enter`/`l`
+    /// descends into the highlighted one, `h`/`Backspace` goes to the parent,
+    /// `s` scans the folder currently open, `Esc` cancels. Navigation returns an
+    /// [`Action`] for the loop to read the directory off disk.
+    fn handle_browse(&mut self, key: KeyEvent) -> Option<Action> {
+        let Mode::Browse { path, entries, sel } = &mut self.mode else {
+            return None;
+        };
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => {
+                *sel = step_down(*sel, entries.len());
+                None
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                *sel = sel.saturating_sub(1);
+                None
+            }
+            KeyCode::Char('l') | KeyCode::Enter | KeyCode::Right => entries
+                .get(*sel)
+                .map(|name| Action::BrowseTo(path.join(name))),
+            KeyCode::Char('h') | KeyCode::Backspace | KeyCode::Left => path
+                .parent()
+                .map(|parent| Action::BrowseTo(parent.to_path_buf())),
+            KeyCode::Char('s') => {
+                let folder = path.display().to_string();
+                self.mode = Mode::Normal;
+                Some(Action::Run(format!("scan \"{folder}\" --import")))
+            }
+            KeyCode::Esc => {
+                self.mode = Mode::Normal;
                 None
             }
             _ => None,

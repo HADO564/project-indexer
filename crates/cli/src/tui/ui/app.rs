@@ -46,8 +46,43 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Mode::Menu(selected) => draw_menu(frame, body, app, *selected),
         Mode::Help => draw_help(frame, body),
         Mode::Scan(buffer) => draw_scan(frame, body, buffer),
+        Mode::Browse { path, entries, sel } => draw_browse(frame, body, path, entries, *sel),
         _ => {}
     }
+}
+
+/// The folder browser: a centred box titled with the open directory, listing
+/// its subfolders with the highlighted one selectable.
+fn draw_browse(
+    frame: &mut Frame,
+    area: Rect,
+    path: &std::path::Path,
+    entries: &[String],
+    sel: usize,
+) {
+    let popup = centered(60, 16, area);
+    frame.render_widget(Clear, popup);
+    let title = format!("Scan — {}", path.display());
+    let items: Vec<ListItem> = if entries.is_empty() {
+        vec![ListItem::new(Span::styled(
+            "(no subfolders)",
+            Style::new().add_modifier(Modifier::DIM),
+        ))]
+    } else {
+        entries
+            .iter()
+            .map(|name| ListItem::new(format!("{name}/")))
+            .collect()
+    };
+    let list = List::new(items)
+        .block(Block::bordered().title(title))
+        .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
+        .highlight_symbol("> ");
+    let mut state = ListState::default();
+    if !entries.is_empty() {
+        state.select(Some(sel));
+    }
+    frame.render_stateful_widget(list, popup, &mut state);
 }
 
 /// The scan dialog: a centred box to type the folder to scan, with a cursor.
@@ -60,7 +95,7 @@ fn draw_scan(frame: &mut Frame, area: Rect, buffer: &str) {
         Paragraph::new(vec![
             Line::from(format!("> {buffer}")),
             Line::from(Span::styled(
-                ". = current folder · Enter scan · Esc cancel",
+                ". = current folder · Tab = browse · Enter scan · Esc cancel",
                 Style::new().add_modifier(Modifier::DIM),
             )),
         ])
@@ -456,7 +491,8 @@ fn short_id(id: &str) -> &str {
 fn hint_line(app: &App) -> Line<'static> {
     let keys = match app.mode() {
         Mode::Command(_) => " Enter run · Esc cancel",
-        Mode::Scan(_) => " type a folder · Enter scan · Esc cancel",
+        Mode::Scan(_) => " type a folder · Tab browse · Enter scan · Esc cancel",
+        Mode::Browse { .. } => " j/k move · Enter open · h up · s scan here · Esc cancel",
         Mode::Menu(_) => " j/k move · Enter run · Esc close",
         Mode::Confirm { .. } => " y confirm · any other key cancels",
         Mode::Help => " any key closes",

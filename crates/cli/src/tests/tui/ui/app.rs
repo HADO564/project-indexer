@@ -115,6 +115,18 @@ fn the_scan_dialog_overlays_the_panes() {
 }
 
 #[test]
+fn the_folder_browser_overlays_the_panes() {
+    let mut app = sample();
+    app.set_browse(
+        std::path::PathBuf::from("/home/me/code"),
+        vec!["api".into(), "web".into()],
+    );
+    let text = render(&app, 90, 20).join("\n");
+    assert!(text.contains("Scan —"), "{text}");
+    assert!(text.contains("api/"), "{text}");
+}
+
+#[test]
 fn an_empty_view_says_so() {
     // No projects at all: the All view is empty, so the list pane names the
     // emptiness rather than leaving a blank frame.

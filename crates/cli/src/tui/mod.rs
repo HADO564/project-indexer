@@ -13,6 +13,7 @@ pub mod terminal;
 pub mod ui;
 
 use std::io::{self, IsTerminal};
+use std::path::{Path, PathBuf};
 
 use anyhow::bail;
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
@@ -50,6 +51,17 @@ pub fn run(ctx: &Context) -> anyhow::Result<()> {
                     },
                     // Already confirmed by the gate — run it.
                     Some(AppAction::RunConfirmed(line)) => run_and_reload(&mut app, ctx, &line),
+                    // The folder browser's directory reads happen here, not in
+                    // the pure App state.
+                    Some(AppAction::OpenBrowser) => {
+                        let dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                        let entries = read_subdirs(&dir);
+                        app.set_browse(dir, entries);
+                    }
+                    Some(AppAction::BrowseTo(dir)) => {
+                        let entries = read_subdirs(&dir);
+                        app.set_browse(dir, entries);
+                    }
                     None => {}
                 }
             }
@@ -72,6 +84,21 @@ fn run_and_reload(app: &mut App, ctx: &Context, line: &str) {
         Ok(()) => app.set_message(message),
         Err(error) => app.set_message(format!("dexily: reload failed: {error:#}")),
     }
+}
+
+/// The subdirectories of `dir`, by name, sorted — what the folder browser
+/// lists. An unreadable directory (or a file) yields an empty list rather than
+/// an error; the browser then just has nothing to descend into.
+fn read_subdirs(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|entry| entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false))
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
 }
 
 /// Runs the edit form until the user saves or cancels: draw, wait for an
