@@ -8,7 +8,7 @@ use indexer_core::domain::{Group, Project};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde_json::json;
 
-use crate::tui::app::{view_label, Action, App, Mode, Pane};
+use crate::tui::app::{view_label, Action, App, Mode, Naming, Pane};
 
 fn project(name: &str, group_id: Option<&str>, favorite: bool) -> Project {
     serde_json::from_value(json!({
@@ -302,6 +302,15 @@ fn a_letter_shortcut_runs_a_command_on_the_selection() {
 }
 
 #[test]
+fn e_and_capital_e_open_the_compact_and_the_full_form() {
+    let mut app = fixture();
+    let action = app.handle(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
+    assert_eq!(action, Some(Action::Run("edit alpha-id".into())));
+    let action = app.handle(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::SHIFT));
+    assert_eq!(action, Some(Action::Run("edit alpha-id --full".into())));
+}
+
+#[test]
 fn f_favourites_or_unfavourites_by_current_state() {
     // alpha is not a favourite → favorite it.
     let mut app = fixture();
@@ -571,6 +580,138 @@ fn search_filters_within_the_active_view() {
     assert_eq!(names(&app), ["charlie"]);
 }
 
+// --- the Groups pane: keys act on groups ---
+
+fn key(app: &mut App, code: KeyCode) -> Option<Action> {
+    app.handle(KeyEvent::new(code, KeyModifiers::NONE))
+}
+
+fn menu_labels(app: &App) -> Vec<&'static str> {
+    app.menu_items().iter().map(|item| item.label).collect()
+}
+
+#[test]
+fn the_groups_pane_offers_group_actions_not_project_ones() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']')); // Ungrouped: not a group
+    assert_eq!(menu_labels(&app), ["New group"]);
+    press(&mut app, KeyCode::Char('j')); // Work
+    assert_eq!(menu_labels(&app), ["New group", "Rename", "Delete"]);
+    // A project's keys don't reach through to the list from here.
+    assert_eq!(key(&mut app, KeyCode::Char('o')), None);
+    assert_eq!(key(&mut app, KeyCode::Char('f')), None);
+    // Back in the list, the project's actions return.
+    press(&mut app, KeyCode::Tab);
+    assert_eq!(
+        menu_labels(&app),
+        ["Open", "Unfavourite", "Edit", "Edit all fields", "Untrack"]
+    );
+}
+
+#[test]
+fn n_asks_for_a_name_and_creates_the_group_with_it_quoted() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']'));
+    assert_eq!(key(&mut app, KeyCode::Char('n')), None);
+    assert_eq!(
+        app.mode(),
+        &Mode::Name {
+            naming: Naming::NewGroup,
+            buffer: String::new()
+        }
+    );
+    // Keys type into the name rather than acting.
+    type_str(&mut app, "Client jobs");
+    assert_eq!(
+        key(&mut app, KeyCode::Enter),
+        Some(Action::Run("group create \"Client jobs\"".into()))
+    );
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
+#[test]
+fn e_renames_the_group_starting_from_its_name() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Char('j')); // Work
+    press(&mut app, KeyCode::Char('e'));
+    assert_eq!(
+        app.mode(),
+        &Mode::Name {
+            naming: Naming::RenameGroup {
+                name: "Work".into()
+            },
+            buffer: "Work".into()
+        }
+    );
+    type_str(&mut app, " stuff");
+    assert_eq!(
+        key(&mut app, KeyCode::Enter),
+        Some(Action::Run(
+            "group edit \"Work\" --name \"Work stuff\"".into()
+        ))
+    );
+}
+
+#[test]
+fn d_deletes_the_group_by_name() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Char('j'));
+    press(&mut app, KeyCode::Char('j')); // Clients
+                                         // The loop gates this behind y/N, as it does every delete.
+    assert_eq!(
+        key(&mut app, KeyCode::Char('d')),
+        Some(Action::Run("group delete \"Clients\"".into()))
+    );
+}
+
+#[test]
+fn the_name_dialog_runs_nothing_when_empty_unchanged_or_cancelled() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Char('n'));
+    type_str(&mut app, "   ");
+    assert_eq!(key(&mut app, KeyCode::Enter), None, "only spaces");
+
+    press(&mut app, KeyCode::Char('j')); // Work
+    press(&mut app, KeyCode::Char('e'));
+    assert_eq!(key(&mut app, KeyCode::Enter), None, "the same name");
+
+    press(&mut app, KeyCode::Char('e'));
+    type_str(&mut app, "x");
+    assert_eq!(key(&mut app, KeyCode::Esc), None);
+    assert_eq!(app.mode(), &Mode::Normal, "Esc cancels");
+}
+
+#[test]
+fn the_groups_menu_opens_the_name_dialog_too() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.mode(), &Mode::Menu(0));
+    assert_eq!(key(&mut app, KeyCode::Enter), None);
+    assert!(matches!(
+        app.mode(),
+        Mode::Name {
+            naming: Naming::NewGroup,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn a_refresh_closes_the_groups_menu_if_its_group_went_away() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Char('j')); // Work
+    press(&mut app, KeyCode::Char(' '));
+    refresh(&mut app, |_, groups| groups.push(group("g-home", "Home")));
+    assert_eq!(app.mode(), &Mode::Menu(0), "Work is still there");
+    refresh(&mut app, |_, groups| groups.retain(|g| g.id != "g-work"));
+    assert_eq!(app.mode(), &Mode::Normal);
+}
+
 // --- live refresh: fresh data swapped in under the cursor ---
 
 /// Swap in the fixture's data with `edit` applied, as a reload would after
@@ -640,17 +781,50 @@ fn a_refresh_after_the_active_group_is_deleted_falls_back_to_all() {
     let mut app = fixture();
     press(&mut app, KeyCode::Char(']'));
     press(&mut app, KeyCode::Char('j')); // Work
-    refresh(&mut app, |projects, groups| {
-        groups.retain(|g| g.id != "g-work");
-        for p in projects.iter_mut() {
-            if p.group_id.as_deref() == Some("g-work") {
-                p.group_id = None;
-            }
-        }
-    });
+    press(&mut app, KeyCode::Tab); // into Work's list
+    refresh(&mut app, |p, g| delete_work(p, g));
     assert_eq!(app.active(), &View::All);
     assert_eq!(app.focus(), Pane::Views);
     assert_eq!(names(&app), ["alpha", "bravo", "charlie", "delta"]);
+}
+
+#[test]
+fn deleting_the_group_under_the_groups_cursor_stays_in_the_groups_pane() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Char('j')); // Work
+    refresh(&mut app, |p, g| delete_work(p, g));
+    // Clients moved up into Work's row, and the list follows it.
+    assert_eq!(app.focus(), Pane::Groups);
+    assert_eq!(app.groups_sel(), 1);
+    assert_eq!(
+        app.active(),
+        &View::Group {
+            id: "g-clients".into()
+        }
+    );
+    assert_eq!(names(&app), ["delta"]);
+
+    // Deleting the last group leaves the cursor on Ungrouped.
+    refresh(&mut app, |projects, groups| {
+        delete_work(projects, groups);
+        groups.clear();
+        for p in projects.iter_mut() {
+            p.group_id = None;
+        }
+    });
+    assert_eq!(app.focus(), Pane::Groups);
+    assert_eq!(app.active(), &View::Ungrouped);
+}
+
+/// Work deleted, its projects ungrouped — what `group delete Work` leaves.
+fn delete_work(projects: &mut [Project], groups: &mut Vec<Group>) {
+    groups.retain(|g| g.id != "g-work");
+    for p in projects.iter_mut() {
+        if p.group_id.as_deref() == Some("g-work") {
+            p.group_id = None;
+        }
+    }
 }
 
 #[test]

@@ -18,7 +18,7 @@ use indexer_core::domain::views::View;
 use indexer_core::domain::{Group, Project};
 
 use crate::appearance::{self, IconStyle};
-use crate::tui::app::{view_label, App, Mode, Pane};
+use crate::tui::app::{view_label, App, Mode, Naming, Pane};
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let [body, status, hint] = Layout::vertical([
@@ -45,7 +45,20 @@ pub fn draw(frame: &mut Frame, app: &App) {
     match app.mode() {
         Mode::Menu(selected) => draw_menu(frame, body, app, *selected),
         Mode::Help => draw_help(frame, body),
-        Mode::Scan(buffer) => draw_scan(frame, body, buffer),
+        Mode::Scan(buffer) => draw_input(
+            frame,
+            body,
+            "Scan a folder",
+            buffer,
+            ". = current folder · Tab = browse · Enter scan · Esc cancel",
+        ),
+        Mode::Name { naming, buffer } => {
+            let title = match naming {
+                Naming::NewGroup => "New group".to_string(),
+                Naming::RenameGroup { name } => format!("Rename \"{name}\""),
+            };
+            draw_input(frame, body, &title, buffer, "Enter save · Esc cancel");
+        }
         Mode::Browse { path, entries, sel } => draw_browse(frame, body, path, entries, *sel),
         _ => {}
     }
@@ -85,17 +98,18 @@ fn draw_browse(
     frame.render_stateful_widget(list, popup, &mut state);
 }
 
-/// The scan dialog: a centred box to type the folder to scan, with a cursor.
-fn draw_scan(frame: &mut Frame, area: Rect, buffer: &str) {
+/// A one-line dialog — the scan folder, a group's name: a centred box titled
+/// with what it asks for, the text typed so far with a cursor, and its keys.
+fn draw_input(frame: &mut Frame, area: Rect, title: &str, buffer: &str, keys: &str) {
     let popup = centered(54, 4, area);
     frame.render_widget(Clear, popup);
-    let block = Block::bordered().title("Scan a folder");
+    let block = Block::bordered().title(title.to_string());
     let inner = block.inner(popup);
     frame.render_widget(
         Paragraph::new(vec![
             Line::from(format!("> {buffer}")),
             Line::from(Span::styled(
-                ". = current folder · Tab = browse · Enter scan · Esc cancel",
+                keys.to_string(),
                 Style::new().add_modifier(Modifier::DIM),
             )),
         ])
@@ -141,11 +155,11 @@ fn draw_help(frame: &mut Frame, area: Rect) {
         ("Tab, h / l", "switch pane"),
         ("[ / ]", "sidebar section"),
         ("/", "search / filter the list"),
-        ("o", "open"),
-        ("f", "favourite / unfavourite"),
-        ("e", "edit"),
+        ("o / f", "open / favourite"),
+        ("e / E", "edit / edit all fields"),
         ("d", "untrack"),
         ("r / x", "restore / purge (bin)"),
+        ("n / e / d", "in Groups: new / rename / delete"),
         ("s", "scan a folder"),
         ("Space", "action menu"),
         (":", "command line"),
@@ -164,7 +178,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
             ])
         })
         .collect();
-    let popup = centered(44, lines.len() as u16 + 2, area);
+    let popup = centered(50, lines.len() as u16 + 2, area);
     frame.render_widget(Clear, popup);
     frame.render_widget(
         Paragraph::new(lines).block(Block::bordered().title("Keys")),
@@ -515,9 +529,18 @@ fn hint_line(app: &App) -> Line<'static> {
         Mode::Browse { .. } => " j/k move · Enter open · h up · s scan here · Esc cancel",
         Mode::Menu(_) => " j/k move · Enter run · Esc close",
         Mode::Confirm { .. } => " y confirm · any other key cancels",
+        Mode::Name { .. } => " type a name · Enter save · Esc cancel",
         Mode::Help => " any key closes",
+        // In the Groups pane the letters act on groups, so say which ones.
+        Mode::Normal if app.focus() == Pane::Groups => {
+            if app.selected_group().is_some() {
+                " j/k move · n new group · e rename · d delete · Space menu · : cmd · ? help · q quit"
+            } else {
+                " j/k move · n new group · Space menu · : cmd · ? help · q quit"
+            }
+        }
         Mode::Normal => {
-            " j/k move · / search · o/f/e/d act · s scan · Space menu · : cmd · ? help · q quit"
+            " j/k move · / search · o/f/e/E/d act · s scan · Space menu · : cmd · ? help · q quit"
         }
     };
     Line::from(Span::styled(keys, Style::new().add_modifier(Modifier::DIM)))

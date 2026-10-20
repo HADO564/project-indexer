@@ -67,11 +67,17 @@ pub fn run(ctx: &Context) -> anyhow::Result<()> {
                     // anything else runs straight away.
                     Some(AppAction::Run(line)) => match cmdline::needs_confirm(&line) {
                         Some(prompt) => app.begin_confirm(prompt, line),
-                        None => run_and_reload(&mut app, ctx, watch.as_mut(), &line),
+                        None => run_and_reload(
+                            &mut session.terminal,
+                            &mut app,
+                            ctx,
+                            watch.as_mut(),
+                            &line,
+                        )?,
                     },
                     // Already confirmed by the gate — run it.
                     Some(AppAction::RunConfirmed(line)) => {
-                        run_and_reload(&mut app, ctx, watch.as_mut(), &line)
+                        run_and_reload(&mut session.terminal, &mut app, ctx, watch.as_mut(), &line)?
                     }
                     // The folder browser's directory reads happen here, not in
                     // the pure App state.
@@ -127,8 +133,15 @@ fn refresh_if_changed(app: &mut App, ctx: &Context, watch: Option<&mut Watch>) -
 
 /// Run one `:` line against the database, then reload so the panes reflect any
 /// change and show the result on the status line. A failed reload is shown, not
-/// fatal.
-fn run_and_reload(app: &mut App, ctx: &Context, watch: Option<&mut Watch>, line: &str) {
+/// fatal. After an `edit`, whose form may have drawn over the browser, the
+/// whole screen is repainted on the next draw, not only what changed.
+fn run_and_reload(
+    terminal: &mut FormTerminal,
+    app: &mut App,
+    ctx: &Context,
+    watch: Option<&mut Watch>,
+    line: &str,
+) -> io::Result<()> {
     let look = Look {
         folder: Color::DEFAULT_FOLDER,
         header: Color::DEFAULT_HEADER,
@@ -145,6 +158,10 @@ fn run_and_reload(app: &mut App, ctx: &Context, watch: Option<&mut Watch>, line:
         Ok(()) => app.set_message(message),
         Err(error) => app.set_message(format!("dexily: reload failed: {error:#}")),
     }
+    if cmdline::opens_form(line) {
+        terminal.clear()?;
+    }
+    Ok(())
 }
 
 /// The subdirectories of `dir`, by name, sorted — what the folder browser

@@ -71,8 +71,8 @@ A command that asks for confirmation and is answered no returns
 `{"schema": 1, "data": {"cancelled": true}}` and exits 0 — nothing went wrong,
 so it is a result rather than an error. Pass `--yes` to agree in advance.
 
-The TUI is not written yet: a bare `dexily` fails with an error of kind
-`error`.
+A bare `dexily` opens the TUI, which needs a terminal: with none — a pipe,
+a script — it fails with an error of kind `error`. Agents use the commands.
 
 **To act on one project, use its id.** `show <id>` is exact, and names are not
 unique. Two projects called `app` in different folders is normal.

@@ -6,7 +6,7 @@
 //! of typing an `edit` command rather than a second path to the database —
 //! whatever it returns is saved by the same one `update` the flags make.
 
-use std::io::{stderr, stdin, IsTerminal};
+use std::io::{self, stderr, stdin, IsTerminal};
 use std::path::PathBuf;
 
 use anyhow::bail;
@@ -17,6 +17,7 @@ use crate::commands::{add, Failure};
 use crate::settings;
 use crate::tui;
 use crate::tui::form::{Action, FormState};
+use crate::tui::terminal::FormTerminal;
 
 /// Which form `edit` opens: the compact one, or every field with `--full`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,25 +94,35 @@ impl ProjectEditor for TerminalEditor {
         // terminal back before anything is printed about the edit.
         let changes = {
             let mut session = tui::terminal::enter()?;
-            loop {
-                match tui::run_form(&mut session.terminal, &mut state)? {
-                    Action::Save => {
-                        let mut changes = state.changes();
-                        // A directory that does not resolve keeps the form
-                        // open with the reason, rather than closing it and
-                        // losing every other edit over a typo.
-                        match resolve_directory(&mut changes)
-                            .and_then(|()| resolve_appearance(&mut changes))
-                        {
-                            Ok(()) => break Some(changes),
-                            Err(e) => state.show_error(format!("{e:#}")),
-                        }
-                    }
-                    Action::Cancel | Action::Continue => break None,
-                }
-            }
+            run_until_done(&mut session.terminal, &mut state)?
         };
         Ok(changes)
+    }
+}
+
+/// Runs the form on `terminal` until the user saves or cancels: the changes
+/// to save, or `None`. Shared by the shell's editor and the TUI's, which differ
+/// only in how they get a terminal to draw on.
+pub(crate) fn run_until_done(
+    terminal: &mut FormTerminal,
+    state: &mut FormState,
+) -> io::Result<Option<UpdateProject>> {
+    loop {
+        match tui::run_form(terminal, state)? {
+            Action::Save => {
+                let mut changes = state.changes();
+                // A directory that does not resolve keeps the form open with
+                // the reason, rather than closing it and losing every other
+                // edit over a typo.
+                match resolve_directory(&mut changes)
+                    .and_then(|()| resolve_appearance(&mut changes))
+                {
+                    Ok(()) => return Ok(Some(changes)),
+                    Err(e) => state.show_error(format!("{e:#}")),
+                }
+            }
+            Action::Cancel | Action::Continue => return Ok(None),
+        }
     }
 }
 
