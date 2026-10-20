@@ -127,6 +127,21 @@ fn the_folder_browser_overlays_the_panes() {
 }
 
 #[test]
+fn the_search_line_renders_and_filters_the_list() {
+    let mut app = sample(); // alpha (ungrouped), bravo (Work)
+    press(&mut app, KeyCode::Char('/'));
+    for ch in "alpha".chars() {
+        press(&mut app, KeyCode::Char(ch));
+    }
+    let text = render(&app, 90, 20).join("\n");
+    assert!(text.contains("/alpha"), "search line missing:\n{text}");
+    assert!(
+        !text.contains("bravo"),
+        "bravo should be filtered out:\n{text}"
+    );
+}
+
+#[test]
 fn an_empty_view_says_so() {
     // No projects at all: the All view is empty, so the list pane names the
     // emptiness rather than leaving a blank frame.

@@ -140,6 +140,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
         ("g / G", "top / bottom"),
         ("Tab, h / l", "switch pane"),
         ("[ / ]", "sidebar section"),
+        ("/", "search / filter the list"),
         ("o", "open"),
         ("f", "favourite / unfavourite"),
         ("e", "edit"),
@@ -244,8 +245,15 @@ fn draw_list(frame: &mut Frame, area: Rect, app: &App) {
         if focused {
             block = block.border_style(Style::new().add_modifier(Modifier::BOLD));
         }
+        // A filter that matches nothing reads differently from a view that is
+        // simply empty.
+        let note_text = if app.search_query().is_empty() {
+            "  no projects in this view".to_string()
+        } else {
+            format!("  no projects match \"{}\"", app.search_query())
+        };
         let note = Paragraph::new(Line::from(Span::styled(
-            "  no projects in this view",
+            note_text,
             Style::new().add_modifier(Modifier::DIM),
         )))
         .block(block);
@@ -298,6 +306,13 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
             let x = x.min(area.x + area.width.saturating_sub(1));
             frame.set_cursor_position(Position::new(x, area.y));
         }
+        // Typing a `/` search: the query, a cursor at its end, same as a command.
+        Mode::Search(buffer) => {
+            frame.render_widget(Paragraph::new(format!("/{buffer}")), area);
+            let x = area.x + 1 + buffer.chars().count() as u16;
+            let x = x.min(area.x + area.width.saturating_sub(1));
+            frame.set_cursor_position(Position::new(x, area.y));
+        }
         // A destructive command is waiting for y/N: show the prompt, bold.
         Mode::Confirm { prompt, .. } => {
             frame.render_widget(
@@ -314,10 +329,14 @@ fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
             let text = if app.message().is_empty() {
                 let count = app.visible().len();
                 let noun = if count == 1 { "project" } else { "projects" };
-                format!(
-                    " {count} {noun} · {}",
-                    view_label(app.active(), app.groups())
-                )
+                let view = view_label(app.active(), app.groups());
+                // A committed filter is named after the view, so it is clear why
+                // the count is smaller than the sidebar's.
+                if app.search_query().is_empty() {
+                    format!(" {count} {noun} · {view}")
+                } else {
+                    format!(" {count} {noun} · {view} · /{}", app.search_query())
+                }
             } else {
                 format!(" {}", app.message())
             };
@@ -491,12 +510,15 @@ fn short_id(id: &str) -> &str {
 fn hint_line(app: &App) -> Line<'static> {
     let keys = match app.mode() {
         Mode::Command(_) => " Enter run · Esc cancel",
+        Mode::Search(_) => " type to filter · Enter keep · Esc clear",
         Mode::Scan(_) => " type a folder · Tab browse · Enter scan · Esc cancel",
         Mode::Browse { .. } => " j/k move · Enter open · h up · s scan here · Esc cancel",
         Mode::Menu(_) => " j/k move · Enter run · Esc close",
         Mode::Confirm { .. } => " y confirm · any other key cancels",
         Mode::Help => " any key closes",
-        Mode::Normal => " j/k move · o/f/e/d act · s scan · Space menu · : cmd · ? help · q quit",
+        Mode::Normal => {
+            " j/k move · / search · o/f/e/d act · s scan · Space menu · : cmd · ? help · q quit"
+        }
     };
     Line::from(Span::styled(keys, Style::new().add_modifier(Modifier::DIM)))
 }

@@ -1,8 +1,8 @@
 //! The terminal UI. A bare `dexily` opens the browser (`app` + `ui::app`): the
 //! sidebar of views and groups, the project list, and the selected project's
 //! detail, navigated with vim-style keys. A bare `dexily edit` opens the `edit`
-//! form (`form`). Running commands from a `:` line, search and live refresh are
-//! the later phases in `docs/superpowers/specs/2026-10-15-tui-design.md`.
+//! form (`form`). A `:` line runs commands and `/` filters the list; live
+//! refresh is a later phase in `docs/superpowers/specs/2026-10-15-tui-design.md`.
 
 pub(crate) mod app;
 pub(crate) mod cmdline;

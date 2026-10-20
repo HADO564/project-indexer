@@ -480,6 +480,85 @@ fn esc_closes_the_folder_browser() {
 }
 
 #[test]
+fn slash_opens_the_search_line_and_filters_live() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('/'));
+    assert_eq!(app.mode(), &Mode::Search(String::new()));
+    // Focus moves to the list, and an empty query shows everything in view.
+    assert_eq!(app.focus(), Pane::List);
+    assert_eq!(names(&app), ["alpha", "bravo", "charlie", "delta"]);
+
+    type_str(&mut app, "brav");
+    assert_eq!(app.mode(), &Mode::Search("brav".into()));
+    assert_eq!(names(&app), ["bravo"]);
+    assert_eq!(
+        app.selected_project().map(|p| p.name.as_str()),
+        Some("bravo")
+    );
+}
+
+#[test]
+fn enter_keeps_the_filter_and_backspace_widens_it() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('/'));
+    type_str(&mut app, "char");
+    press(&mut app, KeyCode::Backspace); // "cha"
+    assert_eq!(names(&app), ["charlie"]);
+    // Search is in-memory filtering, so Enter runs no command — it just keeps
+    // the filter and returns to the browser.
+    let action = app.handle(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(action, None);
+    assert_eq!(app.mode(), &Mode::Normal);
+    assert_eq!(app.search_query(), "cha");
+    assert_eq!(names(&app), ["charlie"]);
+}
+
+#[test]
+fn esc_clears_a_committed_filter_before_it_quits() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('/'));
+    type_str(&mut app, "brav");
+    press(&mut app, KeyCode::Enter); // commit
+    assert_eq!(names(&app), ["bravo"]);
+
+    press(&mut app, KeyCode::Esc); // clears the filter, does not quit
+    assert!(!app.quit());
+    assert_eq!(app.search_query(), "");
+    assert_eq!(names(&app), ["alpha", "bravo", "charlie", "delta"]);
+
+    press(&mut app, KeyCode::Esc); // nothing filtered now, so Esc quits
+    assert!(app.quit());
+}
+
+#[test]
+fn esc_while_typing_restores_the_committed_filter() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('/'));
+    type_str(&mut app, "brav");
+    press(&mut app, KeyCode::Enter); // committed "brav"
+
+    press(&mut app, KeyCode::Char('/')); // a fresh line, buffer empty
+    type_str(&mut app, "zzz"); // matches nothing, live
+    assert_eq!(names(&app), Vec::<String>::new());
+    press(&mut app, KeyCode::Esc); // cancels the edit, keeps the old filter
+    assert_eq!(app.mode(), &Mode::Normal);
+    assert_eq!(app.search_query(), "brav");
+    assert_eq!(names(&app), ["bravo"]);
+}
+
+#[test]
+fn search_filters_within_the_active_view() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']')); // Groups → Ungrouped
+    press(&mut app, KeyCode::Char('j')); // Work (bravo, charlie)
+    assert_eq!(names(&app), ["bravo", "charlie"]);
+    press(&mut app, KeyCode::Char('/'));
+    type_str(&mut app, "char");
+    // Only Work's projects are searched — alpha (ungrouped) never appears.
+    assert_eq!(names(&app), ["charlie"]);
+}
+
+#[test]
 fn view_label_names_every_view() {
     let groups = vec![group("g-work", "Work")];
     assert_eq!(view_label(&View::All, &groups), "All");
