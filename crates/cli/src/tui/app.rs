@@ -8,8 +8,9 @@
 //! what is on screen and where the cursor is.
 //!
 //! The `:` command line runs the shell's commands against the same core (the
-//! parsing and running live in [`super::cmdline`]); search and live refresh are
-//! later phases (see `docs/superpowers/specs/2026-10-15-tui-design.md`).
+//! parsing and running live in [`super::cmdline`]), and `/` filters the list;
+//! live refresh is a later phase (see
+//! `docs/superpowers/specs/2026-10-15-tui-design.md`).
 
 use std::path::PathBuf;
 
@@ -37,6 +38,9 @@ pub(crate) enum Pane {
 pub(crate) enum Mode {
     Normal,
     Command(String),
+    /// The `/` search line is open, filtering the project list as you type (the
+    /// string is the query so far). `Enter` keeps the filter, `Esc` drops it.
+    Search(String),
     /// The scan dialog is open, asking for a folder to scan (the string is what
     /// has been typed; `.` means the current directory).
     Scan(String),
@@ -111,6 +115,9 @@ pub(crate) struct App {
     mode: Mode,
     /// The last command's result, shown on the status line until the next one.
     message: String,
+    /// The committed `/` search query that keeps filtering the list after the
+    /// search line closes; empty when nothing is filtered.
+    search: String,
     quit: bool,
 }
 
@@ -155,6 +162,7 @@ impl App {
             color: true,
             mode: Mode::Normal,
             message: String::new(),
+            search: String::new(),
             quit: false,
         }
     }
@@ -263,10 +271,26 @@ impl App {
         }
     }
 
-    /// The projects the active view shows. Phase 1 applies no search, so the
-    /// query is empty — which `resolve_view` treats as "everything in view".
+    /// The active search query: what is being typed while the `/` line is open,
+    /// otherwise the committed filter (empty when nothing is filtered). The
+    /// sidebar counts stay unfiltered by design — they count the whole view.
+    pub(crate) fn search_query(&self) -> &str {
+        match &self.mode {
+            Mode::Search(buffer) => buffer,
+            _ => &self.search,
+        }
+    }
+
+    /// The projects the active view shows, narrowed by the search query —
+    /// `resolve_view` treats an empty query as "everything in view", so an
+    /// unfiltered list is the common case.
     pub(crate) fn visible(&self) -> Vec<&Project> {
-        resolve_view(&self.active, &self.projects, &self.deleted, "")
+        resolve_view(
+            &self.active,
+            &self.projects,
+            &self.deleted,
+            self.search_query(),
+        )
     }
 
     /// The project under the list cursor, if the view is not empty.
@@ -345,6 +369,7 @@ impl App {
         match self.mode {
             Mode::Normal => self.handle_normal(key),
             Mode::Command(_) => self.handle_command(key),
+            Mode::Search(_) => self.handle_search(key),
             Mode::Scan(_) => self.handle_scan(key),
             Mode::Browse { .. } => self.handle_browse(key),
             Mode::Menu(_) => self.handle_menu(key),
@@ -400,8 +425,26 @@ impl App {
             return None;
         }
         match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
+            KeyCode::Char('q') => self.quit = true,
+            // Esc clears an active filter first and only quits when there is
+            // none, so a `/` search is easy to back out of without leaving.
+            KeyCode::Esc => {
+                if self.search.is_empty() {
+                    self.quit = true;
+                } else {
+                    self.search.clear();
+                    self.list_sel = 0;
+                    self.message.clear();
+                }
+            }
             KeyCode::Char(':') => self.mode = Mode::Command(String::new()),
+            KeyCode::Char('/') => {
+                // Search filters the list, so focus it: the top match stays live
+                // while typing, and j/k walk the results once the filter is kept.
+                self.focus = Pane::List;
+                self.list_sel = 0;
+                self.mode = Mode::Search(String::new());
+            }
             KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char(' ') => {
                 if !self.menu_items().is_empty() {
@@ -536,6 +579,43 @@ impl App {
             _ => {}
         }
         None
+    }
+
+    /// The `/` search line: each key filters the list live, `Backspace` erases,
+    /// `Enter` keeps the filter and returns to the browser, `Esc` (or `Ctrl+C`)
+    /// drops the edit back to whatever filter was committed. No [`Action`] — the
+    /// filtering is in memory over the projects already loaded, no I/O. The
+    /// selection returns to the top on every change so the first match is live.
+    fn handle_search(&mut self, key: KeyEvent) -> Option<Action> {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        if key.code == KeyCode::Esc || (ctrl && key.code == KeyCode::Char('c')) {
+            self.mode = Mode::Normal;
+            self.list_sel = 0;
+            return None;
+        }
+        let Mode::Search(buffer) = &mut self.mode else {
+            return None;
+        };
+        match key.code {
+            KeyCode::Enter => {
+                self.search = std::mem::take(buffer).trim().to_string();
+                self.mode = Mode::Normal;
+                self.list_sel = 0;
+                self.message.clear();
+                None
+            }
+            KeyCode::Backspace => {
+                buffer.pop();
+                self.list_sel = 0;
+                None
+            }
+            KeyCode::Char(c) if !ctrl => {
+                buffer.push(c);
+                self.list_sel = 0;
+                None
+            }
+            _ => None,
+        }
     }
 
     /// Editing the `:` line: type into it, `Backspace` erases, `Esc` (or
