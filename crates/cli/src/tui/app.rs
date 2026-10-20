@@ -8,9 +8,10 @@
 //! what is on screen and where the cursor is.
 //!
 //! The `:` command line runs the shell's commands against the same core (the
-//! parsing and running live in [`super::cmdline`]), and `/` filters the list;
-//! live refresh is a later phase (see
-//! `docs/superpowers/specs/2026-10-15-tui-design.md`).
+//! parsing and running live in [`super::cmdline`]), and `/` filters the list.
+//! When the database changes — a command, or another process's write — the
+//! loop hands the fresh data to [`App::set_data`], which keeps the cursor on
+//! what it was on.
 
 use std::path::PathBuf;
 
@@ -167,15 +168,37 @@ impl App {
         }
     }
 
-    /// Re-reads the database after a command may have changed it, keeping the
-    /// active view and clamping the selections. A view whose group has since
-    /// been deleted falls back to All, so the list is never left pointing at
-    /// nothing.
+    /// Re-reads the database — after a command, or when another process has
+    /// written to it — and swaps the result in with [`set_data`](Self::set_data).
     pub(crate) fn reload(&mut self, ctx: &Context) -> anyhow::Result<()> {
         let opts = SortOptions::default();
-        self.projects = ctx.projects.list(opts)?;
-        self.deleted = ctx.projects.list_deleted(opts)?;
-        self.groups = ctx.groups.list()?;
+        let projects = ctx.projects.list(opts)?;
+        let deleted = ctx.projects.list_deleted(opts)?;
+        let groups = ctx.groups.list()?;
+        self.set_data(projects, deleted, groups);
+        Ok(())
+    }
+
+    /// Swaps in freshly read data, keeping the user's place. Another process
+    /// can write at any moment, so the cursors follow what they were on by id —
+    /// the same project, the same group — not the same row number, which would
+    /// slide onto a neighbour when a row is added above. What has gone falls
+    /// back gently: a vanished project's row goes to whatever now fills it, and
+    /// a deleted group's view to All, so the list never points at nothing. An
+    /// open action menu closes if its project changed, so a letter can't land
+    /// on a project the user never chose.
+    pub(crate) fn set_data(
+        &mut self,
+        projects: Vec<Project>,
+        deleted: Vec<Project>,
+        groups: Vec<Group>,
+    ) {
+        let selected = self.selected_project().map(|project| project.id.clone());
+        let group_row = self.group_pane_view(self.groups_sel);
+
+        self.projects = projects;
+        self.deleted = deleted;
+        self.groups = groups;
         self.counts = view_counts(&self.projects, &self.deleted, &self.groups);
         if let View::Group { id } = &self.active {
             if !self.groups.iter().any(|group| &group.id == id) {
@@ -184,9 +207,30 @@ impl App {
                 self.views_sel = 0;
             }
         }
-        self.groups_sel = self.groups_sel.min(self.group_pane_len().saturating_sub(1));
-        self.list_sel = self.list_sel.min(self.visible().len().saturating_sub(1));
-        Ok(())
+
+        let group_index = match group_row {
+            Some(View::Group { id }) => self
+                .groups
+                .iter()
+                .position(|group| group.id == id)
+                .map(|index| index + 1),
+            _ => None,
+        };
+        self.groups_sel = group_index
+            .unwrap_or(self.groups_sel)
+            .min(self.group_pane_len().saturating_sub(1));
+
+        let visible = self.visible();
+        let list_index = selected
+            .as_ref()
+            .and_then(|id| visible.iter().position(|project| &project.id == id));
+        let last = visible.len().saturating_sub(1);
+        self.list_sel = list_index.unwrap_or(self.list_sel).min(last);
+
+        let still_selected = self.selected_project().map(|project| &project.id);
+        if matches!(self.mode, Mode::Menu(_)) && still_selected != selected.as_ref() {
+            self.mode = Mode::Normal;
+        }
     }
 
     // --- read by the drawing code and the tests ---

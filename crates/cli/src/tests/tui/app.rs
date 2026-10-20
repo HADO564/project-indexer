@@ -41,15 +41,28 @@ fn group(id: &str, name: &str) -> Group {
 /// Two groups (Work, Clients), four live projects spread across them and
 /// Ungrouped, one favourite, and one in the bin.
 fn fixture() -> App {
-    let projects = vec![
+    let (projects, groups) = fixture_data(|_, _| {});
+    App::new(projects, deleted(), groups)
+}
+
+/// The fixture's live projects and groups, with `edit` applied — so a test can
+/// hand `set_data` the data "another process" changed.
+fn fixture_data(
+    edit: impl FnOnce(&mut Vec<Project>, &mut Vec<Group>),
+) -> (Vec<Project>, Vec<Group>) {
+    let mut projects = vec![
         project("alpha", None, false),              // ungrouped
         project("bravo", Some("g-work"), true),     // Work, favourite
         project("charlie", Some("g-work"), false),  // Work
         project("delta", Some("g-clients"), false), // Clients
     ];
-    let deleted = vec![project("echo", None, false)];
-    let groups = vec![group("g-work", "Work"), group("g-clients", "Clients")];
-    App::new(projects, deleted, groups)
+    let mut groups = vec![group("g-work", "Work"), group("g-clients", "Clients")];
+    edit(&mut projects, &mut groups);
+    (projects, groups)
+}
+
+fn deleted() -> Vec<Project> {
+    vec![project("echo", None, false)]
 }
 
 fn press(app: &mut App, code: KeyCode) {
@@ -556,6 +569,123 @@ fn search_filters_within_the_active_view() {
     type_str(&mut app, "char");
     // Only Work's projects are searched — alpha (ungrouped) never appears.
     assert_eq!(names(&app), ["charlie"]);
+}
+
+// --- live refresh: fresh data swapped in under the cursor ---
+
+/// Swap in the fixture's data with `edit` applied, as a reload would after
+/// another process wrote.
+fn refresh(app: &mut App, edit: impl FnOnce(&mut Vec<Project>, &mut Vec<Group>)) {
+    let (projects, groups) = fixture_data(edit);
+    app.set_data(projects, deleted(), groups);
+}
+
+fn selected(app: &App) -> Option<String> {
+    app.selected_project().map(|p| p.name.clone())
+}
+
+#[test]
+fn a_refresh_keeps_the_cursor_on_the_same_project() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Tab); // into the list
+    press(&mut app, KeyCode::Char('j'));
+    press(&mut app, KeyCode::Char('j')); // charlie, row 2
+
+    // Another process adds a project that sorts above it.
+    refresh(&mut app, |projects, _| {
+        projects.insert(0, project("aaron", None, false))
+    });
+    assert_eq!(names(&app), ["aaron", "alpha", "bravo", "charlie", "delta"]);
+    assert_eq!(selected(&app).as_deref(), Some("charlie"));
+    assert_eq!(app.list_sel(), 3);
+}
+
+#[test]
+fn a_refresh_that_removes_the_selected_project_keeps_the_row() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Tab);
+    press(&mut app, KeyCode::Char('j'));
+    press(&mut app, KeyCode::Char('j')); // charlie
+    refresh(&mut app, |projects, _| {
+        projects.retain(|p| p.name != "charlie")
+    });
+    // The row it held is now delta's.
+    assert_eq!(selected(&app).as_deref(), Some("delta"));
+    // And the last row clamps rather than pointing past the end.
+    refresh(&mut app, |projects, _| projects.truncate(2));
+    assert_eq!(selected(&app).as_deref(), Some("bravo"));
+}
+
+#[test]
+fn a_refresh_keeps_the_groups_cursor_on_the_same_group() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']')); // Ungrouped
+    press(&mut app, KeyCode::Char('j'));
+    press(&mut app, KeyCode::Char('j')); // Clients, row 2
+    let clients = View::Group {
+        id: "g-clients".into(),
+    };
+    assert_eq!(app.active(), &clients);
+    // A group created elsewhere lands above it.
+    refresh(&mut app, |_, groups| {
+        groups.insert(0, group("g-home", "Home"))
+    });
+    assert_eq!(app.groups_sel(), 3);
+    assert_eq!(app.active(), &clients);
+    assert_eq!(names(&app), ["delta"]);
+}
+
+#[test]
+fn a_refresh_after_the_active_group_is_deleted_falls_back_to_all() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Char('j')); // Work
+    refresh(&mut app, |projects, groups| {
+        groups.retain(|g| g.id != "g-work");
+        for p in projects.iter_mut() {
+            if p.group_id.as_deref() == Some("g-work") {
+                p.group_id = None;
+            }
+        }
+    });
+    assert_eq!(app.active(), &View::All);
+    assert_eq!(app.focus(), Pane::Views);
+    assert_eq!(names(&app), ["alpha", "bravo", "charlie", "delta"]);
+}
+
+#[test]
+fn a_refresh_keeps_the_search_filter_and_its_match() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Char('/'));
+    type_str(&mut app, "a"); // alpha, bravo, charlie, delta all have an `a`
+    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('j')); // bravo
+    refresh(&mut app, |projects, _| {
+        projects.insert(0, project("zulu", None, false)); // no `a`: filtered out
+        projects.insert(0, project("anna", None, false)); // matches
+    });
+    assert_eq!(app.search_query(), "a");
+    assert_eq!(names(&app), ["anna", "alpha", "bravo", "charlie", "delta"]);
+    assert_eq!(selected(&app).as_deref(), Some("bravo"));
+}
+
+#[test]
+fn a_refresh_closes_the_menu_only_if_its_project_went_away() {
+    let mut app = fixture();
+    press(&mut app, KeyCode::Tab);
+    press(&mut app, KeyCode::Char('j')); // bravo
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.mode(), &Mode::Menu(0));
+    // A change elsewhere that leaves bravo selected keeps the menu up.
+    refresh(&mut app, |projects, _| {
+        projects.insert(0, project("aaron", None, false))
+    });
+    assert_eq!(app.mode(), &Mode::Menu(0));
+    // bravo untracked elsewhere: the menu would now act on someone else.
+    refresh(&mut app, |projects, _| {
+        projects.retain(|p| p.name != "bravo")
+    });
+    assert_eq!(app.mode(), &Mode::Normal);
 }
 
 #[test]
