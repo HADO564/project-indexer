@@ -86,6 +86,12 @@ pub fn run(ctx: &Context) -> anyhow::Result<()> {
                         let entries = read_subdirs(&dir);
                         app.set_browse(dir, entries);
                     }
+                    // `n`: the `:` line, holding `add` and the folder dexily
+                    // was started in.
+                    Some(AppAction::AddHere) => {
+                        let dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                        app.begin_command(cmdline::add_line(&dir));
+                    }
                     Some(AppAction::BrowseTo(dir)) => {
                         let entries = read_subdirs(&dir);
                         app.set_browse(dir, entries);

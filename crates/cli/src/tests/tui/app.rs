@@ -888,3 +888,36 @@ fn view_label_names_every_view() {
         "Unknown group"
     );
 }
+
+#[test]
+fn n_asks_the_loop_to_offer_the_current_folder() {
+    // `n` outside the Groups pane is "add a project": the App has no idea what
+    // the current folder is, so it hands that to the loop and stays put.
+    let mut app = fixture();
+    assert_eq!(key(&mut app, KeyCode::Char('n')), Some(Action::AddHere));
+    assert_eq!(app.mode(), &Mode::Normal);
+
+    press(&mut app, KeyCode::Tab); // the project list
+    assert_eq!(key(&mut app, KeyCode::Char('n')), Some(Action::AddHere));
+}
+
+#[test]
+fn begin_command_opens_the_line_holding_the_text_to_edit_or_run() {
+    let mut app = fixture();
+    app.begin_command("add \"/home/me/app\"".to_string());
+    assert_eq!(
+        app.mode(),
+        &Mode::Command("add \"/home/me/app\"".to_string())
+    );
+
+    // Ordinary `:` line editing from there: change the folder, then run it.
+    for _ in 0.."app\"".len() {
+        press(&mut app, KeyCode::Backspace);
+    }
+    type_str(&mut app, "web\"");
+    assert_eq!(
+        key(&mut app, KeyCode::Enter),
+        Some(Action::Run("add \"/home/me/web\"".to_string()))
+    );
+    assert_eq!(app.mode(), &Mode::Normal);
+}

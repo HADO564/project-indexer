@@ -160,6 +160,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
         ("d", "untrack"),
         ("r / x", "restore / purge (bin)"),
         ("n / e / d", "in Groups: new / rename / delete"),
+        ("n", "add a project here"),
         ("s", "scan a folder"),
         ("Space", "action menu"),
         (":", "command line"),

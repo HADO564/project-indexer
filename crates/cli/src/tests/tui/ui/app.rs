@@ -104,6 +104,7 @@ fn the_help_overlay_lists_the_keys() {
     let text = render(&app, 90, 20).join("\n");
     assert!(text.contains("Keys"), "{text}");
     assert!(text.contains("in Groups: new / rename / delete"), "{text}");
+    assert!(text.contains("add a project here"), "{text}");
     // The last row still fits a 20-line terminal.
     assert!(text.contains("quit"), "{text}");
 }

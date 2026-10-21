@@ -3,6 +3,8 @@
 //! data. Every mutation the TUI makes goes through this, exactly as the shell's
 //! mutations do.
 
+use std::path::Path;
+
 use clap::Parser;
 
 use crate::commands::group::GroupAction;
@@ -90,6 +92,12 @@ pub(crate) fn quote(arg: &str) -> String {
     } else {
         format!("\"{arg}\"")
     }
+}
+
+/// The `:` line that tracks `dir`, quoted so a folder with spaces stays one
+/// argument.
+pub(crate) fn add_line(dir: &Path) -> String {
+    format!("add {}", quote(&dir.to_string_lossy()))
 }
 
 /// Renders an outcome's **prose** (the message, not the table) by handing the
