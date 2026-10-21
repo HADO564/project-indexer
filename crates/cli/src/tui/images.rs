@@ -35,8 +35,8 @@ use crate::appearance;
 
 /// How many columns and rows the detail pane gives an icon: about square,
 /// since a cell is roughly twice as tall as it is wide.
-pub(crate) const ICON_COLS: u16 = 8;
-pub(crate) const ICON_ROWS: u16 = 4;
+pub(crate) const ICON_COLS: u16 = 6;
+pub(crate) const ICON_ROWS: u16 = 3;
 
 /// How long a terminal that should know the question gets to answer it. A
 /// local one answers in milliseconds; this is for one over a slow link.

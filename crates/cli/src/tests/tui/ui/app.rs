@@ -296,10 +296,10 @@ fn a_custom_icon_is_drawn_above_the_details_when_images_work() {
     let buffer = frame_with(&wearing_logo(), &mut images, 24);
     let text = detail_text(&buffer);
 
-    // Rows 1–4 inside the border are the image; the name comes after a gap.
-    assert_eq!(red_rows(&buffer), [1, 2, 3, 4], "{}", text.join("\n"));
+    // Rows 1–3 inside the border are the image; the name comes after a gap.
+    assert_eq!(red_rows(&buffer), [1, 2, 3], "{}", text.join("\n"));
     assert!(
-        text[6].contains("alpha"),
+        text[5].contains("alpha"),
         "expected the name below it:\n{}",
         text.join("\n")
     );
@@ -328,7 +328,7 @@ fn an_icon_that_is_not_in_the_store_falls_back_too() {
 fn a_short_pane_leaves_the_image_out_rather_than_crowd_the_details() {
     let (_dir, store) = crate::tests::tui::images::store_with_logo();
     let mut images = IconImages::with_picker(Picker::halfblocks(), &store);
-    // 8 rows: a 6-row pane, no room for a 4-row icon and the details too.
+    // 8 rows: a 6-row pane, no room for a 3-row icon and the details too.
     let buffer = frame_with(&wearing_logo(), &mut images, 8);
     assert!(red_rows(&buffer).is_empty());
     assert!(detail_text(&buffer)[1].contains("alpha"));
