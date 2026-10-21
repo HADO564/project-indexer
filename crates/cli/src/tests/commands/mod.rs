@@ -4,6 +4,7 @@ mod add;
 mod bin;
 mod config;
 mod edit;
+mod find;
 mod group;
 mod list;
 mod project_args;

@@ -27,7 +27,9 @@ commands the observer recognises and project types it detects see
 ## Install
 
 ```bash
-cargo install dexily          # from crates.io (needs a Rust toolchain)
+brew tap HADO564/dexily-tap   # macOS and Linux, once
+brew install dexily           # then `brew upgrade dexily` for a new release
+cargo install dexily          # or from crates.io (needs a Rust toolchain)
 ```
 
 Or a prebuilt installer / archive from the latest `dexily-v*` release — the
@@ -79,6 +81,22 @@ when two could match, dexily asks — use the id to be exact (`dexily show 08703
 dexily list                      # everything, A–Z
 dexily list api --tracker git    # git projects whose name contains "api"
 dexily list --view favorites -s last-opened
+```
+
+**`dexily find <QUERY>`** — search the way the app's search bar does, and print
+the same table as `list`. Where `list` matches a name (or a path ending),
+`find` matches **any part of** the name, the path, a tag or a property value —
+or, written `name: value`, only that one property. Case is ignored.
+
+| Flag | |
+|---|---|
+| `<QUERY>` | free text, or `name: value` for one property (`client: acme`; `client:` alone finds every project that has a `client`) |
+| `-s`, `-r`, `--view`, `-t` | as for `list` |
+
+```bash
+dexily find rust                 # name, path, tag or property value contains "rust"
+dexily find "client: acme"       # the client property contains "acme"
+dexily find work --view binned   # binned projects anywhere under a "work" folder
 ```
 
 **`dexily show <PROJECT>`** — one project's full detail. `-t <kind>` expands that
