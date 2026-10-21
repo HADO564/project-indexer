@@ -13,6 +13,7 @@ The CLI is released independently of the desktop app, under tags of the form
 ### Added
 
 - **`dexily find <query>` searches the way the app's search bar does.** Free text matches any part of a project's name, its path, its tags and its property values, ignoring case — `find work` finds every project under a `work` folder, which `list work` (name or path ending) does not. `name: value` asks about one property alone: `find "client: acme"`. It prints the same table and `--json` as `list` and takes the same `--view`, `--sort`/`-r` and `--tracker` flags. The matching is the app's own code, so the two always agree.
+- **The TUI's detail pane shows a project's description, properties and notes**, as `dexily show` does — each only when the project has it, a property per line (`client = acme`) and the notes line by line. Long values wrap inside the pane instead of being cut off at its edge.
 
 ## [0.3.0] — 2026-10-21
 
