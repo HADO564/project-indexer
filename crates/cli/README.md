@@ -228,6 +228,7 @@ gh secret set CARGO_REGISTRY_TOKEN   # paste the token when asked
 Users install it with any of:
 
 ```sh
+brew tap HADO564/dexily-tap && brew install dexily   # macOS and Linux
 cargo install dexily
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/HADO564/project-indexer/releases/download/dexily-v<version>/dexily-installer.sh | sh
 ```
