@@ -10,6 +10,10 @@ The CLI is released independently of the desktop app, under tags of the form
 
 ## [Unreleased]
 
+### Added
+
+- **`dexily find <query>` searches the way the app's search bar does.** Free text matches any part of a project's name, its path, its tags and its property values, ignoring case — `find work` finds every project under a `work` folder, which `list work` (name or path ending) does not. `name: value` asks about one property alone: `find "client: acme"`. It prints the same table and `--json` as `list` and takes the same `--view`, `--sort`/`-r` and `--tracker` flags. The matching is the app's own code, so the two always agree.
+
 ## [0.3.0] — 2026-10-21
 
 ### Added

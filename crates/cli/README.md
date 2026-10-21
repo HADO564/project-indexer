@@ -6,7 +6,7 @@ exposes most of what the desktop app does as commands, and offers a
 keyboard-driven TUI. It opens the same database as the app, so the two stay in
 step with no pairing — and it works without the app installed.
 
-**Status: every plain subcommand works.** `list`, `show`, `add`, `open`,
+**Status: every plain subcommand works.** `list`, `find`, `show`, `add`, `open`,
 `untrack`, `favorite`, `unfavorite`, `edit`, `restore`, `purge`, `scan` and
 `config` all run against the app's database, and a bare `edit` in a terminal
 opens a full-screen form (`edit --full` for every field). `group` lists,
@@ -20,6 +20,7 @@ is in [the manual](../../docs/cli/MANUAL.md).
 
 ```
 dexily list                     every project, as a table (--view, -s name|last-opened, -r to flip)
+dexily find <query>             search name, path, tags and property values, or `name: value`, as the app does
 dexily show <query>             one project — exact name, id, parent/folder, or part of a name
 dexily add [dir]                track a directory, or the current one
 dexily open <query>             open a project in its application

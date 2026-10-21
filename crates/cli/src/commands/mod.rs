@@ -10,6 +10,7 @@ pub mod config;
 pub mod edit;
 mod failure;
 mod favorite;
+pub mod find;
 pub mod group;
 pub mod list;
 mod open;
@@ -40,6 +41,12 @@ pub use failure::Failure;
 pub enum Command {
     /// List tracked projects.
     List(list::ListArgs),
+    /// Search projects by name, path, tags and property values.
+    ///
+    /// The desktop app's search: free text over the name, any part of the
+    /// path, tags and property values, or `name: value` for one property
+    /// (`client: acme`).
+    Find(find::FindArgs),
     /// Show one project's details.
     Show(show::ShowArgs),
     /// Start tracking a directory.
@@ -409,6 +416,7 @@ pub fn find_in(
 pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {
     match command {
         Command::List(args) => list::run(args, ctx),
+        Command::Find(args) => find::run(args, ctx),
         Command::Show(args) => show::run(args, ctx),
         Command::Add(args) => add::run(args, ctx),
         Command::Open(args) => open::run(args, ctx),
