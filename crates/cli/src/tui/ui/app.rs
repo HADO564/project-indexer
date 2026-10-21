@@ -11,7 +11,7 @@
 use ratatui::layout::{Constraint, Flex, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
 use indexer_core::domain::views::View;
@@ -308,7 +308,12 @@ fn draw_detail(frame: &mut Frame, area: Rect, app: &App) {
             )
         }
     };
-    frame.render_widget(Paragraph::new(lines).block(block), area);
+    // Wrapped, not clipped: the pane is narrow, and a description or a line
+    // of notes is often wider than it.
+    let detail = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: false });
+    frame.render_widget(detail, area);
 }
 
 fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
@@ -466,6 +471,9 @@ fn detail_lines(
 
     lines.push(row("directory", &project.directory));
     lines.push(row("id", short_id(&project.id)));
+    if !project.description.is_empty() {
+        lines.push(row("description", &project.description));
+    }
     if let Some(id) = &project.group_id {
         if let Some(group) = groups.iter().find(|g| &g.id == id) {
             lines.push(row("group", &group.name));
@@ -473,6 +481,14 @@ fn detail_lines(
     }
     if !project.tags.is_empty() {
         lines.push(row("tags", &project.tags.join(", ")));
+    }
+    let properties = project
+        .properties
+        .iter()
+        .map(|(key, value)| format!("{key} = {value}"));
+    lines.extend(rows("properties", properties));
+    if let Some(notes) = &project.notes {
+        lines.extend(rows("notes", notes.lines().map(str::to_string)));
     }
     let trackers = tracker_labels(project);
     if !trackers.is_empty() {
@@ -487,6 +503,16 @@ fn detail_lines(
         .unwrap_or_else(|| "never".to_string());
     lines.push(row("last opened", &last_opened));
     lines
+}
+
+/// A row per value, labelled on the first and blank on the rest, so the values
+/// line up under one another — as `show` prints properties. No values, no rows:
+/// a field the project does not have takes no space.
+fn rows(label: &str, values: impl Iterator<Item = String>) -> Vec<Line<'static>> {
+    values
+        .enumerate()
+        .map(|(i, value)| row(if i == 0 { label } else { "" }, &value))
+        .collect()
 }
 
 fn row(label: &str, value: &str) -> Line<'static> {

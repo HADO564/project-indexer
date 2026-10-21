@@ -181,3 +181,67 @@ fn an_empty_view_says_so() {
     let text = render(&app, 90, 20).join("\n");
     assert!(text.contains("no projects in this view"), "{text}");
 }
+
+/// One project carrying every field the detail pane can show beyond the
+/// basics: a description, two properties and two lines of notes.
+fn described() -> App {
+    let project = serde_json::from_value(json!({
+        "id": "shop-0000-4000-8000-000000000000",
+        "name": "shop",
+        "description": "Storefront",
+        "directory": "/home/me/shop",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "last_opened_at": null,
+        "trackers": [],
+        "properties": { "client": "acme", "stage": "beta" },
+        "notes": "ship on Friday\nask about the logo",
+    }))
+    .unwrap();
+    App::new(vec![project], vec![], vec![])
+}
+
+#[test]
+fn the_detail_pane_shows_the_description_properties_and_notes() {
+    let text = render(&described(), 100, 24).join("\n");
+    for needle in [
+        "description",
+        "Storefront",
+        "properties",
+        "client = acme",
+        "stage = beta", // the second property, on a line of its own
+        "notes",
+        "ship on Friday",
+        "ask about the logo", // the second line of the notes
+    ] {
+        assert!(text.contains(needle), "expected {needle:?} in:\n{text}");
+    }
+}
+
+#[test]
+fn a_long_description_wraps_rather_than_being_cut_off() {
+    let mut app = described();
+    let mut projects = vec![app.selected_project().unwrap().clone()];
+    projects[0].description = "A storefront for the spring sale, with a basket and zebra".into();
+    app.set_data(projects, vec![], vec![]);
+
+    // The detail pane is 36 columns wide; the last word only shows if the
+    // line wraps onto the next.
+    let text = render(&app, 100, 24).join("\n");
+    assert!(
+        text.contains("zebra"),
+        "expected the end of the description in:\n{text}"
+    );
+}
+
+#[test]
+fn fields_a_project_does_not_have_are_left_out() {
+    // `alpha` has no description, properties or notes: no empty rows for them.
+    let text = render(&sample(), 100, 24).join("\n");
+    for absent in ["description", "properties", "notes"] {
+        assert!(
+            !text.contains(absent),
+            "did not expect {absent:?} in:\n{text}"
+        );
+    }
+}
