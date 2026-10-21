@@ -10,6 +10,8 @@ The CLI is released independently of the desktop app, under tags of the form
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-10-21
+
 ### Added
 
 - **Search in the TUI.** Press `/` to filter the project list as you type — over the name, the path, tags and property values, within whatever view you are in — `Enter` keeps the filter and `Esc` drops it (and in the browser, `Esc` clears an active filter before it quits). The status line shows the active `/query`.

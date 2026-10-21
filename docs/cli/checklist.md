@@ -158,12 +158,12 @@ Design decided 2026-10-08 — three phases, no threads; outcome not output; dexi
   - [ ] "Install command-line tool" in the app: puts `dexily` on `PATH` (macOS symlink, Windows, deb/rpm), detects an existing `dexily` rather than overwriting it, and can remove it
   - [ ] Windows console output decided and working (release builds use the `windows` subsystem)
   - [ ] `dexily list` through the app's binary starts within a measured budget (~100 ms)
-- [ ] Homebrew tap, winget manifest, Scoop bucket; Linux channels decided — see the reminder below
+- [ ] Homebrew tap (done), winget manifest, Scoop bucket; Linux channels decided — see the reminder below and issue #48
 - [ ] Anything asking GitHub for "the latest release" filters by tag prefix. Nothing does yet (the app has no updater); meanwhile `restore-latest.yml` runs after each `dexily-v*` release and marks the newest app (`v*`) release "Latest" again, so the releases page and its `/latest` link keep pointing at the app
 
 > **Reminder (asked for 2026-10-08): the package-manager channels for `dexily`.** The first release ships as GitHub release archives, the shell/PowerShell installers and crates.io. Still to do:
 >
-> - [ ] **Homebrew tap** — `HADO564/homebrew-tap`; dist's `homebrew` installer generates the formula and pushes it on each release. Needs a token secret `HOMEBREW_TAP_TOKEN` with write access to the tap. Users: `brew install HADO564/tap/dexily` (macOS and Linux)
+> - [x] **Homebrew tap** — `HADO564/homebrew-dexily-tap`; dist's `homebrew` installer generates the formula and pushes it on each release, using the `HOMEBREW_TAP_TOKEN` secret. Users: `brew tap HADO564/dexily-tap` then `brew install dexily`, and `brew upgrade dexily` for a new release (macOS and Linux). A bare `brew install dexily` with no tap would need homebrew-core, which accepts only open-source licences — not FSL
 > - [ ] **Scoop bucket** — `HADO564/scoop-bucket` with a `dexily.json` using `checkver` / `autoupdate`, so new releases are picked up. Users: `scoop bucket add hado https://github.com/HADO564/scoop-bucket` then `scoop install dexily`
 > - [ ] **winget** — `HADO564.Dexily`: the first submission by hand with `wingetcreate` (a PR to `microsoft/winget-pkgs`, reviewed), then the `winget-releaser` action on each release
 > - [ ] **AUR** — `dexily-bin`, a `PKGBUILD` over the release binary; needs the user's own AUR account and SSH key
