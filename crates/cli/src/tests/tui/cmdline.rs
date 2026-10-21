@@ -2,7 +2,9 @@
 //! command is exercised through the real binary, not here — it needs a
 //! database — so these cover the pure parsing helpers.
 
-use crate::tui::cmdline::{first_line, needs_confirm, opens_form, quote, tokenize};
+use std::path::Path;
+
+use crate::tui::cmdline::{add_line, first_line, needs_confirm, opens_form, quote, tokenize};
 
 #[test]
 fn tokenize_splits_on_whitespace() {
@@ -83,5 +85,13 @@ fn quote_keeps_a_typed_name_one_argument() {
             ["group", "create", name],
             "{line}"
         );
+    }
+}
+
+#[test]
+fn add_line_keeps_a_folder_with_spaces_one_argument() {
+    for dir in ["/home/me/app", "/home/me/my projects/app"] {
+        let line = add_line(Path::new(dir));
+        assert_eq!(tokenize(&line).unwrap(), ["add", dir], "{line}");
     }
 }

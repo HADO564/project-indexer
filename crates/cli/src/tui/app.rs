@@ -103,6 +103,9 @@ pub(crate) enum Action {
     OpenBrowser,
     /// Move the folder browser to this directory (the loop reads its subdirs).
     BrowseTo(PathBuf),
+    /// Open the `:` line holding `add` and the current directory, ready to run
+    /// or edit. The loop knows the directory; `App` does not.
+    AddHere,
 }
 
 /// One row of the action menu: the shortcut key, its label, and what it does to
@@ -543,6 +546,11 @@ impl App {
         self.mode = Mode::Confirm { prompt, pending };
     }
 
+    /// Open the `:` line already holding `line`, for the user to edit or run.
+    pub(crate) fn begin_command(&mut self, line: String) {
+        self.mode = Mode::Command(line);
+    }
+
     /// Open (or move) the folder browser to `path` with its subdirectories; the
     /// event loop calls this after reading the directory off disk.
     pub(crate) fn set_browse(&mut self, path: PathBuf, entries: Vec<String>) {
@@ -616,6 +624,9 @@ impl App {
             KeyCode::Char('[') => self.jump_section(Pane::Views),
             KeyCode::Char(']') => self.jump_section(Pane::Groups),
             KeyCode::Char('s') => self.mode = Mode::Scan(String::new()),
+            // `n` is "new group" in the Groups pane (a shortcut, below) and "add a
+            // project" everywhere else.
+            KeyCode::Char('n') if self.focus != Pane::Groups => return Some(Action::AddHere),
             // A letter shortcut acts on the selected project, or in the Groups
             // pane on the group.
             KeyCode::Char(c) => {
