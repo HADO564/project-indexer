@@ -7,20 +7,28 @@
 //! group's, with the glyph from `config icons`. `NO_COLOR` drops the colour but
 //! keeps the glyphs, and the cursor and focus are drawn with modifiers
 //! (reversed, bold, dim) so they still read when colour is off.
+//!
+//! On a terminal that can show images, a project's custom icon is drawn as one
+//! at the top of the detail pane (`tui/images.rs`); everywhere else, and on any
+//! other terminal, it is the folder glyph, as in `list`.
 
 use ratatui::layout::{Constraint, Flex, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
+use ratatui_image::Image;
 
 use indexer_core::domain::views::View;
 use indexer_core::domain::{Group, Project};
 
 use crate::appearance::{self, IconStyle};
 use crate::tui::app::{view_label, App, Mode, Naming, Pane};
+use crate::tui::images::{IconImages, ICON_COLS, ICON_ROWS};
 
-pub fn draw(frame: &mut Frame, app: &App) {
+/// Draws the browser. `images` is `None` on a terminal that can't show images,
+/// and every icon is then a glyph.
+pub fn draw(frame: &mut Frame, app: &App, images: Option<&mut IconImages>) {
     let [body, status, hint] = Layout::vertical([
         Constraint::Fill(1),
         Constraint::Length(1),
@@ -37,7 +45,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     draw_sidebar(frame, sidebar, app);
     draw_list(frame, list, app);
-    draw_detail(frame, detail, app);
+    draw_detail(frame, detail, app, images);
     draw_status(frame, status, app);
     frame.render_widget(Paragraph::new(hint_line(app)), hint);
 
@@ -292,29 +300,56 @@ fn draw_list(frame: &mut Frame, area: Rect, app: &App) {
     render_list(frame, area, &title, items, app.list_sel(), focused);
 }
 
-fn draw_detail(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_detail(frame: &mut Frame, area: Rect, app: &App, images: Option<&mut IconImages>) {
     let block = Block::bordered().title("DETAIL");
-    let lines = match app.selected_project() {
-        None => vec![Line::from(Span::styled(
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let Some(project) = app.selected_project() else {
+        let none = Span::styled(
             "no project selected",
             Style::new().add_modifier(Modifier::DIM),
-        ))],
-        Some(project) => {
-            let mark = appearance::mark_rgb(project.color.as_deref(), app.group_color_of(project));
-            detail_lines(
-                project,
-                app.groups(),
-                app.icons(),
-                mark_style(mark, app.color_enabled()),
-            )
-        }
+        );
+        frame.render_widget(Paragraph::new(Line::from(none)), inner);
+        return;
     };
+
+    // A custom icon as an image, above the details — when the terminal can
+    // show one, the icon renders, and the pane has room for it and a few rows
+    // beneath. Otherwise the title carries the glyph, as it always has.
+    let roomy = inner.width >= ICON_COLS && inner.height >= ICON_ROWS + 4;
+    let image = images
+        .filter(|_| roomy)
+        .and_then(|images| images.get(project.icon.as_deref()?));
+    let text = match image {
+        Some(protocol) => {
+            let [icon, _gap, text] = Layout::vertical([
+                Constraint::Length(ICON_ROWS),
+                Constraint::Length(1),
+                Constraint::Fill(1),
+            ])
+            .areas(inner);
+            let icon = Rect {
+                width: ICON_COLS,
+                ..icon
+            };
+            frame.render_widget(Image::new(protocol), icon);
+            text
+        }
+        None => inner,
+    };
+
+    let mark = appearance::mark_rgb(project.color.as_deref(), app.group_color_of(project));
+    let lines = detail_lines(
+        project,
+        app.groups(),
+        app.icons(),
+        mark_style(mark, app.color_enabled()),
+        text == inner,
+    );
     // Wrapped, not clipped: the pane is narrow, and a description or a line
     // of notes is often wider than it.
-    let detail = Paragraph::new(lines)
-        .block(block)
-        .wrap(Wrap { trim: false });
-    frame.render_widget(detail, area);
+    let detail = Paragraph::new(lines).wrap(Wrap { trim: false });
+    frame.render_widget(detail, text);
 }
 
 fn draw_status(frame: &mut Frame, area: Rect, app: &App) {
@@ -456,15 +491,19 @@ fn project_line(
     Line::from(spans)
 }
 
+/// The detail pane's text. `glyph` is whether the title leads with the icon's
+/// glyph — not when the icon is drawn as an image above it.
 fn detail_lines(
     project: &Project,
     groups: &[Group],
     icons: IconStyle,
     name_style: Style,
+    glyph: bool,
 ) -> Vec<Line<'static>> {
     let bold = name_style.add_modifier(Modifier::BOLD);
     let mut title = Vec::new();
-    if let Some(glyph) = appearance::glyph(project.icon.as_deref().unwrap_or("folder"), icons) {
+    let icon = project.icon.as_deref().unwrap_or("folder");
+    if let Some(glyph) = appearance::glyph(icon, icons).filter(|_| glyph) {
         title.push(Span::styled(format!("{glyph} "), bold));
     }
     title.push(Span::styled(project.name.clone(), bold));

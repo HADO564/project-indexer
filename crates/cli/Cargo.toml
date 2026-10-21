@@ -42,6 +42,15 @@ dirs = "6"
 # same crate `tauri-plugin-opener` wraps, so the CLI and the app agree.
 open = "5"
 ratatui = "0.30.2"
+# Custom icons drawn as images in the TUI (`tui/images.rs`), on terminals that
+# can show one (Kitty, WezTerm, Ghostty, iTerm2, sixel terminals). resvg turns
+# the SVG into pixels; its defaults are off, so there is no text shaping, font
+# loading or embedded raster decoding, none of which an icon needs.
+# ratatui-image sends the pixels in whichever protocol the terminal speaks; its
+# defaults are off too, to leave out `chafa`, a C library.
+ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm"] }
+resvg = { version = "0.48.1", default-features = false }
+image = { version = "0.25", default-features = false }
 # Only for the TUI's live refresh (`tui/watch.rs`): a read-only connection that
 # polls `PRAGMA data_version`. The same version core uses, so it is one build of
 # SQLite in the tree, with core's `bundled` feature.

@@ -215,5 +215,11 @@ before it runs. Flags for the new project go **before** the command
 **Colours** are a palette name — `cyan`, `gold`, `amber`, `rust`, `violet`,
 `green`, `blue`, `pink` — or a `#rrggbb` hex value. **Icons** are a bundled name
 (`folder`, `briefcase`, `code`, `rocket`, `terminal`, `gamepad`, …) or
-`custom:<name>` for one added in the app. `NO_COLOR` in the environment drops
-all colour.
+`custom:<name>` for one added in the app or with `dexily icon import`.
+`NO_COLOR` in the environment drops all colour.
+
+A terminal draws text, not SVG, so a custom icon shows as the folder glyph in
+`list` and `show`. **The TUI draws it as the image itself**, at the top of the
+detail pane, in a terminal that can show images and says so in its
+environment — Kitty, WezTerm, Ghostty, iTerm2, Konsole, foot — and not inside
+tmux or screen. Anywhere else it is the folder glyph there too.

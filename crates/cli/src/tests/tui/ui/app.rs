@@ -3,12 +3,16 @@
 //! that goes missing, which the pure-state tests in `tests/tui/app.rs` cannot.
 
 use indexer_core::domain::{Group, Project};
+use indexer_core::IconStore;
 use ratatui::backend::TestBackend;
+use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Terminal;
+use ratatui_image::picker::Picker;
 use serde_json::json;
 
 use crate::tui::app::App;
+use crate::tui::images::IconImages;
 use crate::tui::ui::app::draw;
 
 fn press(app: &mut App, code: KeyCode) {
@@ -52,7 +56,7 @@ fn sample() -> App {
 
 fn render(app: &App, width: u16, height: u16) -> Vec<String> {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-    terminal.draw(|frame| draw(frame, app)).unwrap();
+    terminal.draw(|frame| draw(frame, app, None)).unwrap();
     let buffer = terminal.backend().buffer();
     (0..buffer.area.height)
         .map(|y| {
@@ -245,4 +249,87 @@ fn fields_a_project_does_not_have_are_left_out() {
             "did not expect {absent:?} in:\n{text}"
         );
     }
+}
+
+/// `alpha`, wearing the custom icon `logo`, as the only project.
+fn wearing_logo() -> App {
+    let mut alpha = project("alpha", None);
+    alpha.icon = Some("custom:logo".to_string());
+    App::new(vec![alpha], vec![], vec![])
+}
+
+/// The frame `app` draws with `images`, 100 × `height`.
+fn frame_with(app: &App, images: &mut IconImages, height: u16) -> Buffer {
+    let mut terminal = Terminal::new(TestBackend::new(100, height)).unwrap();
+    terminal
+        .draw(|frame| draw(frame, app, Some(images)))
+        .unwrap();
+    terminal.backend().buffer().clone()
+}
+
+/// The text of each row of `buffer`'s detail pane: its last 36 columns.
+fn detail_text(buffer: &Buffer) -> Vec<String> {
+    (0..buffer.area.height)
+        .map(|y| {
+            (64..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect()
+        })
+        .collect()
+}
+
+/// The detail pane's rows that hold any of the icon's red — the image, which
+/// half blocks paint as coloured cells.
+fn red_rows(buffer: &Buffer) -> Vec<u16> {
+    let red = ratatui::style::Color::Rgb(255, 0, 0);
+    (0..buffer.area.height)
+        .filter(|&y| {
+            (64..buffer.area.width).any(|x| buffer[(x, y)].bg == red || buffer[(x, y)].fg == red)
+        })
+        .collect()
+}
+
+#[test]
+fn a_custom_icon_is_drawn_above_the_details_when_images_work() {
+    let (_dir, store) = crate::tests::tui::images::store_with_logo();
+    let mut images = IconImages::with_picker(Picker::halfblocks(), &store);
+    let buffer = frame_with(&wearing_logo(), &mut images, 24);
+    let text = detail_text(&buffer);
+
+    // Rows 1–3 inside the border are the image; the name comes after a gap.
+    assert_eq!(red_rows(&buffer), [1, 2, 3], "{}", text.join("\n"));
+    assert!(
+        text[5].contains("alpha"),
+        "expected the name below it:\n{}",
+        text.join("\n")
+    );
+}
+
+#[test]
+fn without_images_a_custom_icon_is_the_title_glyph_as_before() {
+    let text = render(&wearing_logo(), 100, 24);
+    let pane: Vec<String> = text
+        .iter()
+        .map(|row| row.chars().skip(64).collect())
+        .collect();
+    assert!(pane[1].contains("alpha"), "{}", pane.join("\n"));
+}
+
+#[test]
+fn an_icon_that_is_not_in_the_store_falls_back_too() {
+    let store = IconStore::new(std::path::PathBuf::from("/nonexistent/dexily-test-icons"));
+    let mut images = IconImages::with_picker(Picker::halfblocks(), &store);
+    let buffer = frame_with(&wearing_logo(), &mut images, 24);
+    assert!(red_rows(&buffer).is_empty());
+    assert!(detail_text(&buffer)[1].contains("alpha"));
+}
+
+#[test]
+fn a_short_pane_leaves_the_image_out_rather_than_crowd_the_details() {
+    let (_dir, store) = crate::tests::tui::images::store_with_logo();
+    let mut images = IconImages::with_picker(Picker::halfblocks(), &store);
+    // 8 rows: a 6-row pane, no room for a 3-row icon and the details too.
+    let buffer = frame_with(&wearing_logo(), &mut images, 8);
+    assert!(red_rows(&buffer).is_empty());
+    assert!(detail_text(&buffer)[1].contains("alpha"));
 }

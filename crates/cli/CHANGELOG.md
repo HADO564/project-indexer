@@ -16,6 +16,7 @@ The CLI is released independently of the desktop app, under tags of the form
 - **The TUI's detail pane shows a project's description, properties and notes**, as `dexily show` does — each only when the project has it, a property per line (`client = acme`) and the notes line by line. Long values wrap inside the pane instead of being cut off at its edge.
 - **`n` in the TUI adds a project.** It opens the `:` line already holding `add "<the folder dexily was started in>"` — `Enter` tracks that folder, or edit the path first, and `Esc` cancels. In the Groups pane `n` still makes a new group. `?` lists it.
 - **`dexily icon list|import|delete` manages your own SVG icons** — the same store the app keeps, so an icon added on either side shows on both. `import` cleans the SVG as the app does and names it after the file (`Logo.svg` → `custom:logo`, numbered if taken); `list` shows each with how many projects use it; `delete` asks first, saying how many projects wear it — they fall back to the folder icon. Put one on a project with `edit --icon custom:<name>`. In the TUI, `:icon delete` asks `y/N` like the other deletes.
+- **The TUI shows a project's custom icon as the image itself**, at the top of the detail pane, in a terminal that can draw images — Kitty, WezTerm, Ghostty, iTerm2, Konsole, foot. Anywhere else, inside tmux, or for an SVG that won't render, it is the folder glyph as before; `list` and `show` are unchanged. The TUI asks only terminals that identify themselves, so others start as fast as ever.
 
 ## [0.3.0] — 2026-10-21
 
