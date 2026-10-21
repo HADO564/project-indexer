@@ -4,7 +4,9 @@
 use std::sync::Arc;
 
 use anyhow::Context as _;
-use indexer_core::{DetectorRunner, GroupService, ProjectService, ScanService, SqliteRepository};
+use indexer_core::{
+    DetectorRunner, GroupService, IconStore, ProjectService, ScanService, SqliteRepository,
+};
 
 use crate::confirm::Confirmer;
 use crate::editor::ProjectEditor;
@@ -15,12 +17,12 @@ use crate::paths;
 /// project, which commands default to when none is given.
 pub struct Context {
     pub projects: Arc<ProjectService>,
-    /// Built for every run, and unused until the group commands exist. Kept
-    /// here rather than created on demand so `Context` stays the one place
-    /// that wires core's services, exactly as the app's `lib.rs` does.
-    #[allow(dead_code)]
+    /// Built for every run rather than on demand, so `Context` stays the one
+    /// place that wires core's services, exactly as the app's `lib.rs` does.
     pub groups: Arc<GroupService>,
     pub scan: Arc<ScanService>,
+    /// The custom icons, in the folder the app keeps them in.
+    pub icons: IconStore,
     pub confirmer: Box<dyn Confirmer>,
     /// How `edit` asks for changes when no field flag was given — the
     /// full-screen form in a shell. Supplied by the caller, like `confirmer`.
@@ -52,11 +54,13 @@ impl Context {
         ));
         let scan = Arc::new(ScanService::new(projects.clone(), detectors));
         let groups = Arc::new(GroupService::new(repo));
+        let icons = IconStore::new(paths::config_dir()?.join("icons"));
 
         Ok(Self {
             projects,
             groups,
             scan,
+            icons,
             confirmer,
             editor,
         })

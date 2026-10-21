@@ -8,6 +8,7 @@ use std::path::Path;
 use clap::Parser;
 
 use crate::commands::group::GroupAction;
+use crate::commands::icon::IconAction;
 use crate::commands::{self, Command, Outcome};
 use crate::context::Context;
 use crate::output::{human, Look};
@@ -60,6 +61,12 @@ pub(crate) fn needs_confirm(line: &str) -> Option<String> {
             GroupAction::Delete { group } => {
                 format!("Delete the group \"{group}\"? Its projects are kept, ungrouped. [y/N]")
             }
+            _ => return None,
+        },
+        Command::Icon(args) => match args.action {
+            IconAction::Delete { name } => format!(
+                "Delete the custom icon \"{name}\"? Projects using it show the folder icon. [y/N]"
+            ),
             _ => return None,
         },
         _ => return None,

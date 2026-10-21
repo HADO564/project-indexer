@@ -7,7 +7,7 @@ keyboard-driven TUI. It opens the same database as the app, so the two stay in
 step with no pairing — and it works without the app installed.
 
 **Status: every plain subcommand works.** `list`, `find`, `show`, `add`, `open`,
-`untrack`, `favorite`, `unfavorite`, `edit`, `restore`, `purge`, `scan` and
+`untrack`, `favorite`, `unfavorite`, `edit`, `restore`, `purge`, `scan`, `icon` and
 `config` all run against the app's database, and a bare `edit` in a terminal
 opens a full-screen form (`edit --full` for every field). `group` lists,
 creates, changes and deletes groups; a project joins one with `edit --group`.
@@ -38,6 +38,9 @@ dexily group list               the groups, with their colour, icon and project 
 dexily group create <name>      a new group (--color, --icon; cyan and briefcase by default)
 dexily group edit <group>       rename it (--name) or change its --color or --icon
 dexily group delete <group>     delete a group, keeping its projects ungrouped (asks first; --yes)
+dexily icon list               your custom icons, with how many projects use each
+dexily icon import <file.svg>  add an SVG as a custom icon; then edit --icon custom:<name>
+dexily icon delete <name>      delete a custom icon (asks first; --yes)
 dexily config form-wrap on|off  whether Tab wraps around at the ends of edit's form
 dexily config icons nerd|emoji|off   icons before names in tables (off by default)
 dexily mkdir <folders…>         run the real mkdir, then track each folder it made (asks [Y/n/e])

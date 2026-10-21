@@ -6,6 +6,7 @@ mod config;
 mod edit;
 mod find;
 mod group;
+mod icon;
 mod list;
 mod project_args;
 mod scan;

@@ -12,6 +12,7 @@ mod failure;
 mod favorite;
 pub mod find;
 pub mod group;
+pub mod icon;
 pub mod list;
 mod open;
 mod purge;
@@ -76,6 +77,10 @@ pub enum Command {
     ///
     /// To put a project in one, use `edit --group`.
     Group(group::GroupArgs),
+    /// List, add or delete your custom icons.
+    ///
+    /// To put one on a project, use `edit --icon custom:<name>`.
+    Icon(icon::IconArgs),
     /// Show or change the CLI's settings.
     Config(config::ConfigArgs),
 }
@@ -161,6 +166,12 @@ pub enum Outcome {
     GroupSaved { group: Box<Group>, created: bool },
     /// A group deleted, as it was, and how many projects it left ungrouped.
     GroupDeleted { group: Box<Group>, members: usize },
+    /// Every custom icon by name, each with how many live projects use it.
+    CustomIcons { icons: Vec<(String, usize)> },
+    /// A custom icon added by `icon import`, under the name it was given.
+    IconImported { name: String },
+    /// A custom icon deleted, and how many projects wore it.
+    IconDeleted { name: String, users: usize },
 }
 
 /// The colours a user can set with `dexily config`.
@@ -428,6 +439,7 @@ pub fn run(command: Command, ctx: &Context) -> anyhow::Result<Outcome> {
         Command::Purge(args) => purge::run(args, ctx),
         Command::Scan(args) => scan::run(args, ctx),
         Command::Group(args) => group::run(args, ctx),
+        Command::Icon(args) => icon::run(args, ctx),
         Command::Config(args) => config::run(args, ctx),
     }
 }

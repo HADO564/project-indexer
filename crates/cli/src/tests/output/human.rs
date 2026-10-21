@@ -757,3 +757,46 @@ fn prose_goes_to_the_err_writer_and_stdout_stays_empty() {
     let prose = String::from_utf8(err).unwrap();
     assert_eq!(prose, "dexily: opening \"app\"\n");
 }
+
+/// The stdout and the prose `outcome` renders to, with icons and colour off.
+fn both(outcome: &Outcome) -> (String, String) {
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let look = Look {
+        folder: Color::DEFAULT_FOLDER,
+        header: Color::DEFAULT_HEADER,
+        icons: IconStyle::Off,
+    };
+    write(&mut out, &mut err, outcome, look).unwrap();
+    (
+        String::from_utf8(out).unwrap(),
+        String::from_utf8(err).unwrap(),
+    )
+}
+
+#[test]
+fn custom_icons_list_as_their_edit_spelling_with_a_count() {
+    let outcome = Outcome::CustomIcons {
+        icons: vec![("logo".to_string(), 1), ("mascot".to_string(), 3)],
+    };
+    let (out, err) = both(&outcome);
+    // Aligned, and spelled as `edit --icon` takes them.
+    assert_eq!(out, "custom:logo    1 project\ncustom:mascot  3 projects\n");
+    assert!(err.is_empty(), "{err}");
+}
+
+#[test]
+fn no_custom_icons_says_how_to_add_one() {
+    let (out, err) = both(&Outcome::CustomIcons { icons: vec![] });
+    assert!(out.is_empty(), "{out}");
+    assert!(err.contains("dexily icon import"), "{err}");
+}
+
+#[test]
+fn an_imported_icon_says_how_to_use_it() {
+    let (out, err) = both(&Outcome::IconImported {
+        name: "logo".to_string(),
+    });
+    assert!(out.is_empty(), "{out}");
+    assert!(err.contains("--icon custom:logo"), "{err}");
+}

@@ -20,7 +20,7 @@ commands the observer recognises and project types it detects see
 - [Naming a project](#naming-a-project)
 - [Commands](#commands)
   - [Viewing](#viewing) · [Tracking](#tracking) · [Changing](#changing) ·
-    [The bin](#the-bin) · [Groups](#groups) · [Settings](#settings)
+    [The bin](#the-bin) · [Groups](#groups) · [Icons](#icons) · [Settings](#settings)
 - [Observing commands](#observing-commands)
 - [Colours and icons](#colours-and-icons)
 
@@ -168,6 +168,18 @@ A project is in one group at a time; put it in one with `edit --group`.
 | `dexily group create <name> [--color <c>] [--icon <i>]` | make one (default cyan / briefcase) |
 | `dexily group edit <group> <--name\|--color\|--icon …>` | rename or restyle |
 | `dexily group delete <group>` | delete it; its projects are kept, ungrouped. Asks first |
+
+### Icons
+
+Your own SVG icons, in the same store the app keeps — one added here shows in
+the app, and the other way round. Put one on a project with
+`edit --icon custom:<name>`. (Groups take the bundled icons only.)
+
+| Command | |
+|---|---|
+| `dexily icon list` | your custom icons, as `custom:<name>`, with how many projects use each |
+| `dexily icon import <file.svg>` | add one, cleaned as the app cleans it, named after the file (`Logo.svg` → `logo`, or `logo-2` if that is taken) |
+| `dexily icon delete <name>` | delete one (`logo` or `custom:logo`). Asks first; projects using it show the folder icon |
 
 ### Settings
 
