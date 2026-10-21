@@ -2,12 +2,13 @@
 //! would otherwise need a person at a terminal — shared by the tests that run
 //! whole commands.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::Parser;
 use indexer_core::{
-    DetectorRunner, Group, GroupService, Project, ProjectRepository, ProjectService, ScanService,
-    SqliteRepository, UpdateProject,
+    DetectorRunner, Group, GroupService, IconStore, Project, ProjectRepository, ProjectService,
+    ScanService, SqliteRepository, UpdateProject,
 };
 use serde_json::json;
 
@@ -87,6 +88,9 @@ pub fn context(consent: bool, editor: impl ProjectEditor + 'static) -> Context {
         scan: Arc::new(ScanService::new(projects.clone(), detectors)),
         groups: Arc::new(GroupService::new(repo)),
         projects,
+        // A store that does not exist, so it lists as empty and never touches
+        // the user's real icons; the icon tests swap in a temporary one.
+        icons: IconStore::new(PathBuf::from("/nonexistent/dexily-test-icons")),
         confirmer: Box::new(Answer(consent)),
         editor: Box::new(editor),
     }

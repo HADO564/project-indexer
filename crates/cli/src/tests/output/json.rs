@@ -372,3 +372,25 @@ fn an_unchanged_edit_is_the_project_as_it_was() {
     });
     assert_eq!(doc["data"]["name"], "app");
 }
+
+#[test]
+fn custom_icons_carry_their_name_spelling_and_count() {
+    let data = &render(&Outcome::CustomIcons {
+        icons: vec![("logo".to_string(), 2)],
+    })["data"];
+    assert_eq!(
+        data,
+        &json!([{ "name": "logo", "icon": "custom:logo", "projects": 2 }])
+    );
+
+    let data = &render(&Outcome::IconImported {
+        name: "logo".to_string(),
+    })["data"];
+    assert_eq!(data, &json!({ "name": "logo", "icon": "custom:logo" }));
+
+    let data = &render(&Outcome::IconDeleted {
+        name: "logo".to_string(),
+        users: 2,
+    })["data"];
+    assert_eq!(data, &json!({ "name": "logo", "projects": 2 }));
+}

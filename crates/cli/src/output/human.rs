@@ -186,6 +186,32 @@ pub fn write(
                 group.name
             )?,
         },
+        Outcome::CustomIcons { icons } => {
+            if icons.is_empty() {
+                writeln!(
+                    err,
+                    "dexily: no custom icons yet — add one with `dexily icon import <file.svg>`"
+                )?;
+                return Ok(());
+            }
+            let width = icons.iter().map(|(name, _)| name.chars().count()).max().unwrap_or(0);
+            for (name, users) in icons {
+                let used = match users {
+                    1 => "1 project".to_string(),
+                    n => format!("{n} projects"),
+                };
+                writeln!(out, "custom:{name:<width$}  {used}")?;
+            }
+        }
+        Outcome::IconImported { name } => writeln!(
+            err,
+            "dexily: added the icon \"{name}\" — use it with `dexily edit <project> --icon custom:{name}`"
+        )?,
+        Outcome::IconDeleted { name, users } => match users {
+            0 => writeln!(err, "dexily: deleted the icon \"{name}\"")?,
+            1 => writeln!(err, "dexily: deleted the icon \"{name}\" — its 1 project shows the folder icon now")?,
+            n => writeln!(err, "dexily: deleted the icon \"{name}\" — its {n} projects show the folder icon now")?,
+        },
         Outcome::Color { color: chosen, .. } => {
             let name = chosen.name();
             if color {

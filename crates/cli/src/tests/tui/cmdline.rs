@@ -95,3 +95,12 @@ fn add_line_keeps_a_folder_with_spaces_one_argument() {
         assert_eq!(tokenize(&line).unwrap(), ["add", dir], "{line}");
     }
 }
+
+#[test]
+fn deleting_an_icon_is_gated_and_named() {
+    let prompt = needs_confirm("icon delete logo").expect("icon delete should ask");
+    assert!(prompt.contains("\"logo\""), "{prompt}");
+    assert!(prompt.ends_with("[y/N]"), "{prompt}");
+    assert_eq!(needs_confirm("icon list"), None);
+    assert_eq!(needs_confirm("icon import logo.svg"), None);
+}

@@ -200,6 +200,22 @@ pub fn write(out: &mut impl Write, outcome: &Outcome) -> anyhow::Result<()> {
                 "ungrouped": members,
             }),
         ),
+        Outcome::CustomIcons { icons } => {
+            let icons: Vec<serde_json::Value> = icons
+                .iter()
+                .map(|(name, users)| {
+                    serde_json::json!({ "name": name, "icon": format!("custom:{name}"), "projects": users })
+                })
+                .collect();
+            emit(out, &icons)
+        }
+        Outcome::IconImported { name } => emit(
+            out,
+            &serde_json::json!({ "name": name, "icon": format!("custom:{name}") }),
+        ),
+        Outcome::IconDeleted { name, users } => {
+            emit(out, &serde_json::json!({ "name": name, "projects": users }))
+        }
         Outcome::Color { setting, color } => {
             let mut data = serde_json::Map::new();
             data.insert(setting.key().to_string(), serde_json::to_value(color)?);
