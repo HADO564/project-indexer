@@ -46,17 +46,50 @@ pub(crate) fn run_line(line: &str, ctx: &Context, look: Look) -> String {
 /// prompt to show before running it; otherwise `None`. The TUI puts a `y/N`
 /// gate in front of these, matching the shell, which confirms the same three.
 pub(crate) fn needs_confirm(line: &str) -> Option<String> {
-    let argv = tokenize(line).ok()?;
-    let command = Line::try_parse_from(&argv).ok()?.command;
-    let prompt = match command {
-        Command::Untrack(_) => "Stop tracking this project? Its files are left alone. [y/N]",
-        Command::Purge(_) => "Permanently delete this binned record? Cannot be undone. [y/N]",
-        Command::Group(args) if matches!(args.action, GroupAction::Delete { .. }) => {
-            "Delete this group? Its projects are kept, ungrouped. [y/N]"
+    let prompt = match parse(line)? {
+        Command::Untrack(_) => {
+            "Stop tracking this project? Its files are left alone. [y/N]".to_string()
         }
+        Command::Purge(_) => {
+            "Permanently delete this binned record? Cannot be undone. [y/N]".to_string()
+        }
+        // A group is named by name, so the prompt can say which one.
+        Command::Group(args) => match args.action {
+            GroupAction::Delete { group } => {
+                format!("Delete the group \"{group}\"? Its projects are kept, ungrouped. [y/N]")
+            }
+            _ => return None,
+        },
         _ => return None,
     };
-    Some(prompt.to_string())
+    Some(prompt)
+}
+
+/// Whether `line` is an `edit`, which opens the full-screen form when no field
+/// flag is given. The form draws over the browser, so after one the loop
+/// repaints the whole screen rather than only what it thinks has changed. An
+/// `edit` with a flag never opens the form; repainting after it costs nothing.
+pub(crate) fn opens_form(line: &str) -> bool {
+    matches!(parse(line), Some(Command::Edit(_)))
+}
+
+/// `line` parsed as a command, or `None` if it does not parse.
+fn parse(line: &str) -> Option<Command> {
+    let argv = tokenize(line).ok()?;
+    Some(Line::try_parse_from(&argv).ok()?.command)
+}
+
+/// `arg` quoted as one argument of a `:` line, for a line built from something
+/// the user typed: `Client Work` stays one group name rather than two
+/// arguments. Double quotes, or single ones if the text holds a double quote.
+/// [`tokenize`] has no escapes, so text holding both kinds cannot be written
+/// on the line; it splits, and the command says what it did not understand.
+pub(crate) fn quote(arg: &str) -> String {
+    if arg.contains('"') {
+        format!("'{arg}'")
+    } else {
+        format!("\"{arg}\"")
+    }
 }
 
 /// Renders an outcome's **prose** (the message, not the table) by handing the

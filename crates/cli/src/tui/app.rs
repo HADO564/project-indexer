@@ -20,6 +20,7 @@ use indexer_core::domain::views::{resolve_view, view_counts, View, ViewCounts};
 use indexer_core::domain::{Group, Project};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use super::cmdline;
 use crate::appearance::IconStyle;
 use crate::context::Context;
 use crate::settings;
@@ -62,6 +63,31 @@ pub(crate) enum Mode {
         prompt: String,
         pending: String,
     },
+    /// The name dialog is open, asking for a group's name (`buffer` is what has
+    /// been typed); `naming` says which command to build from it.
+    Name {
+        naming: Naming,
+        buffer: String,
+    },
+}
+
+/// What the name dialog is for. The dialog takes the name as typed, spaces and
+/// all, and builds the command from it — quoting it, so the user never has to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Naming {
+    /// A new, empty group.
+    NewGroup,
+    /// Renaming the group called `name`.
+    RenameGroup { name: String },
+}
+
+/// What choosing an action does, from the menu or by its key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Does {
+    /// Run this `:` line.
+    Run(String),
+    /// Ask for a name in the name dialog first, then run the line it builds.
+    AskName(Naming),
 }
 
 /// Something the event loop must do that `App` cannot, having no `Context`.
@@ -79,14 +105,14 @@ pub(crate) enum Action {
     BrowseTo(PathBuf),
 }
 
-/// One row of the action menu: the shortcut key, its label, and the `:` command
-/// it runs on the selected project. Shortcuts and the menu share this list, so
-/// they can never name different commands for the same key.
+/// One row of the action menu: the shortcut key, its label, and what it does to
+/// the selection. Shortcuts and the menu share this list, so they can never
+/// name different commands for the same key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct MenuItem {
     pub(crate) key: char,
     pub(crate) label: &'static str,
-    pub(crate) command: String,
+    pub(crate) does: Does,
 }
 
 /// The whole TUI state for a frame.
@@ -184,9 +210,10 @@ impl App {
     /// the same project, the same group — not the same row number, which would
     /// slide onto a neighbour when a row is added above. What has gone falls
     /// back gently: a vanished project's row goes to whatever now fills it, and
-    /// a deleted group's view to All, so the list never points at nothing. An
-    /// open action menu closes if its project changed, so a letter can't land
-    /// on a project the user never chose.
+    /// a deleted group's view to the group now in its row if the Groups pane
+    /// has the keys, else to All, so the list never points at nothing. An
+    /// open action menu closes if what it acts on changed, so a letter can't
+    /// land on a project or group the user never chose.
     pub(crate) fn set_data(
         &mut self,
         projects: Vec<Project>,
@@ -195,18 +222,12 @@ impl App {
     ) {
         let selected = self.selected_project().map(|project| project.id.clone());
         let group_row = self.group_pane_view(self.groups_sel);
+        let menu_target = self.menu_target();
 
         self.projects = projects;
         self.deleted = deleted;
         self.groups = groups;
         self.counts = view_counts(&self.projects, &self.deleted, &self.groups);
-        if let View::Group { id } = &self.active {
-            if !self.groups.iter().any(|group| &group.id == id) {
-                self.active = View::All;
-                self.focus = Pane::Views;
-                self.views_sel = 0;
-            }
-        }
 
         let group_index = match group_row {
             Some(View::Group { id }) => self
@@ -220,6 +241,22 @@ impl App {
             .unwrap_or(self.groups_sel)
             .min(self.group_pane_len().saturating_sub(1));
 
+        if let View::Group { id } = &self.active {
+            if !self.groups.iter().any(|group| &group.id == id) {
+                if self.focus == Pane::Groups {
+                    // In the Groups pane — most likely `d` just deleted it — so
+                    // stay there, on the row that took its place.
+                    self.active = self
+                        .group_pane_view(self.groups_sel)
+                        .unwrap_or(View::Ungrouped);
+                } else {
+                    self.active = View::All;
+                    self.focus = Pane::Views;
+                    self.views_sel = 0;
+                }
+            }
+        }
+
         let visible = self.visible();
         let list_index = selected
             .as_ref()
@@ -227,8 +264,7 @@ impl App {
         let last = visible.len().saturating_sub(1);
         self.list_sel = list_index.unwrap_or(self.list_sel).min(last);
 
-        let still_selected = self.selected_project().map(|project| &project.id);
-        if matches!(self.mode, Mode::Menu(_)) && still_selected != selected.as_ref() {
+        if matches!(self.mode, Mode::Menu(_)) && self.menu_target() != menu_target {
             self.mode = Mode::Normal;
         }
     }
@@ -342,11 +378,23 @@ impl App {
         self.visible().get(self.list_sel).copied()
     }
 
-    /// The actions that apply to the selected project — the rows of the `Space`
-    /// menu, and the targets of the letter shortcuts. Each runs a `:` command
-    /// on the project by id, so they go through the same path as a typed line.
-    /// Empty when nothing is selected.
+    /// The group under the Groups pane's cursor — `None` on Ungrouped, which is
+    /// the "no group" bucket rather than a group.
+    pub(crate) fn selected_group(&self) -> Option<&Group> {
+        self.groups_sel
+            .checked_sub(1)
+            .and_then(|index| self.groups.get(index))
+    }
+
+    /// The actions for what the keys are on — the rows of the `Space` menu, and
+    /// the targets of the letter shortcuts. In the Groups pane they act on
+    /// groups; anywhere else on the selected project. Each is a `:` command, so
+    /// it goes through the same path as a typed line. Empty when there is
+    /// nothing to act on.
     pub(crate) fn menu_items(&self) -> Vec<MenuItem> {
+        if self.focus == Pane::Groups {
+            return self.group_items();
+        }
         let Some(project) = self.selected_project() else {
             return Vec::new();
         };
@@ -356,12 +404,12 @@ impl App {
                 MenuItem {
                     key: 'r',
                     label: "Restore",
-                    command: format!("restore {id}"),
+                    does: Does::Run(format!("restore {id}")),
                 },
                 MenuItem {
                     key: 'x',
                     label: "Purge",
-                    command: format!("purge {id}"),
+                    does: Does::Run(format!("purge {id}")),
                 },
             ]
         } else {
@@ -374,33 +422,95 @@ impl App {
                 MenuItem {
                     key: 'o',
                     label: "Open",
-                    command: format!("open {id}"),
+                    does: Does::Run(format!("open {id}")),
                 },
                 MenuItem {
                     key: fav_key,
                     label: fav_label,
-                    command: format!("{fav_cmd} {id}"),
+                    does: Does::Run(format!("{fav_cmd} {id}")),
                 },
                 MenuItem {
                     key: 'e',
                     label: "Edit",
-                    command: format!("edit {id}"),
+                    does: Does::Run(format!("edit {id}")),
+                },
+                // The compact form is the common edit; every field — the name,
+                // the group, the colour — is the full one, as `--full` is in a
+                // shell.
+                MenuItem {
+                    key: 'E',
+                    label: "Edit all fields",
+                    does: Does::Run(format!("edit {id} --full")),
                 },
                 MenuItem {
                     key: 'd',
                     label: "Untrack",
-                    command: format!("untrack {id}"),
+                    does: Does::Run(format!("untrack {id}")),
                 },
             ]
         }
     }
 
-    /// The command a letter shortcut runs, if one applies to the selection.
-    fn shortcut_command(&self, key: char) -> Option<String> {
+    /// The Groups pane's actions: a new group from anywhere in it, and rename
+    /// and delete for the group under the cursor. The keys mirror a project's —
+    /// `e` edits, `d` deletes — and a group is named in its commands by name,
+    /// as the shell names it.
+    fn group_items(&self) -> Vec<MenuItem> {
+        let mut items = vec![MenuItem {
+            key: 'n',
+            label: "New group",
+            does: Does::AskName(Naming::NewGroup),
+        }];
+        if let Some(group) = self.selected_group() {
+            items.push(MenuItem {
+                key: 'e',
+                label: "Rename",
+                does: Does::AskName(Naming::RenameGroup {
+                    name: group.name.clone(),
+                }),
+            });
+            items.push(MenuItem {
+                key: 'd',
+                label: "Delete",
+                does: Does::Run(format!("group delete {}", cmdline::quote(&group.name))),
+            });
+        }
+        items
+    }
+
+    /// What a letter shortcut does, if one applies to what the keys are on.
+    fn shortcut(&self, key: char) -> Option<Does> {
         self.menu_items()
             .into_iter()
             .find(|item| item.key == key)
-            .map(|item| item.command)
+            .map(|item| item.does)
+    }
+
+    /// Carry out a chosen action: a command goes to the loop to run; a name to
+    /// ask for opens the name dialog — empty for a new group, holding the
+    /// current name for a rename, so a small fix is a small edit.
+    fn activate(&mut self, does: Does) -> Option<Action> {
+        match does {
+            Does::Run(line) => Some(Action::Run(line)),
+            Does::AskName(naming) => {
+                let buffer = match &naming {
+                    Naming::NewGroup => String::new(),
+                    Naming::RenameGroup { name } => name.clone(),
+                };
+                self.mode = Mode::Name { naming, buffer };
+                None
+            }
+        }
+    }
+
+    /// What an open action menu acts on — the group under the Groups cursor,
+    /// or the selected project — so a refresh can tell when it has changed.
+    fn menu_target(&self) -> Option<String> {
+        if self.focus == Pane::Groups {
+            self.selected_group().map(|group| group.id.clone())
+        } else {
+            self.selected_project().map(|project| project.id.clone())
+        }
     }
 
     // --- key handling ---
@@ -418,6 +528,7 @@ impl App {
             Mode::Browse { .. } => self.handle_browse(key),
             Mode::Menu(_) => self.handle_menu(key),
             Mode::Confirm { .. } => self.handle_confirm(key),
+            Mode::Name { .. } => self.handle_name(key),
             Mode::Help => {
                 // Any key dismisses the help overlay.
                 self.mode = Mode::Normal;
@@ -505,10 +616,11 @@ impl App {
             KeyCode::Char('[') => self.jump_section(Pane::Views),
             KeyCode::Char(']') => self.jump_section(Pane::Groups),
             KeyCode::Char('s') => self.mode = Mode::Scan(String::new()),
-            // A letter shortcut runs its command on the selected project.
+            // A letter shortcut acts on the selected project, or in the Groups
+            // pane on the group.
             KeyCode::Char(c) => {
-                if let Some(command) = self.shortcut_command(c) {
-                    return Some(Action::Run(command));
+                if let Some(does) = self.shortcut(c) {
+                    return self.activate(does);
                 }
             }
             _ => {}
@@ -610,14 +722,14 @@ impl App {
             }
             KeyCode::Enter => {
                 self.mode = Mode::Normal;
-                return items
-                    .get(selected)
-                    .map(|item| Action::Run(item.command.clone()));
+                if let Some(item) = items.into_iter().nth(selected) {
+                    return self.activate(item.does);
+                }
             }
             KeyCode::Char(c) => {
                 if let Some(item) = items.into_iter().find(|item| item.key == c) {
                     self.mode = Mode::Normal;
-                    return Some(Action::Run(item.command));
+                    return self.activate(item.does);
                 }
             }
             _ => {}
@@ -656,6 +768,46 @@ impl App {
             KeyCode::Char(c) if !ctrl => {
                 buffer.push(c);
                 self.list_sel = 0;
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// The name dialog: type a name, `Backspace` erases, `Esc` (or `Ctrl+C`)
+    /// cancels, `Enter` builds the command and hands it to the loop. The name is
+    /// quoted into the line, so `Client Work` is one name, not two arguments.
+    /// An empty name, or a rename to the very same name, runs nothing.
+    fn handle_name(&mut self, key: KeyEvent) -> Option<Action> {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        if key.code == KeyCode::Esc || (ctrl && key.code == KeyCode::Char('c')) {
+            self.mode = Mode::Normal;
+            return None;
+        }
+        let Mode::Name { naming, buffer } = &mut self.mode else {
+            return None;
+        };
+        match key.code {
+            KeyCode::Enter => {
+                let name = buffer.trim().to_string();
+                let line = match naming {
+                    Naming::NewGroup => format!("group create {}", cmdline::quote(&name)),
+                    Naming::RenameGroup { name: old } if *old == name => String::new(),
+                    Naming::RenameGroup { name: old } => format!(
+                        "group edit {} --name {}",
+                        cmdline::quote(old),
+                        cmdline::quote(&name)
+                    ),
+                };
+                self.mode = Mode::Normal;
+                (!name.is_empty() && !line.is_empty()).then_some(Action::Run(line))
+            }
+            KeyCode::Backspace => {
+                buffer.pop();
+                None
+            }
+            KeyCode::Char(c) if !ctrl => {
+                buffer.push(c);
                 None
             }
             _ => None,

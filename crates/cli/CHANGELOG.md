@@ -14,6 +14,8 @@ The CLI is released independently of the desktop app, under tags of the form
 
 - **Search in the TUI.** Press `/` to filter the project list as you type — over the name, the path, tags and property values, within whatever view you are in — `Enter` keeps the filter and `Esc` drops it (and in the browser, `Esc` clears an active filter before it quits). The status line shows the active `/query`.
 - **The TUI stays current.** A project added, edited or binned in the desktop app, another shell or by the observer shows up in the open browser within a quarter of a second, with no restart and no key press. The cursor stays on the project you were on, even when rows appear or disappear above it; if that project is gone, the cursor moves to the row now in its place, and an open `Space` menu closes so it can't act on a different project.
+- **Edit projects from the TUI.** `e` opens the edit form over the browser — the same form `dexily edit` opens in a shell — and `E` opens it with every field (name, directory, group, colour, icon…). Saving or cancelling returns to the browser. Before, `e` only said the form wasn't available yet.
+- **Manage groups from the TUI.** With the Groups pane focused, `n` makes a new, empty group, `e` renames the one under the cursor and `d` deletes it (asking first, and naming it). Type the name as it is — `Client work` needs no quotes. `Space` there lists the same actions, and the hint line and `?` help show them.
 
 ## [0.2.1] — 2026-10-20
 

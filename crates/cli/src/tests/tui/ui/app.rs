@@ -103,7 +103,39 @@ fn the_help_overlay_lists_the_keys() {
     press(&mut app, KeyCode::Char('?'));
     let text = render(&app, 90, 20).join("\n");
     assert!(text.contains("Keys"), "{text}");
+    assert!(text.contains("in Groups: new / rename / delete"), "{text}");
+    // The last row still fits a 20-line terminal.
     assert!(text.contains("quit"), "{text}");
+}
+
+#[test]
+fn the_groups_pane_hints_its_own_keys() {
+    let mut app = sample();
+    press(&mut app, KeyCode::Char(']')); // Ungrouped
+    let text = render(&app, 110, 20).join("\n");
+    assert!(text.contains("n new group"), "{text}");
+    assert!(
+        !text.contains("e rename"),
+        "Ungrouped can't be renamed:\n{text}"
+    );
+    press(&mut app, KeyCode::Char('j')); // Work
+    let text = render(&app, 110, 20).join("\n");
+    assert!(text.contains("e rename · d delete"), "{text}");
+}
+
+#[test]
+fn the_name_dialog_says_what_it_names() {
+    let mut app = sample();
+    press(&mut app, KeyCode::Char(']'));
+    press(&mut app, KeyCode::Char('n'));
+    let text = render(&app, 90, 20).join("\n");
+    assert!(text.contains("New group"), "{text}");
+    press(&mut app, KeyCode::Esc);
+    press(&mut app, KeyCode::Char('j'));
+    press(&mut app, KeyCode::Char('e'));
+    let text = render(&app, 90, 20).join("\n");
+    assert!(text.contains("Rename \"Work\""), "{text}");
+    assert!(text.contains("> Work"), "{text}");
 }
 
 #[test]
