@@ -1025,6 +1025,7 @@ dependencies = [
  "env_logger",
  "open",
  "ratatui",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

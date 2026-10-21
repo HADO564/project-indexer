@@ -37,7 +37,7 @@ exact one-liners and platforms are in [`crates/cli/README.md`](../../crates/cli/
 
 | You type | What happens |
 |---|---|
-| `dexily` | Opens the full-screen **TUI** — a browser of your projects. Navigate with `j`/`k`, `Tab`/`h`/`l` between panes, `:` to run any command below, `q` to quit. |
+| `dexily` | Opens the full-screen **TUI** — a browser of your projects. Navigate with `j`/`k`, `Tab`/`h`/`l` between panes, `/` to search, `:` to run any command below, `q` to quit. It refreshes by itself when the app, another shell or the observer changes your projects. |
 | `dexily <command> …` | Runs **one command** and exits (everything in this manual). |
 | `dexily <program> …` | **Observes** a recognised scaffolding command (`dexily git clone …`, `dexily cargo new …`) — runs it, then tracks what it made. See [Observing commands](#observing-commands). |
 

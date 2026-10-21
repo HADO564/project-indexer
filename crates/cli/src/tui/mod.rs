@@ -1,8 +1,8 @@
 //! The terminal UI. A bare `dexily` opens the browser (`app` + `ui::app`): the
 //! sidebar of views and groups, the project list, and the selected project's
 //! detail, navigated with vim-style keys. A bare `dexily edit` opens the `edit`
-//! form (`form`). A `:` line runs commands and `/` filters the list; live
-//! refresh is a later phase in `docs/superpowers/specs/2026-10-15-tui-design.md`.
+//! form (`form`). A `:` line runs commands and `/` filters the list, and the
+//! panes refresh when another process writes to the database (`watch`).
 
 pub(crate) mod app;
 pub(crate) mod cmdline;
@@ -11,9 +11,11 @@ pub(crate) mod host;
 mod keys;
 pub mod terminal;
 pub mod ui;
+pub(crate) mod watch;
 
 use std::io::{self, IsTerminal};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::bail;
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
@@ -21,23 +23,41 @@ use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use self::app::{Action as AppAction, App};
 use self::form::{Action, FormState};
 use self::terminal::FormTerminal;
+use self::watch::Watch;
 use crate::context::Context;
 use crate::output::color::Color;
 use crate::output::Look;
+use crate::paths;
 
-/// Opens the browser: read the database once, then draw and handle keys until
-/// the user quits. The terminal is put back by `Session`'s `Drop` on every way
-/// out, panic included. Without a terminal to draw on there is no interface to
-/// open, so this says so rather than hanging — a pipe or a script wants a
-/// command, not a full-screen app.
+/// How long the loop waits for a key before checking whether the database has
+/// changed. A quarter second reads as instant, and each check is one tiny read.
+const REFRESH_TICK: Duration = Duration::from_millis(250);
+
+/// Opens the browser: read the database, then draw and handle keys until the
+/// user quits, re-reading whenever another process writes. The terminal is put
+/// back by `Session`'s `Drop` on every way out, panic included. Without a
+/// terminal to draw on there is no interface to open, so this says so rather
+/// than hanging — a pipe or a script wants a command, not a full-screen app.
 pub fn run(ctx: &Context) -> anyhow::Result<()> {
     if !std::io::stderr().is_terminal() {
         bail!("dexily's interface needs a terminal; run a command instead (see `dexily --help`)");
     }
     let mut app = App::load(ctx)?;
+    let mut watch = open_watch(&mut app);
     let mut session = terminal::enter()?;
+    let mut redraw = true;
     while !app.quit() {
-        session.terminal.draw(|frame| ui::app::draw(frame, &app))?;
+        if redraw {
+            session.terminal.draw(|frame| ui::app::draw(frame, &app))?;
+        }
+        // No key within the tick: check for another process's write, and only
+        // draw again if the panes changed.
+        if !event::poll(REFRESH_TICK)? {
+            redraw = refresh_if_changed(&mut app, ctx, watch.as_mut());
+            continue;
+        }
+        // Any event redraws — a resize must, and a key usually changes the view.
+        redraw = true;
         // Only key presses act. Some terminals also send release and repeat
         // events; acting on a release would run every key twice.
         if let Event::Key(key) = event::read()? {
@@ -47,10 +67,12 @@ pub fn run(ctx: &Context) -> anyhow::Result<()> {
                     // anything else runs straight away.
                     Some(AppAction::Run(line)) => match cmdline::needs_confirm(&line) {
                         Some(prompt) => app.begin_confirm(prompt, line),
-                        None => run_and_reload(&mut app, ctx, &line),
+                        None => run_and_reload(&mut app, ctx, watch.as_mut(), &line),
                     },
                     // Already confirmed by the gate — run it.
-                    Some(AppAction::RunConfirmed(line)) => run_and_reload(&mut app, ctx, &line),
+                    Some(AppAction::RunConfirmed(line)) => {
+                        run_and_reload(&mut app, ctx, watch.as_mut(), &line)
+                    }
                     // The folder browser's directory reads happen here, not in
                     // the pure App state.
                     Some(AppAction::OpenBrowser) => {
@@ -70,16 +92,55 @@ pub fn run(ctx: &Context) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The live-refresh watch on the database `ctx` opened. If it can't be opened
+/// the browser still works — it just doesn't notice other processes' writes
+/// until the next command reloads it — so the status line says so, rather than
+/// stderr, which the browser is about to draw over.
+fn open_watch(app: &mut App) -> Option<Watch> {
+    let watch = paths::database_path().and_then(|path| Ok(Watch::open(&path)?));
+    match watch {
+        Ok(watch) => Some(watch),
+        Err(error) => {
+            app.set_message(format!("live refresh is off: {error:#}"));
+            None
+        }
+    }
+}
+
+/// On an idle tick: if another process has committed since the last look,
+/// re-read the database, keeping the cursor where it was. Returns whether the
+/// panes need drawing again. A failed check — the database briefly busy — is
+/// skipped, since the next tick asks again; a failed reload is shown on the
+/// status line, not fatal.
+fn refresh_if_changed(app: &mut App, ctx: &Context, watch: Option<&mut Watch>) -> bool {
+    let Some(watch) = watch else {
+        return false;
+    };
+    if !watch.changed().unwrap_or(false) {
+        return false;
+    }
+    if let Err(error) = app.reload(ctx) {
+        app.set_message(format!("dexily: refresh failed: {error:#}"));
+    }
+    true
+}
+
 /// Run one `:` line against the database, then reload so the panes reflect any
 /// change and show the result on the status line. A failed reload is shown, not
 /// fatal.
-fn run_and_reload(app: &mut App, ctx: &Context, line: &str) {
+fn run_and_reload(app: &mut App, ctx: &Context, watch: Option<&mut Watch>, line: &str) {
     let look = Look {
         folder: Color::DEFAULT_FOLDER,
         header: Color::DEFAULT_HEADER,
         icons: app.icons(),
     };
     let message = cmdline::run_line(line, ctx, look);
+    // The command's own write moves the watch's counter too. Take it as seen
+    // before the reload below picks it up, so the next tick doesn't read the
+    // same data twice; anything written after this point is still noticed.
+    if let Some(watch) = watch {
+        let _ = watch.changed();
+    }
     match app.reload(ctx) {
         Ok(()) => app.set_message(message),
         Err(error) => app.set_message(format!("dexily: reload failed: {error:#}")),
