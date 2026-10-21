@@ -118,6 +118,12 @@ pub fn is_custom(typed: &str) -> bool {
     typed.trim().starts_with(CUSTOM_PREFIX)
 }
 
+/// The store's name for a stored `custom:<name>` icon, or `None` for a bundled
+/// one. Stored icons are already lowercase, so this is only the prefix.
+pub fn custom_name(icon: &str) -> Option<&str> {
+    icon.strip_prefix(CUSTOM_PREFIX)
+}
+
 /// [`icon`] against the app's own custom icons, read only for a `custom:`
 /// one, so a bundled icon never touches the store.
 pub fn checked_icon(typed: &str) -> anyhow::Result<Option<String>> {

@@ -8,6 +8,7 @@ pub(crate) mod app;
 pub(crate) mod cmdline;
 pub mod form;
 pub(crate) mod host;
+pub(crate) mod images;
 mod keys;
 pub mod terminal;
 pub mod ui;
@@ -22,6 +23,7 @@ use ratatui::crossterm::event::{self, Event, KeyEventKind};
 
 use self::app::{Action as AppAction, App};
 use self::form::{Action, FormState};
+use self::images::IconImages;
 use self::terminal::FormTerminal;
 use self::watch::Watch;
 use crate::context::Context;
@@ -45,15 +47,20 @@ pub fn run(ctx: &Context) -> anyhow::Result<()> {
     let mut app = App::load(ctx)?;
     let mut watch = open_watch(&mut app);
     let mut session = terminal::enter()?;
+    // With the screen up and before the first key is read, as the question to
+    // the terminal needs.
+    let mut images = IconImages::detect(&ctx.icons);
     let mut redraw = true;
     while !app.quit() {
         if redraw {
-            session.terminal.draw(|frame| ui::app::draw(frame, &app))?;
+            session
+                .terminal
+                .draw(|frame| ui::app::draw(frame, &app, images.as_mut()))?;
         }
         // No key within the tick: check for another process's write, and only
         // draw again if the panes changed.
         if !event::poll(REFRESH_TICK)? {
-            redraw = refresh_if_changed(&mut app, ctx, watch.as_mut());
+            redraw = refresh_if_changed(&mut app, ctx, watch.as_mut(), images.as_mut());
             continue;
         }
         // Any event redraws — a resize must, and a key usually changes the view.
@@ -72,13 +79,19 @@ pub fn run(ctx: &Context) -> anyhow::Result<()> {
                             &mut app,
                             ctx,
                             watch.as_mut(),
+                            images.as_mut(),
                             &line,
                         )?,
                     },
                     // Already confirmed by the gate — run it.
-                    Some(AppAction::RunConfirmed(line)) => {
-                        run_and_reload(&mut session.terminal, &mut app, ctx, watch.as_mut(), &line)?
-                    }
+                    Some(AppAction::RunConfirmed(line)) => run_and_reload(
+                        &mut session.terminal,
+                        &mut app,
+                        ctx,
+                        watch.as_mut(),
+                        images.as_mut(),
+                        &line,
+                    )?,
                     // The folder browser's directory reads happen here, not in
                     // the pure App state.
                     Some(AppAction::OpenBrowser) => {
@@ -124,7 +137,12 @@ fn open_watch(app: &mut App) -> Option<Watch> {
 /// panes need drawing again. A failed check — the database briefly busy — is
 /// skipped, since the next tick asks again; a failed reload is shown on the
 /// status line, not fatal.
-fn refresh_if_changed(app: &mut App, ctx: &Context, watch: Option<&mut Watch>) -> bool {
+fn refresh_if_changed(
+    app: &mut App,
+    ctx: &Context,
+    watch: Option<&mut Watch>,
+    images: Option<&mut IconImages>,
+) -> bool {
     let Some(watch) = watch else {
         return false;
     };
@@ -133,6 +151,10 @@ fn refresh_if_changed(app: &mut App, ctx: &Context, watch: Option<&mut Watch>) -
     }
     if let Err(error) = app.reload(ctx) {
         app.set_message(format!("dexily: refresh failed: {error:#}"));
+    }
+    // A project may now wear an icon added since the icons were last read.
+    if let Some(images) = images {
+        images.reload(&ctx.icons);
     }
     true
 }
@@ -146,6 +168,7 @@ fn run_and_reload(
     app: &mut App,
     ctx: &Context,
     watch: Option<&mut Watch>,
+    images: Option<&mut IconImages>,
     line: &str,
 ) -> io::Result<()> {
     let look = Look {
@@ -163,6 +186,10 @@ fn run_and_reload(
     match app.reload(ctx) {
         Ok(()) => app.set_message(message),
         Err(error) => app.set_message(format!("dexily: reload failed: {error:#}")),
+    }
+    // `:icon import`, or an `edit --icon`, may have changed what to draw.
+    if let Some(images) = images {
+        images.reload(&ctx.icons);
     }
     if cmdline::opens_form(line) {
         terminal.clear()?;
