@@ -25,7 +25,7 @@ path = "src/main.rs"
 [dependencies]
 # `version` as well as `path`: crates.io resolves it by version, this
 # workspace by path.
-dexily-core = { path = "../core", version = "0.3.7" }
+dexily-core = { path = "../core", version = "0.3.8" }
 anyhow = "1"
 # Only for the timestamp fields of `--json`'s project shape (`output/json.rs`).
 chrono = { version = "0.4.45", features = ["serde"] }

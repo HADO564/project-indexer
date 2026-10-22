@@ -1098,7 +1098,7 @@ dependencies = [
 
 [[package]]
 name = "dexily-core"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "chrono",
  "git2",
@@ -3739,7 +3739,7 @@ dependencies = [
 
 [[package]]
 name = "project-indexer"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "block2",
  "dexily-core",

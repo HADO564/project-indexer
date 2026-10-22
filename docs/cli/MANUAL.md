@@ -63,6 +63,11 @@ order: an **exact name**, a full **id**, an **id prefix** of 8+ characters, a
 **`parent/folder` path ending**, or **part of a name**. Names are not unique, so
 when two could match, dexily asks — use the id to be exact (`dexily show 087039a7`).
 
+In a path ending, `...` stands for any number of folders, none included:
+`dexily show work/.../app` finds `~/work/client/acme/app` and `~/work/app`, and
+lists them both if there are both. `...` rather than `*`, which the shell would
+expand before dexily saw it.
+
 ## Commands
 
 ### Viewing
@@ -71,7 +76,7 @@ when two could match, dexily asks — use the id to be exact (`dexily show 08703
 
 | Flag | |
 |---|---|
-| `[QUERY]` | keep projects whose name contains it (or, with a `/`, whose path ends with it) |
+| `[QUERY]` | keep projects whose name contains it (or, with a `/`, whose path ends with it; `...` for any folders: `work/.../app`) |
 | `-s, --sort name\|last-opened` | order the table (default `name`) |
 | `-r, --reverse` | flip the sort |
 | `--view all\|favorites\|binned` | which set to draw from (default `all`); binned projects appear only under `binned` |

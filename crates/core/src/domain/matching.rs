@@ -22,7 +22,9 @@ pub enum Resolution<'a> {
 ///    they are all returned, most recently opened first;
 /// 2. a project's full id, or an id prefix at least [`SHORT_ID_LEN`] long;
 /// 3. a query containing `/`: the end of the directory, whole folder names
-///    only (`work/app` matches `~/work/app`, `rk/app` does not);
+///    only (`work/app` matches `~/work/app`, `rk/app` does not), where `...`
+///    stands for any number of folders (`work/.../app` matches
+///    `~/work/client/acme/app`);
 /// 4. part of a name, those starting with the query first, then the most
 ///    recently opened.
 ///
@@ -54,7 +56,8 @@ pub fn resolve<'a>(projects: &'a [Project], query: &str) -> Resolution<'a> {
 /// These are rules 3 and 4 of [`resolve`], not all four:
 ///
 /// - a query containing `/` matches the end of the directory, whole folder
-///   names only (`work/app` matches `~/work/app`);
+///   names only (`work/app` matches `~/work/app`), with `...` for any number
+///   of folders (`work/.../app`);
 /// - anything else matches part of a name, ranked the exact name first, then
 ///   names starting with it, then the rest, each most recently opened first.
 ///
@@ -80,9 +83,38 @@ fn pick(matches: Vec<&Project>) -> Resolution<'_> {
     }
 }
 
+/// Whether `directory` ends with the folders of `query`, compared whole and
+/// from the end. A `...` in `query` stands for any number of folders, none
+/// included: `work/.../app` matches `~/work/app` and
+/// `~/work/client/acme/app`, but not `~/work/app/src`.
+///
+/// Folder by folder rather than one `ends_with` on the text, which has no
+/// way to say "anything here".
 fn path_matcher(directory: &str, query: &str) -> bool {
-    let suffix = format!("/{query}");
-    directory.to_lowercase().ends_with(&suffix)
+    let directory = directory.to_lowercase();
+    let folders: Vec<&str> = directory.split('/').collect();
+    let wanted: Vec<&str> = query.split('/').collect();
+    ends_with_folders(&folders, &wanted)
+}
+
+/// Whether `folders` ends with `wanted`, each a list of single folder names,
+/// checked from the last one back. It calls itself on what is left after each
+/// folder that matches, so every call has fewer to check.
+fn ends_with_folders(folders: &[&str], wanted: &[&str]) -> bool {
+    // Every wanted folder has matched; whatever comes before them is the
+    // rest of the path, which a path ending doesn't care about.
+    let Some((last, before)) = wanted.split_last() else {
+        return true;
+    };
+    // `...` can skip any number of folders: try keeping each count of them
+    // before it until the rest of `wanted` fits one.
+    if *last == "..." {
+        return (0..=folders.len()).any(|kept| ends_with_folders(&folders[..kept], before));
+    }
+    match folders.split_last() {
+        Some((folder, rest)) if folder == last => ends_with_folders(rest, before),
+        _ => false,
+    }
 }
 
 /// Ids are UUIDs: hex digits and dashes. Anything else can't be one, so a

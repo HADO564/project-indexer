@@ -176,6 +176,65 @@ fn several_projects_ending_in_the_same_path_are_ambiguous() {
 }
 
 #[test]
+fn dots_in_a_path_stand_for_any_number_of_folders() {
+    let projects = [
+        project("acme", "app", "/home/me/work/client/acme/app", None),
+        project("ea", "app", "/home/me/work/client/ea/app", None),
+        project("play", "app", "/home/me/play/app", None),
+    ];
+
+    assert_eq!(filtered(&projects, "work/.../app"), ["acme", "ea"]);
+    let mut several = ambiguous(resolve(&projects, "work/.../app"));
+    several.sort();
+    assert_eq!(several, ["acme", "ea"]);
+}
+
+#[test]
+fn dots_in_a_path_can_stand_for_no_folders_at_all() {
+    let projects = [project("a", "app", "/home/me/work/app", None)];
+
+    assert_eq!(found(resolve(&projects, "work/.../app")), "a");
+}
+
+#[test]
+fn the_folders_around_dots_still_end_the_path_and_are_whole() {
+    let projects = [
+        project("src", "src", "/home/me/work/app/src", None),
+        project("network", "app", "/home/me/network/client/app", None),
+    ];
+
+    // `app` must be the last folder, and `work` a whole one.
+    assert!(not_found(resolve(&projects, "work/.../app")));
+}
+
+#[test]
+fn dots_and_more_folders_narrow_to_one_project() {
+    let projects = [
+        project("acme", "app", "/home/me/work/client/acme/app", None),
+        project("ea", "app", "/home/me/work/client/ea/app", None),
+    ];
+
+    assert_eq!(found(resolve(&projects, "work/.../acme/app")), "acme");
+}
+
+#[test]
+fn dots_in_a_path_ignore_case() {
+    let projects = [project("a", "app", "/Users/me/Work/Client/App", None)];
+
+    assert_eq!(found(resolve(&projects, "work/.../APP")), "a");
+}
+
+#[test]
+fn a_path_may_start_with_dots() {
+    let projects = [
+        project("app", "app", "/home/me/work/client/app", None),
+        project("notes", "notes", "/home/me/notes", None),
+    ];
+
+    assert_eq!(found(resolve(&projects, ".../client/app")), "app");
+}
+
+#[test]
 fn a_full_id_finds_the_project() {
     let projects = [
         project(
