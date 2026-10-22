@@ -87,7 +87,8 @@ impl std::fmt::Display for SortByKind {
 
 #[derive(Debug, Args)]
 pub struct ListArgs {
-    /// Filter by name, or by a `/`-path ending (`work/app`).
+    /// Filter by name, or by a `/`-path ending (`work/app`, or `work/.../app`
+    /// for any folders between).
     ///
     /// Keeps projects whose name contains this, or, when it has a `/`, whose
     /// path ends with it. Ignores case.

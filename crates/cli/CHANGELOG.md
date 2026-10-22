@@ -10,6 +10,10 @@ The CLI is released independently of the desktop app, under tags of the form
 
 ## [Unreleased]
 
+### Added
+
+- **`...` in a path stands for any number of folders.** `dexily show work/.../app` finds `~/work/client/acme/app`, and `~/work/app` too: the folders on either side still have to be whole names, and the last one still has to end the path. Several matches list as any query's do, so `work/.../acme/app` narrows them. It works wherever a project is named — `show`, `open`, `edit`, `list` and the rest. `...`, not `*`, because the shell expands `*` before dexily ever sees it.
+
 ## [0.3.1] — 2026-10-22
 
 ### Added
