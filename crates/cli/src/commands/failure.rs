@@ -34,6 +34,18 @@ impl Failure {
     /// The one-line message, without the table human output adds.
     pub fn summary(&self) -> String {
         match self {
+            // `.` is a folder, not a name: say which way round it failed.
+            Failure::NotFound {
+                query,
+                corpus: Corpus::Live,
+            } if query == "." => {
+                "the current folder is not inside a tracked project — track it with `dexily add`"
+                    .to_string()
+            }
+            Failure::NotFound {
+                query,
+                corpus: Corpus::Bin,
+            } if query == "." => "the current folder is not inside a binned project".to_string(),
             Failure::NotFound {
                 query,
                 corpus: Corpus::Live,

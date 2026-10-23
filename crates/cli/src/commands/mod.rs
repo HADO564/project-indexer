@@ -21,9 +21,11 @@ pub mod scan;
 mod show;
 mod untrack;
 
+// `as _`: only its methods are wanted, and `Context` here is the CLI's own.
+use anyhow::Context as _;
 use clap::{Subcommand, ValueEnum};
 use indexer_core::application::ImportReport;
-use indexer_core::domain::matching::{resolve, Resolution};
+use indexer_core::domain::matching::{containing, resolve, Resolution};
 use indexer_core::domain::scan::ScanReport;
 use indexer_core::domain::sorting::SortOptions;
 use indexer_core::{Group, Project};
@@ -401,6 +403,10 @@ pub fn find_one(
 /// there would report "no project matches" for the very project they act on.
 /// The rules are otherwise the same, so a query finds a binned project the way
 /// it finds a live one.
+///
+/// A query of `.` is the project the working directory is in, from its own
+/// folder or any below it ([`containing`]), so `open .` works from anywhere
+/// inside a project.
 pub fn find_in(
     ctx: &Context,
     corpus: Corpus,
@@ -412,6 +418,15 @@ pub fn find_in(
         Corpus::Bin => ctx.projects.list_deleted(SortOptions::default())?,
     };
     let projects = with_tracker(projects, &tracker);
+    if query == "." {
+        // Canonical, as `add` stores every directory, so a folder reached
+        // through a symlink still finds the project tracked at its real path.
+        let here = std::fs::canonicalize(".").context("cannot read the current folder")?;
+        return match containing(&projects, &here) {
+            Some(project) => Ok(project.clone()),
+            None => Err(Failure::NotFound { query, corpus }.into()),
+        };
+    }
     match resolve(&projects, &query) {
         Resolution::Found(project) => Ok(project.clone()),
         Resolution::NotFound => Err(Failure::NotFound { query, corpus }.into()),

@@ -1,6 +1,7 @@
 //! Tests for [`crate::domain::matching`].
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use chrono::{Duration, Utc};
 
@@ -394,4 +395,60 @@ fn filter_returns_nothing_for_an_empty_query_or_no_match() {
 
     assert!(filtered(&projects, "").is_empty());
     assert!(filtered(&projects, "zebra").is_empty());
+}
+
+// `containing`: the project a folder is in, for `show .`.
+
+/// The id of the project `containing` finds for `dir`, if any.
+fn inside<'a>(projects: &'a [Project], dir: &str) -> Option<&'a str> {
+    containing(projects, Path::new(dir)).map(|p| p.id.as_str())
+}
+
+#[test]
+fn a_projects_own_folder_is_in_it() {
+    let projects = [project("app", "app", "/home/me/work/app", None)];
+
+    assert_eq!(inside(&projects, "/home/me/work/app"), Some("app"));
+}
+
+#[test]
+fn a_folder_deep_inside_a_project_is_in_it() {
+    let projects = [
+        project("app", "app", "/home/me/work/app", None),
+        project("notes", "notes", "/home/me/notes", None),
+    ];
+
+    assert_eq!(inside(&projects, "/home/me/work/app/src/bin"), Some("app"));
+}
+
+#[test]
+fn a_folder_outside_every_project_is_in_none() {
+    let projects = [project("app", "app", "/home/me/work/app", None)];
+
+    for dir in ["/home/me/work", "/home/me/play/app", "/"] {
+        assert_eq!(inside(&projects, dir), None, "{dir}");
+    }
+}
+
+#[test]
+fn a_folder_whose_name_only_starts_like_a_project_is_not_in_it() {
+    let projects = [project("app", "app", "/home/me/work/app", None)];
+
+    // The text starts the same, the folders don't.
+    for dir in ["/home/me/work/app-two", "/home/me/work/apple/src"] {
+        assert_eq!(inside(&projects, dir), None, "{dir}");
+    }
+}
+
+#[test]
+fn the_innermost_of_nested_projects_wins() {
+    let mono = project("mono", "mono", "/home/me/work/mono", None);
+    let web = project("web", "web", "/home/me/work/mono/packages/web", None);
+
+    // In both orders, so the first match in the list can't pass by luck.
+    for projects in [[mono.clone(), web.clone()], [web, mono]] {
+        let in_web = inside(&projects, "/home/me/work/mono/packages/web/src");
+        assert_eq!(in_web, Some("web"));
+        assert_eq!(inside(&projects, "/home/me/work/mono/docs"), Some("mono"));
+    }
 }

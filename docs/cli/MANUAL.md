@@ -68,6 +68,10 @@ In a path ending, `...` stands for any number of folders, none included:
 lists them both if there are both. `...` rather than `*`, which the shell would
 expand before dexily saw it.
 
+`.` is the project you are in, from its own folder or any folder inside it, the
+way git finds your repository: `dexily open .`, `dexily edit . --add-tag wip`. When
+projects nest, it is the innermost one.
+
 ## Commands
 
 ### Viewing
