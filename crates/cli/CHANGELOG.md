@@ -10,6 +10,8 @@ The CLI is released independently of the desktop app, under tags of the form
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-10-23
+
 ### Added
 
 - **`.` is the project you are in.** `dexily open .`, `dexily show .` or `dexily edit . --add-tag wip` acts on the project whose folder you are in, or any folder inside it, the way git finds your repository. When projects nest, it is the innermost one. Outside every project it says so and suggests `dexily add`.
