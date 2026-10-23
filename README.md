@@ -125,7 +125,11 @@ first launch.
 
 Dexily also ships a standalone command-line tool, **`dexily`**, that works
 against the same project database — no app required. It is released separately
-under `dexily-v*` tags. On macOS and Linux, install it with Homebrew:
+under `dexily-v*` tags.
+
+![dexily listing projects, showing the one in the current folder with `show .`, then browsing and searching them in its TUI](docs/cli/demo/dexily.gif)
+
+On macOS and Linux, install it with Homebrew:
 
 ```sh
 brew tap HADO564/dexily-tap

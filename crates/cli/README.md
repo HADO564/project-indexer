@@ -6,6 +6,10 @@ exposes most of what the desktop app does as commands, and offers a
 keyboard-driven TUI. It opens the same database as the app, so the two stay in
 step with no pairing — and it works without the app installed.
 
+<!-- A full URL, not a relative path: this file is also the crates.io page.
+     Recorded with VHS from docs/cli/demo/demo.tape. -->
+![dexily listing projects, showing the one in the current folder with `show .`, then browsing and searching them in its TUI](https://raw.githubusercontent.com/HADO564/project-indexer/main/docs/cli/demo/dexily.gif)
+
 **Status: every plain subcommand works.** `list`, `find`, `show`, `add`, `open`,
 `untrack`, `favorite`, `unfavorite`, `edit`, `restore`, `purge`, `scan`, `icon` and
 `config` all run against the app's database, and a bare `edit` in a terminal
