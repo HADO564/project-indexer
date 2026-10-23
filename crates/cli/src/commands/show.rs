@@ -7,7 +7,7 @@ use indexer_core::domain::Project;
 
 #[derive(Debug, Args)]
 pub struct ShowArgs {
-    /// The project to show.
+    /// The project to show, or `.` for the one the current folder is in.
     pub project: String,
 
     /// Only include projects with one of these trackers, before the query is

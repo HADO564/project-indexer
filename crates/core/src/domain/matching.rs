@@ -1,5 +1,8 @@
 //! Matching a typed query against projects: [`resolve`] finds the one project
 //! `indexer show app` means, and [`filter`] every row `indexer list app` shows.
+//! [`containing`] is the one a folder is in, for `show .`.
+
+use std::path::Path;
 
 use crate::domain::Project;
 
@@ -73,6 +76,26 @@ pub fn filter<'a>(projects: &'a [Project], query: &str) -> Vec<&'a Project> {
         return matches_path(projects, &query);
     }
     matches_name(projects, &query)
+}
+
+/// The project `dir` is in: the one whose directory is `dir` or holds it, the
+/// way git finds the repository from any folder inside it. `None` when no
+/// project holds `dir`.
+///
+/// When projects nest, the innermost wins: in `~/work/mono/packages/web/src`
+/// it is the `web` package, not `mono` around it. Folders compare whole, so
+/// `~/work/app-two` is not inside `~/work/app`.
+///
+/// `dir` is compared as given, so the caller makes it absolute and canonical,
+/// as `add` stores every directory.
+pub fn containing<'a>(projects: &'a [Project], dir: &Path) -> Option<&'a Project> {
+    // `Path::starts_with` compares whole folders, not letters: the reason
+    // `app-two` is not inside `app`.
+    projects
+        .iter()
+        .filter(|p| dir.starts_with(&p.directory))
+        // The innermost of nested projects is the one with the most folders.
+        .max_by_key(|p| Path::new(&p.directory).components().count())
 }
 
 fn pick(matches: Vec<&Project>) -> Resolution<'_> {

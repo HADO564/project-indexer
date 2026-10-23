@@ -12,6 +12,7 @@ The CLI is released independently of the desktop app, under tags of the form
 
 ### Added
 
+- **`.` is the project you are in.** `dexily open .`, `dexily show .` or `dexily edit . --add-tag wip` acts on the project whose folder you are in, or any folder inside it, the way git finds your repository. When projects nest, it is the innermost one. Outside every project it says so and suggests `dexily add`.
 - **`...` in a path stands for any number of folders.** `dexily show work/.../app` finds `~/work/client/acme/app`, and `~/work/app` too: the folders on either side still have to be whole names, and the last one still has to end the path. Several matches list as any query's do, so `work/.../acme/app` narrows them. It works wherever a project is named — `show`, `open`, `edit`, `list` and the rest. `...`, not `*`, because the shell expands `*` before dexily ever sees it.
 
 ## [0.3.1] — 2026-10-22

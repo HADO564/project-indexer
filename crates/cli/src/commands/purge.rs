@@ -14,7 +14,8 @@ use crate::context::Context;
 #[derive(Debug, Args)]
 pub struct PurgeArgs {
     /// The binned project — an exact name, an id, a parent/folder path ending,
-    /// or part of a name, matched only against the bin.
+    /// part of a name, or `.` for the one the current folder is in, matched
+    /// only against the bin.
     pub project: String,
 
     /// Only consider projects with one of these trackers when matching.

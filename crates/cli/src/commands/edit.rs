@@ -28,8 +28,8 @@ use std::path::PathBuf;
 #[derive(Debug, Args)]
 #[command(group(ArgGroup::new("change").multiple(true)))]
 pub struct EditArgs {
-    /// The project — an exact name, an id, a parent/folder path ending, or
-    /// part of a name.
+    /// The project — an exact name, an id, a parent/folder path ending, part
+    /// of a name, or `.` for the one the current folder is in.
     pub project: String,
 
     /// Replace the description. An empty string clears it.

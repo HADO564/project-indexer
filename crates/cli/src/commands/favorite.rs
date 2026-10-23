@@ -14,8 +14,8 @@ use crate::context::Context;
 
 #[derive(Debug, Args)]
 pub struct FavoriteArgs {
-    /// The project — an exact name, an id, a parent/folder path ending, or
-    /// part of a name.
+    /// The project — an exact name, an id, a parent/folder path ending, part
+    /// of a name, or `.` for the one the current folder is in.
     pub project: String,
 
     /// Only consider projects with one of these trackers when matching.
